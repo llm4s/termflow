@@ -1,0 +1,55 @@
+package termflow.apps.task
+
+import termflow.apps.task.Task.Msg
+import termflow.tui.{ TermFlowError, TuiPrelude }
+import TuiPrelude.Result
+
+import scala.util.Try
+
+object Add {
+  def unapply(input: String): Option[String] =
+    if (input.startsWith("add ")) Some(input.drop(4).trim)
+    else None
+}
+
+object Remove {
+  def unapply(input: String): Option[String] =
+    if (input.startsWith("remove ")) Some(input.drop(7).trim)
+    else None
+}
+
+object MarkInProgress {
+  def unapply(input: String): Option[String] =
+    if (input.startsWith("inprogress ")) Some(input.drop(11).trim)
+    else None
+}
+
+object MarkDone {
+  def unapply(input: String): Option[String] =
+    if (input.startsWith("done ")) Some(input.drop(5).trim)
+    else None
+}
+
+object MarkCancel {
+  def unapply(input: String): Option[String] =
+    if (input.startsWith("cancel ")) Some(input.drop(7).trim)
+    else None
+}
+
+object GetMsg {
+  def apply(input: String): Result[Msg] =
+    Try {
+      input.trim match {
+        case Add(taskId) if taskId.nonEmpty            => Msg.Add(taskId)
+        case Remove(taskId) if taskId.nonEmpty         => Msg.Remove(taskId)
+        case MarkInProgress(taskId) if taskId.nonEmpty => Msg.MarkInProgress(taskId)
+        case MarkDone(taskId) if taskId.nonEmpty       => Msg.MarkDone(taskId)
+        case MarkCancel(taskId) if taskId.nonEmpty     => Msg.MarkCancel(taskId)
+        case "all"                                     => Msg.ListAll
+        case "inprogress"                              => Msg.ListInProgress
+        case "done"                                    => Msg.ListDone
+        case "canceled"                                => Msg.ListCancelled
+        case _                                         => Msg.InvalidCmd(input)
+      }
+    }.toEither.left.map(e => TermFlowError.Unexpected(e.getMessage))
+}

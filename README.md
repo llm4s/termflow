@@ -1,0 +1,69 @@
+# termflow
+
+`termflow` is a small, functional terminal UI (TUI) framework for Scala.
+
+It’s designed for building interactive CLIs with a simple architecture:
+
+- a pure-ish `update` function (state transitions)
+- a `view` function (render a small virtual DOM)
+- `Cmd` for async work and `Sub` for event streams (keys, timers, etc.)
+
+The project started as the TUI layer for LLM4s sample applications, but it is
+usable on its own.
+
+## What You Can Build
+
+- prompt-driven apps (REPL-style, command palettes)
+- streaming output (e.g., LLM token streaming)
+- progress spinners and long-running tasks
+- simple dashboards (lists, panes, status bars)
+
+## Notes On Rendering
+
+Rendering is intentionally simple today. Virtual-DOM diffing and throttling to
+minimize flicker are work-in-progress topics we plan to iterate on (especially
+for high-frequency updates like spinners and streaming text).
+
+## Scala Versions
+
+TermFlow currently cross-builds for Scala 2.13 and Scala 3 to match LLM4s.
+
+Long-term, the direction is Scala 3–first once LLM4s no longer requires Scala 2.13.
+
+## Modules
+
+- `modules/termflow`: the library
+- `modules/termflow-sample`: demo apps (not published)
+
+## Quick Start
+
+Run a sample app:
+
+- `sbt "termflowSample/runMain termflow.run.TermFlowMain"`
+
+## Sample Apps
+
+The `termflow-sample` module contains a few small demo apps you can run with `runMain`.
+
+- Echo: `sbt "termflowSample/runMain termflow.apps.echo.EchoApp"`
+- Counter (sync): `sbt "termflowSample/runMain termflow.apps.counter.SyncCounter"`
+- Counter (async + spinner): `sbt "termflowSample/runMain termflow.apps.counter.FutureCounter"`
+- Clock: `sbt "termflowSample/runMain termflow.apps.clock.DigitalClock"`
+
+Note: there are also small “inspector” utilities under `termflow.run.jline.*` to
+debug key sequences and line editing behaviour.
+
+## Build
+
+- Compile: `sbt +compile`
+- Format: `sbt scalafmtAll`
+- Format check (CI): `sbt scalafmtCheckAll`
+- Tests: `sbt +test`
+- Publish locally (for integration testing): `sbt +publishLocal`
+
+## Versioning
+
+This repo uses `sbt-dynver` for versioning:
+
+- tags like `v0.1.0` produce release versions (`0.1.0`)
+- untagged commits use snapshot versions derived from git metadata

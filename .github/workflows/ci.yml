@@ -1,20 +1,31 @@
 name: CI
 
 on:
-  pull_request:
   push:
     branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+  workflow_call:
+
+# Concurrency settings to prevent conflicts
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: zulu
+          distribution: temurin
           java-version: 21
           cache: sbt
 
@@ -23,6 +34,9 @@ jobs:
 
       - name: Format check
         run: sbt scalafmtCheckAll
+
+      - name: Compile (Scala 2/3)
+        run: sbt +compile
 
       - name: Tests (Scala 2/3)
         run: sbt +test

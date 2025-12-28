@@ -1,13 +1,54 @@
 import sbt._
 import Keys._
 
-ThisBuild / organization := "org.llm4s"
-
 val scala213 = Versions.scala213
 val scala3   = Versions.scala3
 
-ThisBuild / scalaVersion       := scala213
-ThisBuild / crossScalaVersions := Seq(scala213, scala3)
+inThisBuild(
+  List(
+    organization       := "org.llm4s",
+    organizationName   := "llm4s",
+    scalaVersion       := scala213,
+    crossScalaVersions := Seq(scala213, scala3),
+    versionScheme      := Some("early-semver"),
+    homepage           := Some(url("https://github.com/llm4s/termflow")),
+    licenses           := List("MIT" -> url("https://mit-license.org/")),
+    developers := List(
+      Developer(
+        "rorygraves",
+        "Rory Graves",
+        "rory.graves@fieldmark.co.uk",
+        url("https://github.com/rorygraves")
+      )
+    ),
+    publishTo := {
+      val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
+      val centralReleases  = "https://central.sonatype.com/repository/maven-releases/"
+      if (isSnapshot.value) Some("central-snapshots".at(centralSnapshots))
+      else Some("central-releases".at(centralReleases))
+    },
+    pgpPublicRing := file("/tmp/public.asc"),
+    pgpSecretRing := file("/tmp/secret.asc"),
+    pgpPassphrase := sys.env.get("PGP_PASSPHRASE").map(_.toArray),
+    scmInfo := Some(
+      ScmInfo(
+        url("https://github.com/llm4s/termflow/"),
+        "scm:git:git@github.com:llm4s/termflow.git"
+      )
+    ),
+    version := {
+      dynverGitDescribeOutput.value match {
+        case Some(out) if !out.isSnapshot() =>
+          out.ref.value.stripPrefix("v")
+        case Some(out) =>
+          val baseVersion = out.ref.value.stripPrefix("v")
+          s"$baseVersion+${out.commitSuffix.mkString("", "", "")}-SNAPSHOT"
+        case None =>
+          "0.0.0-UNKNOWN"
+      }
+    }
+  )
+)
 
 lazy val commonSettings = Seq(
   scalacOptions ++= Seq(

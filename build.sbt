@@ -67,6 +67,7 @@ lazy val root = (project in file("."))
 lazy val termflow = (project in file("modules/termflow"))
   .settings(
     name := "termflow",
+    description := "A small, functional terminal UI (TUI) framework for Scala",
     commonSettings,
     libraryDependencies ++= Seq(
       Deps.jline,

@@ -9,6 +9,5 @@
 
 - Format: `sbt scalafmtAll`
 - Format check (CI): `sbt scalafmtCheckAll`
-- Tests: `sbt +test`
-- Publish locally (for integration testing): `sbt +publishLocal`
-
+- Tests: `sbt test`
+- Publish locally (for integration testing): `sbt publishLocal`

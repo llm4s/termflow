@@ -26,9 +26,7 @@ for high-frequency updates like spinners and streaming text).
 
 ## Scala Versions
 
-TermFlow currently cross-builds for Scala 2.13 and Scala 3 to match LLM4s.
-
-Long-term, the direction is Scala 3–first once LLM4s no longer requires Scala 2.13.
+TermFlow targets Scala 3.
 
 ## Modules
 
@@ -55,11 +53,11 @@ debug key sequences and line editing behaviour.
 
 ## Build
 
-- Compile: `sbt +compile`
+- Compile: `sbt compile`
 - Format: `sbt scalafmtAll`
 - Format check (CI): `sbt scalafmtCheckAll`
-- Tests: `sbt +test`
-- Publish locally (for integration testing): `sbt +publishLocal`
+- Tests: `sbt test`
+- Publish locally (for integration testing): `sbt publishLocal`
 
 ## Versioning
 

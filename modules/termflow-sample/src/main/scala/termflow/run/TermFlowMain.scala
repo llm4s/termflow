@@ -2,7 +2,7 @@ package termflow.run
 
 import termflow.tui.TuiRuntime
 
-/** Entry points for the sample apps (Scala 2 style). */
+/** Entry points for the sample apps. */
 object TermFlowMain {
 
   def syncCounterMain(args: Array[String]): Unit = {

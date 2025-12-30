@@ -35,8 +35,8 @@ jobs:
       - name: Format check
         run: sbt scalafmtCheckAll
 
-      - name: Compile (Scala 2/3)
-        run: sbt +compile
+      - name: Compile
+        run: sbt compile
 
-      - name: Tests (Scala 2/3)
-        run: sbt +test
+      - name: Tests
+        run: sbt test

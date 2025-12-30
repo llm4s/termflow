@@ -20,11 +20,11 @@ inThisBuild(
         url("https://github.com/rorygraves")
       )
     ),
+    // Publish to Sonatype Central Portal via staging
     publishTo := {
       val centralSnapshots = "https://central.sonatype.com/repository/maven-snapshots/"
-      val centralReleases  = "https://central.sonatype.com/repository/maven-releases/"
       if (isSnapshot.value) Some("central-snapshots".at(centralSnapshots))
-      else Some("central-releases".at(centralReleases))
+      else localStaging.value
     },
     pgpPublicRing := file("/tmp/public.asc"),
     pgpSecretRing := file("/tmp/secret.asc"),

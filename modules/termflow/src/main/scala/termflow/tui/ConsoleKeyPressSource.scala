@@ -113,40 +113,36 @@ object ConsoleKeyPressSource {
     val bridge = new LinkedBlockingQueue[Integer]()
 
     // Producer: read raw ints from the reader
-    Thread
-      .ofVirtual()
-      .start(new Runnable {
-        override def run(): Unit =
-          try {
-            def loop(): Unit = {
-              val c = reader.read()
-              if (c != -1) {
-                bridge.put(c)
-                loop()
-              }
+    ThreadUtils.startThread(new Runnable {
+      override def run(): Unit =
+        try {
+          def loop(): Unit = {
+            val c = reader.read()
+            if (c != -1) {
+              bridge.put(c)
+              loop()
             }
-            loop()
-          } catch {
-            case _: InterruptedException => ()
           }
-      })
+          loop()
+        } catch {
+          case _: InterruptedException => ()
+        }
+    })
 
     val inputKeys = new LinkedBlockingQueue[InputKey]()
     // Decoder: consume ints + escape sequences and emit InputKey
-    Thread
-      .ofVirtual()
-      .start(new Runnable {
-        override def run(): Unit =
-          try
-            while (true) {
-              val c   = bridge.take().intValue()
-              val key = processKey(c, bridge, Nil)
-              inputKeys.put(key)
-            }
-          catch {
-            case _: InterruptedException => ()
+    ThreadUtils.startThread(new Runnable {
+      override def run(): Unit =
+        try
+          while (true) {
+            val c   = bridge.take().intValue()
+            val key = processKey(c, bridge, Nil)
+            inputKeys.put(key)
           }
-      })
+        catch {
+          case _: InterruptedException => ()
+        }
+    })
 
     new TerminalKeySource {
       override def next(): Try[InputKey] =

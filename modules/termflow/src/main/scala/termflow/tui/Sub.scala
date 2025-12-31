@@ -19,7 +19,7 @@ object Sub {
   def Every[Msg](millis: Long, msg: () => Msg, sink: EventSink[Msg]): Sub[Msg] =
     new Sub[Msg] {
       @volatile private var active = true
-      private val scheduler        = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())
+      private val scheduler        = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
       private val handle =
         scheduler.scheduleAtFixedRate(
           new Runnable {
@@ -49,25 +49,23 @@ object Sub {
     new Sub[Msg] {
       @volatile private var active = true
 
-      private val thread = Thread
-        .ofVirtual()
-        .start(new Runnable {
-          override def run(): Unit =
-            try
-              while (active)
-                source
-                  .next()
-                  .fold(
-                    err => sink.publish(Cmd.GCmd(onError(err))),
-                    key => sink.publish(Cmd.GCmd(msg(key)))
-                  )
-            catch {
-              case _: InterruptedException =>
-                ()
-              case e: Throwable =>
-                sink.publish(Cmd.GCmd(onError(e)))
-            }
-        })
+      private val thread = ThreadUtils.startThread(new Runnable {
+        override def run(): Unit =
+          try
+            while (active)
+              source
+                .next()
+                .fold(
+                  err => sink.publish(Cmd.GCmd(onError(err))),
+                  key => sink.publish(Cmd.GCmd(msg(key)))
+                )
+          catch {
+            case _: InterruptedException =>
+              ()
+            case e: Throwable =>
+              sink.publish(Cmd.GCmd(onError(e)))
+          }
+      })
 
       override def isActive: Boolean = active
 
@@ -85,7 +83,7 @@ object Sub {
   ): Sub[Msg] =
     new Sub[Msg] {
       @volatile private var active = true
-      private val scheduler        = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())
+      private val scheduler        = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
       @volatile private var w0     = ctx.terminal.width
       @volatile private var h0     = ctx.terminal.height
 
@@ -142,7 +140,7 @@ trait EventSource[Msg] {
 object RandomUtil {
   final class RandomSourceAtFixedRate[A, Msg](period: Long, next: () => A, toMsg: A => Msg) {
     def asEventSource(sink: EventSink[Msg]): Sub[Msg] = {
-      val scheduler = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())
+      val scheduler = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
       scheduler.scheduleAtFixedRate(
         new Runnable {
           override def run(): Unit = {

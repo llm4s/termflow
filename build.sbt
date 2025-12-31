@@ -1,14 +1,15 @@
 import sbt._
 import Keys._
 
+val scala213 = Versions.scala213
 val scala3   = Versions.scala3
 
 inThisBuild(
   List(
     organization       := "org.llm4s",
     organizationName   := "llm4s",
-    scalaVersion       := scala3,
-    crossScalaVersions := Seq(scala3),
+    scalaVersion       := scala213,
+    crossScalaVersions := Seq(scala213, scala3),
     versionScheme      := Some("early-semver"),
     homepage           := Some(url("https://github.com/llm4s/termflow")),
     licenses           := List("MIT" -> url("https://mit-license.org/")),

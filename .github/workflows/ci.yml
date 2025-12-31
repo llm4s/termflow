@@ -41,8 +41,8 @@ jobs:
       - name: Tests (Scala 2.13 and 3)
         run: sbt +test
 
-      - name: Coverage tests (core only)
-        run: sbt "project termflow" coverage test coverageReport
+      - name: Coverage tests (Scala 3 only)
+        run: sbt ++3.7.1 "project termflow" coverage test coverageReport
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4

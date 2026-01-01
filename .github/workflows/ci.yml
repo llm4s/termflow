@@ -44,10 +44,19 @@ jobs:
       - name: Coverage tests (Scala 3 only)
         run: sbt ++3.7.1 "project termflow" coverage test coverageReport
 
-      - name: Upload coverage report
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: modules/termflow/target/scala-3.7.1/scoverage-report/scoverage.xml
+          slug: rorygraves/termflow
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Upload coverage report artifact
         uses: actions/upload-artifact@v4
         with:
           name: scoverage-report
           path: |
-            modules/termflow/target/**/scoverage-report
-            modules/termflow/target/**/coverage-report
+            modules/termflow/target/scala-3.7.1/scoverage-report/
+          retention-days: 14

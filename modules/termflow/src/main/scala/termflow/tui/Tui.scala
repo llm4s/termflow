@@ -8,12 +8,12 @@ import scala.language.implicitConversions
 sealed trait TermFlowError
 
 object TermFlowError {
-  final case class ConfigError(msg: String)    extends TermFlowError
-  case object ModelNotFound                    extends TermFlowError
-  final case class Unexpected(msg: String)     extends TermFlowError
-  final case class Validation(msg: String)     extends TermFlowError
-  final case class CommandError(input: String) extends TermFlowError
-  final case class UnknownApp(name: String)    extends TermFlowError
+  final case class ConfigError(msg: String)                                 extends TermFlowError
+  case object ModelNotFound                                                 extends TermFlowError
+  final case class Unexpected(msg: String, cause: Option[Throwable] = None) extends TermFlowError
+  final case class Validation(msg: String)                                  extends TermFlowError
+  final case class CommandError(input: String)                              extends TermFlowError
+  final case class UnknownApp(name: String)                                 extends TermFlowError
 }
 
 final case class Tui[Model, Msg](
@@ -51,9 +51,29 @@ object Cmd {
   final case class TermFlowErrorCmd[Msg](msg: TermFlowError) extends Cmd[Msg]
 }
 
+/**
+ * Main trait for TermFlow applications following the Elm architecture.
+ *
+ * Applications define four core functions:
+ *  - `init`: Create initial model and optional startup command
+ *  - `update`: Handle messages and produce new model state
+ *  - `view`: Render model to a virtual DOM tree
+ *  - `toMsg`: Parse user input into messages
+ *
+ * @tparam Model The application state type
+ * @tparam Msg The message/event type handled by the application
+ */
 trait TuiApp[Model, Msg] {
+
+  /** Create the initial model and optional startup command. */
   def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg]
+
+  /** Handle a message and produce a new model state with optional command. */
   def update(model: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg]
+
+  /** Render the model to a virtual DOM tree for display. */
   def view(model: Model): RootNode
+
+  /** Parse user input into a message. */
   def toMsg(input: PromptLine): Result[Msg]
 }

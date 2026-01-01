@@ -11,6 +11,7 @@ import scala.util.Try
 
 trait TerminalKeySource {
   def next(): Try[InputKey]
+  def close(): Unit
 }
 
 object ConsoleKeyPressSource {
@@ -113,7 +114,7 @@ object ConsoleKeyPressSource {
     val bridge = new LinkedBlockingQueue[Integer]()
 
     // Producer: read raw ints from the reader
-    ThreadUtils.startThread(new Runnable {
+    val producerThread = ThreadUtils.startThread(new Runnable {
       override def run(): Unit =
         try {
           def loop(): Unit = {
@@ -131,7 +132,7 @@ object ConsoleKeyPressSource {
 
     val inputKeys = new LinkedBlockingQueue[InputKey]()
     // Decoder: consume ints + escape sequences and emit InputKey
-    ThreadUtils.startThread(new Runnable {
+    val decoderThread = ThreadUtils.startThread(new Runnable {
       override def run(): Unit =
         try
           while (true) {
@@ -145,8 +146,17 @@ object ConsoleKeyPressSource {
     })
 
     new TerminalKeySource {
+      @volatile private var closed = false
+
       override def next(): Try[InputKey] =
         Try(inputKeys.take())
+
+      override def close(): Unit =
+        if (!closed) {
+          closed = true
+          producerThread.interrupt()
+          decoderThread.interrupt()
+        }
     }
   }
 }

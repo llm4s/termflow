@@ -5,8 +5,25 @@ import termflow.tui.KeyDecoder.InputKey
 import java.io.Reader
 import java.util.concurrent.{ Executors, TimeUnit }
 
+/**
+ * A subscription represents a long-running background task that emits messages.
+ *
+ * Subscriptions are used for:
+ *  - Keyboard input (`Sub.InputKey`)
+ *  - Timers (`Sub.Every`)
+ *  - Terminal resize detection (`Sub.TerminalResize`)
+ *
+ * Subscriptions should be cancelled when no longer needed to free resources.
+ * Register subscriptions with `RuntimeCtx.registerSub` for automatic cleanup on exit.
+ *
+ * @tparam Msg The message type emitted by this subscription
+ */
 trait Sub[+Msg] {
+
+  /** Returns true if the subscription is still active. */
   def isActive: Boolean
+
+  /** Cancel the subscription and release associated resources. */
   def cancel(): Unit
 }
 
@@ -40,7 +57,8 @@ object Sub {
       }
     }
 
-  def InputKey[Msg](
+  /** Create an InputKey subscription from a TerminalKeySource. */
+  def InputKeyFromSource[Msg](
     source: TerminalKeySource,
     msg: InputKey => Msg,
     onError: Throwable => Msg,
@@ -115,25 +133,36 @@ object Sub {
       }
     }
 
-  /** Convenience constructor that uses a console reader (JLine-based by default). */
-  def InputKey[Msg](
+  /** Create an InputKey subscription with a console reader (JLine-based by default). */
+  def InputKeyWithReader[Msg](
     msg: InputKey => Msg,
     onError: Throwable => Msg,
     sink: EventSink[Msg],
     reader: Reader = ConsoleKeyPressSource.JLineReader()
   ): Sub[Msg] =
-    InputKey(ConsoleKeyPressSource(reader), msg, onError, sink)
+    InputKeyFromSource(ConsoleKeyPressSource(reader), msg, onError, sink)
 
-  /** Convenience constructor that uses the shared terminal backend from the runtime context. */
+  /** Create an InputKey subscription using the shared terminal backend from the runtime context. */
   def InputKey[Msg](msg: InputKey => Msg, onError: Throwable => Msg, ctx: RuntimeCtx[Msg]): Sub[Msg] =
-    InputKey(ConsoleKeyPressSource(ctx.terminal.reader), msg, onError, ctx)
+    InputKeyFromSource(ConsoleKeyPressSource(ctx.terminal.reader), msg, onError, ctx)
 }
 
+/**
+ * Sink that receives commands from subscriptions and other sources.
+ * Commands are queued and processed by the runtime loop.
+ */
 trait EventSink[Msg] {
+
+  /** Publish a command to be processed by the runtime. */
   def publish(cmd: Cmd[Msg]): Unit
 }
 
+/**
+ * Source that produces events and sends them to a sink.
+ */
 trait EventSource[Msg] {
+
+  /** Start the source and return a subscription handle. */
   def start(sink: EventSink[Msg]): Sub[Msg]
 }
 

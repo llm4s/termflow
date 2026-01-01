@@ -49,7 +49,7 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: modules/termflow/target/scala-3.7.1/scoverage-report/scoverage.xml
-          slug: rorygraves/termflow
+          slug: llm4s/termflow
           fail_ci_if_error: false
           verbose: true
 

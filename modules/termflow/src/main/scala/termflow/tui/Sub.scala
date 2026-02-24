@@ -86,6 +86,7 @@ object Sub:
 
       override def cancel(): Unit =
         active = false
+        source.close()
         thread.interrupt()
 
   /** Poll terminal dimensions and emit a message when they change. */

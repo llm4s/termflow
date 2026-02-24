@@ -42,7 +42,7 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: modules/termflow/target/scala-3.7.1/scoverage-report/scoverage.xml
+          files: modules/termflow/target/scala-*/scoverage-report/scoverage.xml
           slug: llm4s/termflow
           fail_ci_if_error: false
           verbose: true
@@ -52,15 +52,16 @@ jobs:
         with:
           name: scoverage-report
           path: |
-            modules/termflow/target/scala-3.7.1/scoverage-report/
+            modules/termflow/target/scala-*/scoverage-report/
           retention-days: 14
 
       - name: Coverage summary (informational)
         if: always()
         continue-on-error: true
         run: |
-          if [ -f modules/termflow/target/scala-3.7.1/scoverage-report/scoverage.xml ]; then
-            RATE=$(grep -o 'statement-rate="[^"]*"' modules/termflow/target/scala-3.7.1/scoverage-report/scoverage.xml | head -n1 | cut -d'"' -f2)
+          REPORT=$(ls modules/termflow/target/scala-*/scoverage-report/scoverage.xml 2>/dev/null | head -n1)
+          if [ -n "$REPORT" ]; then
+            RATE=$(grep -o 'statement-rate="[^"]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
             if [ -n "$RATE" ]; then
               PCT=$(awk "BEGIN { printf \"%.2f\", $RATE * 100 }")
               echo "Library statement coverage: ${PCT}%"

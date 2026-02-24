@@ -108,3 +108,28 @@ class HistorySpec extends AnyFunSuite:
     Files.deleteIfExists(path)
     Files.deleteIfExists(parent)
     Files.deleteIfExists(tmp)
+
+  test("Ctrl+C exits without appending history"):
+    val store = new StubStore(Vector("one"))
+    val start = PromptHistory.initial(store)
+    val (next, cmd) = step(
+      start.copy(prompt = Prompt.State(buffer = Vector('x'), cursor = 1)),
+      InputKey.Ctrl('C')
+    )
+
+    assert(cmd.contains(Cmd.Exit))
+    assert(Prompt.render(next.prompt).isEmpty)
+    assert(next.index.isEmpty)
+    assert(store.contents == Vector("one"))
+
+  test("renderWithPrefix returns prefixed text and shifted cursor"):
+    val store = new StubStore()
+    val state = PromptHistory
+      .initial(store)
+      .copy(
+        prompt = Prompt.State(buffer = Vector('a', 'b'), cursor = 1)
+      )
+
+    val rendered = PromptHistory.renderWithPrefix(state, "> ")
+    assert(rendered.text == "> ab")
+    assert(rendered.cursorIndex == 3)

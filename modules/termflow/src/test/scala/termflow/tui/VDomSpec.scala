@@ -62,3 +62,12 @@ class VDomSpec extends AnyFunSuite:
       case _ => fail("expected InputNode")
 
     assert(nodeByLineWidth.width == 20)
+
+  test("BoxNode and InputNode default style/height branches"):
+    val box = BoxNode(XCoord(1), YCoord(1), width = 2, height = 2, children = Nil)
+    assert(box.style == Style())
+    assert(box.height == 2)
+
+    val input = InputNode(XCoord(1), YCoord(1), prompt = "", style = Style())
+    assert(input.height == 1)
+    assert(input.style == Style())

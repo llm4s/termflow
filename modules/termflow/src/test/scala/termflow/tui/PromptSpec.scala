@@ -79,3 +79,15 @@ class PromptSpec extends AnyFunSuite:
     assert(Prompt.render(next).isEmpty)
     assert(next.cursor == 0)
     assert(cmdOpt.contains(Cmd.TermFlowErrorCmd(TermFlowError.CommandError("bad"))))
+
+  test("Ctrl+C exits and clears the buffer"):
+    val state          = Prompt.State(buffer = Vector('x'), cursor = 1)
+    val (next, cmdOpt) = Prompt.handleKey[String](state, InputKey.Ctrl('C'))(noopToMsg)
+    assert(Prompt.render(next).isEmpty)
+    assert(next.cursor == 0)
+    assert(cmdOpt.contains(Cmd.Exit))
+
+  test("renderWithPrefix shifts cursor index by prefix length"):
+    val line = Prompt.renderWithPrefix(Prompt.State(buffer = Vector('a', 'b'), cursor = 1), ">> ")
+    assert(line.text == ">> ab")
+    assert(line.cursorIndex == 4)

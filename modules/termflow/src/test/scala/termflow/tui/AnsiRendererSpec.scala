@@ -2,7 +2,15 @@ package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
+
 class AnsiRendererSpec extends AnyFunSuite:
+
+  private def captureOut(body: => Unit): String =
+    val buf = new ByteArrayOutputStream()
+    Console.withOut(new PrintStream(buf))(body)
+    buf.toString("UTF-8")
 
   test("moveTo generates correct ANSI escape sequence"):
     assert(AnsiRenderer.moveTo(XCoord(1), YCoord(1)) == "\u001b[1;1H")
@@ -64,3 +72,49 @@ class AnsiRendererSpec extends AnyFunSuite:
     assert(node.width == 1)
     assert(node.height == 1)
     assert(node.style == Style())
+
+  test("render draws bordered boxes, styled text, and input cursor"):
+    val root = RootNode(
+      width = 80,
+      height = 24,
+      children = List(
+        BoxNode(
+          x = XCoord(1),
+          y = YCoord(1),
+          width = 5,
+          height = 3,
+          children = List(TextNode(XCoord(2), YCoord(2), List(Text("x", Style(bold = true))))),
+          style = Style(fg = Color.Green, border = true)
+        )
+      ),
+      input = Some(InputNode(XCoord(1), YCoord(4), prompt = "ab", style = Style(fg = Color.Red), cursor = 1))
+    )
+
+    val out = captureOut(AnsiRenderer.render(root))
+    assert(out.contains("┌"))
+    assert(out.contains("└"))
+    assert(out.contains("\u001b[1m")) // bold style for text
+    assert(out.contains(ANSI.hideCursor))
+    assert(out.contains("\u001b[2K")) // clear current line
+
+  test("renderInputOnly clamps cursor to end and pads to lineWidth"):
+    val root = RootNode(
+      width = 80,
+      height = 24,
+      children = Nil,
+      input = Some(
+        InputNode(
+          XCoord(10),
+          YCoord(5),
+          prompt = "abc",
+          style = Style(fg = Color.Blue),
+          cursor = 999,
+          lineWidth = 8
+        )
+      )
+    )
+
+    val out = captureOut(AnsiRenderer.renderInputOnly(root))
+    assert(out.contains("\u001b[2K"))
+    assert(out.contains("\u001b[7m")) // reverse-video caret
+    assert(out.contains(" "))         // padded trailing area

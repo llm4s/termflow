@@ -63,6 +63,14 @@ debug key sequences and line editing behaviour.
 - Tests: `sbt test`
 - Publish locally (for integration testing): `sbt publishLocal`
 
+## Scala 3 Conventions
+
+- Prefer `enum` for closed ADTs.
+- Prefer `given` / `using` over implicit parameters and values.
+- Prefer `extension` methods over implicit classes.
+- Avoid implicit conversions; return explicit `Tui` values (for example, `model.tui`).
+- Keep migration changes behavior-preserving unless a PR states otherwise.
+
 ## Versioning
 
 This repo uses `sbt-dynver` for versioning:

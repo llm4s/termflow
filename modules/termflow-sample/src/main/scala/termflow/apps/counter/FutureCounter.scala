@@ -18,7 +18,7 @@ object FutureCounter {
     terminalWidth: Int,
     terminalHeight: Int,
     count: Counter,
-    staus: String,
+    status: String,
     input: Sub[Msg],
     prompt: Prompt.State,
     spinner: Sub[Msg],
@@ -43,7 +43,7 @@ object FutureCounter {
         terminalWidth = ctx.terminal.width,
         terminalHeight = ctx.terminal.height,
         count = Counter(0),
-        staus = s"init::${TimeFormatter.getCurrentTime}",
+        status = s"init::${TimeFormatter.getCurrentTime}",
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         prompt = Prompt.State(),
         spinner = Sub.NoSub,
@@ -73,11 +73,12 @@ object FutureCounter {
         case UpdateWith(c) =>
           // stop spinner when work completes
           if (m.spinner.isActive) m.spinner.cancel()
-          m.copy(count = c, staus = s"done::${TimeFormatter.getCurrentTime}", spinner = Sub.NoSub, spinnerIndex = 0).tui
+          m.copy(count = c, status = s"done::${TimeFormatter.getCurrentTime}", spinner = Sub.NoSub, spinnerIndex = 0)
+            .tui
         case Busy(action) =>
           // start spinner if not already active
-          if (m.spinner.isActive) m.copy(staus = action).tui
-          else m.copy(staus = action, spinner = Sub.Every(200, () => SpinnerTick, ctx)).tui
+          if (m.spinner.isActive) m.copy(status = action).tui
+          else m.copy(status = action, spinner = Sub.Every(200, () => SpinnerTick, ctx)).tui
         case SpinnerTick =>
           m.copy(spinnerIndex = (m.spinnerIndex + 1) % 4).tui
         case ConsoleInputKey(k) =>
@@ -140,7 +141,7 @@ object FutureCounter {
 
     private def statusWithSpinner(m: Model): String = {
       val frames = Array("|", "/", "-", "\\")
-      if (m.spinner.isActive) s"${m.staus} ${frames(m.spinnerIndex % frames.length)}" else m.staus
+      if (m.spinner.isActive) s"${m.status} ${frames(m.spinnerIndex % frames.length)}" else m.status
     }
   }
 }

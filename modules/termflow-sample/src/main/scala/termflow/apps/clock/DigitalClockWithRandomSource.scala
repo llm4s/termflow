@@ -10,7 +10,7 @@ import termflow.tui._
 import java.time.LocalTime
 import scala.util.Random
 
-object DigitalClockWithRandomSource {
+object DigitalClockWithRandomSource:
 
   final case class SubSource[T](sub: Sub[Msg], value: T)
 
@@ -26,7 +26,7 @@ object DigitalClockWithRandomSource {
   )
 
   // --- Messages (Events) ---
-  enum Msg {
+  enum Msg:
     case Tick
     case RandomValue(value: Int)
     case StartRandom
@@ -36,12 +36,11 @@ object DigitalClockWithRandomSource {
     case Exit
     case ConsoleInputKey(key: KeyDecoder.InputKey)
     case ConsoleInputError(error: Throwable)
-  }
 
   import Msg._
 
   // --- Application Definition ---
-  object App extends TuiApp[Model, Msg] {
+  object App extends TuiApp[Model, Msg]:
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -62,7 +61,7 @@ object DigitalClockWithRandomSource {
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
-      msg match {
+      msg match
         case Tick =>
           m.copy(clock = m.clock.copy(value = LocalTime.now().toString)).tui
 
@@ -70,7 +69,7 @@ object DigitalClockWithRandomSource {
           m.copy(random = m.random.copy(value = v)).tui
 
         case StartRandom =>
-          if (m.random.sub.isActive)
+          if m.random.sub.isActive then
             m.copy(error = Some("You  have attempted to start random generator while it is already running")).tui
           else
             m.copy(
@@ -98,15 +97,13 @@ object DigitalClockWithRandomSource {
 
         case ConsoleInputKey(k) =>
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
-          maybeCmd match {
+          maybeCmd match
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
             case None      => m.copy(prompt = nextPrompt).tui
-          }
         case ConsoleInputError(e) =>
           m.copy(messages = m.messages :+ s"Console Input Error: ${e.getMessage}").tui
-      }
 
-    override def view(m: Model): RootNode = {
+    override def view(m: Model): RootNode =
       val prefix         = "[]> "
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
       // Use terminal width with a small right margin.
@@ -144,15 +141,11 @@ object DigitalClockWithRandomSource {
           )
         )
       )
-    }
 
     override def toMsg(input: PromptLine): Result[Msg] =
-      input.value.trim.toLowerCase match {
+      input.value.trim.toLowerCase match
         case "start"     => Right(StartRandom)
         case "stop"      => Right(StopRandom)
         case "stopclock" => Right(StopClock)
         case "exit"      => Right(Exit)
         case other       => Right(AddMessage(other))
-      }
-  }
-}

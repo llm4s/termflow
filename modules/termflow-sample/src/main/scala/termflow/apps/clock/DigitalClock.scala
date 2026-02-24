@@ -8,7 +8,7 @@ import termflow.tui._
 
 import java.time.LocalTime
 
-object DigitalClock {
+object DigitalClock:
 
   final case class SubSource[T](sub: Sub[Msg], value: T)
 
@@ -23,7 +23,7 @@ object DigitalClock {
   )
 
   // --- Messages ---
-  enum Msg {
+  enum Msg:
     case Tick
     case StartClock
     case StopClock
@@ -31,11 +31,10 @@ object DigitalClock {
     case Exit
     case ConsoleInputKey(key: KeyDecoder.InputKey)
     case ConsoleInputError(error: Throwable)
-  }
 
   import Msg._
 
-  object App extends TuiApp[Model, Msg] {
+  object App extends TuiApp[Model, Msg]:
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -51,15 +50,13 @@ object DigitalClock {
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
-      msg match {
+      msg match
         case Tick =>
           m.copy(clock = m.clock.copy(value = LocalTime.now().toString)).tui
 
         case StartClock =>
-          if (m.clock.sub.isActive)
-            m.copy(error = Some("⏱️ Clock already running")).tui
-          else
-            m.copy(clock = m.clock.copy(sub = Sub.Every(1000, () => Tick, ctx)), error = None).tui
+          if m.clock.sub.isActive then m.copy(error = Some("⏱️ Clock already running")).tui
+          else m.copy(clock = m.clock.copy(sub = Sub.Every(1000, () => Tick, ctx)), error = None).tui
 
         case StopClock =>
           m.clock.sub.cancel()
@@ -73,16 +70,14 @@ object DigitalClock {
 
         case ConsoleInputKey(k) =>
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
-          maybeCmd match {
+          maybeCmd match
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
             case None      => m.copy(prompt = nextPrompt).tui
-          }
 
         case ConsoleInputError(e) =>
           m.copy(messages = m.messages :+ s"Console Input Error: ${e.getMessage}").tui
-      }
 
-    override def view(m: Model): RootNode = {
+    override def view(m: Model): RootNode =
       val prefix         = "[]> "
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
       val boxWidth       = math.max(40, m.terminalWidth - 4)
@@ -117,14 +112,10 @@ object DigitalClock {
           )
         )
       )
-    }
 
     override def toMsg(input: PromptLine): Result[Msg] =
-      input.value.trim.toLowerCase match {
+      input.value.trim.toLowerCase match
         case "startclock" => Right(StartClock)
         case "stopclock"  => Right(StopClock)
         case "exit"       => Right(Exit)
         case other        => Right(AddMessage(other))
-      }
-  }
-}

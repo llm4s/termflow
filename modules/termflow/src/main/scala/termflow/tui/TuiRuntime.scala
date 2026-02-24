@@ -11,11 +11,10 @@ import scala.util.Success
 /**
  * Renderer responsible for converting virtual DOM to terminal output.
  */
-trait TuiRenderer {
+trait TuiRenderer:
 
   /** Render the root node and optionally display an error. */
   def render(textNode: RootNode, err: Option[TermFlowError]): Unit
-}
 
 /**
  * Runtime context providing access to terminal and command publishing.
@@ -28,7 +27,7 @@ trait TuiRenderer {
  *
  * @tparam Msg The message type used by the application
  */
-trait RuntimeCtx[Msg] extends EventSink[Msg] {
+trait RuntimeCtx[Msg] extends EventSink[Msg]:
 
   /** Access the terminal backend for dimensions and reader. */
   def terminal: TerminalBackend
@@ -38,29 +37,25 @@ trait RuntimeCtx[Msg] extends EventSink[Msg] {
    * Returns the subscription for chaining.
    */
   def registerSub(sub: Sub[Msg]): Sub[Msg]
-}
 
 /** Read side of the command bus used by the runtime loop. */
-trait CmdConsumer[Msg] {
+trait CmdConsumer[Msg]:
   def take(): Cmd[Msg]
-}
 
 /** Bidirectional command bus: producers publish, the runtime consumes. */
-trait CmdBus[Msg] extends RuntimeCtx[Msg] with CmdConsumer[Msg] {
+trait CmdBus[Msg] extends RuntimeCtx[Msg] with CmdConsumer[Msg]:
   def cancelAllSubscriptions(): Unit
-}
 
 /** Default in-memory command bus backed by a LinkedBlockingQueue. */
-final class LocalCmdBus[Msg](val terminal: TerminalBackend) extends CmdBus[Msg] {
+final class LocalCmdBus[Msg](val terminal: TerminalBackend) extends CmdBus[Msg]:
   private val queue                                   = new LinkedBlockingQueue[Cmd[Msg]]()
   private val subscriptions: java.util.List[Sub[Msg]] = new java.util.concurrent.CopyOnWriteArrayList[Sub[Msg]]()
   override def publish(cmd: Cmd[Msg]): Unit           = queue.put(cmd)
   override def take(): Cmd[Msg]                       = queue.take()
   override def registerSub(sub: Sub[Msg]): Sub[Msg]   = { subscriptions.add(sub); sub }
   override def cancelAllSubscriptions(): Unit         = subscriptions.forEach(_.cancel())
-}
 
-object TuiRuntime {
+object TuiRuntime:
 
   given ExecutionContext = ExecutionContext.global
 
@@ -74,7 +69,7 @@ object TuiRuntime {
     app: TuiApp[Model, Msg],
     renderer: TuiRenderer = SimpleANSIRenderer(),
     terminalBackend: TerminalBackend = new JLineTerminalBackend()
-  ): Unit = {
+  ): Unit =
 
     val bus: CmdBus[Msg] = new LocalCmdBus[Msg](terminalBackend)
 
@@ -83,15 +78,15 @@ object TuiRuntime {
     ClearScreen()
     print(ANSI.showCursor)
 
-    try {
+    try
       // Build initial model and command using the provided runtime context
       val initial: Tui[Model, Msg] = app.init(bus)
       bus.publish(initial.cmd)
 
       @tailrec
-      def loop(model: Model): Unit = {
+      def loop(model: Model): Unit =
         val cmd = bus.take()
-        cmd match {
+        cmd match
           case Cmd.Exit =>
             // Exit handled in finally block - just return
             ()
@@ -110,22 +105,18 @@ object TuiRuntime {
             loop(next.model)
 
           case Cmd.FCmd(task, toCmd, onEnqueue) =>
-            task.onComplete {
+            task.onComplete:
               case Success(result) =>
                 bus.publish(toCmd(result))
               case Failure(e) =>
                 bus.publish(Cmd.TermFlowErrorCmd(TermFlowError.Unexpected(e.getMessage, Some(e))))
-            }
-            onEnqueue match {
+            onEnqueue match
               case Some(msg) => bus.publish(Cmd.GCmd(msg))
               case None      => bus.publish(Cmd.NoCmd)
-            }
             loop(model)
-        }
-      }
 
       loop(initial.model)
-    } finally {
+    finally
       // Cancel all registered subscriptions to stop background threads
       bus.cancelAllSubscriptions()
       // Always restore terminal state, even on crash
@@ -133,6 +124,3 @@ object TuiRuntime {
       EnterNormalBuffer()
       println("Goodbye from TermFlow!")
       terminalBackend.close()
-    }
-  }
-}

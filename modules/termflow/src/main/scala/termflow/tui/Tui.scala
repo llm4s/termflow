@@ -5,31 +5,27 @@ import termflow.tui.TuiPrelude._
 import scala.concurrent.Future
 
 /** Error ADT used by TermFlow. */
-enum TermFlowError {
+enum TermFlowError:
   case ConfigError(msg: String)
   case ModelNotFound
   case Unexpected(msg: String, cause: Option[Throwable] = None)
   case Validation(msg: String)
   case CommandError(input: String)
   case UnknownApp(name: String)
-}
 
 final case class Tui[Model, Msg](
   model: Model,
   cmd: Cmd[Msg] = Cmd.NoCmd
 )
 
-object Tui {
+object Tui:
 
   /** Syntax helpers for lifting a model into a `Tui`. */
-  extension [Model](m: Model) {
+  extension [Model](m: Model)
     def tui[Msg]: Tui[Model, Msg]            = Tui(m)
     def gCmd[Msg](msg: Msg): Tui[Model, Msg] = Tui(m, Cmd.GCmd(msg))
-  }
 
-}
-
-enum Cmd[+Msg] {
+enum Cmd[+Msg]:
   case NoCmd extends Cmd[Nothing]
   case Exit  extends Cmd[Nothing]
 
@@ -42,7 +38,6 @@ enum Cmd[+Msg] {
   ) extends Cmd[Msg]
 
   case TermFlowErrorCmd[Msg](msg: TermFlowError) extends Cmd[Msg]
-}
 
 /**
  * Main trait for TermFlow applications following the Elm architecture.
@@ -56,7 +51,7 @@ enum Cmd[+Msg] {
  * @tparam Model The application state type
  * @tparam Msg The message/event type handled by the application
  */
-trait TuiApp[Model, Msg] {
+trait TuiApp[Model, Msg]:
 
   /** Create the initial model and optional startup command. */
   def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg]
@@ -69,4 +64,3 @@ trait TuiApp[Model, Msg] {
 
   /** Parse user input into a message. */
   def toMsg(input: PromptLine): Result[Msg]
-}

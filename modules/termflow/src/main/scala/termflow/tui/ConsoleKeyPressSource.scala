@@ -12,15 +12,14 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.annotation.tailrec
 import scala.util.Try
 
-trait TerminalKeySource {
+trait TerminalKeySource:
   def next(): Try[InputKey]
   def close(): Unit
-}
 
-object ConsoleKeyPressSource {
+object ConsoleKeyPressSource:
 
   /** Default JLine-based reader, mainly used in tests and tools. */
-  def JLineReader(): Reader = {
+  def JLineReader(): Reader =
     val terminal: Terminal =
       TerminalBuilder
         .builder()
@@ -30,23 +29,21 @@ object ConsoleKeyPressSource {
     terminal.enterRawMode()
     val input = terminal.input()
     new InputStreamReader(input)
-  }
 
   @tailrec
   private def processKey(c: Int, queueBridge: BlockingQueue[Integer], buffer: List[Int]): InputKey =
-    (c, buffer) match {
+    (c, buffer) match
       case (x, Nil) if x != ESC =>
         KeyDecoder.decode(x)
 
       case (ESC, Nil) =>
         val next: Integer =
           queueBridge.poll(50, java.util.concurrent.TimeUnit.MILLISECONDS)
-        Option(next).map(_.intValue()) match {
+        Option(next).map(_.intValue()) match
           case None =>
             InputKey.Escape
           case Some(n) =>
             processKey(n, queueBridge, ESC :: Nil)
-        }
 
       case (O, ESC :: Nil) =>
         processKey(queueBridge.take(), queueBridge, buffer :+ c)
@@ -110,10 +107,9 @@ object ConsoleKeyPressSource {
 
       case _ =>
         InputKey.Unknown(c.toString)
-    }
 
   /** Create a `TerminalKeySource` from a reader. */
-  def apply(reader: Reader = JLineReader()): TerminalKeySource = {
+  def apply(reader: Reader = JLineReader()): TerminalKeySource =
     val bridge = new LinkedBlockingQueue[Integer]()
 
     // Producer: read raw ints from the reader
@@ -122,7 +118,7 @@ object ConsoleKeyPressSource {
         try {
           def loop(): Unit = {
             val c = reader.read()
-            if (c != -1) {
+            if c != -1 then {
               bridge.put(c)
               loop()
             }
@@ -138,7 +134,7 @@ object ConsoleKeyPressSource {
     val decoderThread = ThreadUtils.startThread(new Runnable {
       override def run(): Unit =
         try
-          while (true) {
+          while true do {
             val c   = bridge.take().intValue()
             val key = processKey(c, bridge, Nil)
             inputKeys.put(key)
@@ -148,18 +144,14 @@ object ConsoleKeyPressSource {
         }
     })
 
-    new TerminalKeySource {
+    new TerminalKeySource:
       @volatile private var closed = false
 
       override def next(): Try[InputKey] =
         Try(inputKeys.take())
 
       override def close(): Unit =
-        if (!closed) {
+        if !closed then
           closed = true
           producerThread.interrupt()
           decoderThread.interrupt()
-        }
-    }
-  }
-}

@@ -4,19 +4,15 @@ import termflow.tui.Tui._
 import termflow.tui.TuiPrelude._
 import termflow.tui._
 
-object Task {
+object Task:
   opaque type TaskId = String
-  object TaskId {
+  object TaskId:
     def apply(value: String): TaskId = value
 
-    extension (id: TaskId) {
-      def value: String = id
-    }
-  }
+    extension (id: TaskId) def value: String = id
 
-  enum TaskStatus {
+  enum TaskStatus:
     case Pending, InProgress, Done, Cancelled
-  }
 
   final case class Task(id: TaskId, status: TaskStatus)
 
@@ -30,12 +26,11 @@ object Task {
     prompt: Prompt.State
   )
 
-  enum RenderMode {
+  enum RenderMode:
     case Init, Add, All, InProgress, Cancelled, Done, Count
     case AppErrorMsg(errorMsg: String)
-  }
 
-  enum Msg {
+  enum Msg:
     case Add(id: TaskId)
     case Remove(id: TaskId)
     case MarkInProgress(id: TaskId)
@@ -48,11 +43,10 @@ object Task {
     case InvalidCmd(msg: String)
     case ConsoleInputKey(key: KeyDecoder.InputKey)
     case ConsoleInputError(error: Throwable)
-  }
 
   import Msg._
 
-  object App extends TuiApp[Model, Msg] {
+  object App extends TuiApp[Model, Msg]:
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -65,24 +59,20 @@ object Task {
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
-      msg match {
+      msg match
         case ConsoleInputKey(k) =>
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
-          maybeCmd match {
+          maybeCmd match
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
             case None      => m.copy(prompt = nextPrompt).tui
-          }
         case ConsoleInputError(e) =>
           // Surface the decoding error as InvalidCmd
           m.copy(renderList = RenderMode.AppErrorMsg(s"Console Input Error: ${e.getMessage}")).tui
         case other =>
           UpdateApp(m, other)
-      }
 
     override def view(m: Model): RootNode =
       RenderApp(m)
 
     override def toMsg(input: PromptLine): Result[Msg] =
       GetMsg(input.value)
-  }
-}

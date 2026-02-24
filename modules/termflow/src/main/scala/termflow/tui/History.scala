@@ -10,36 +10,30 @@ import java.nio.file.StandardOpenOption
 import scala.jdk.CollectionConverters._
 
 /** Abstraction for loading and persisting command history. */
-trait HistoryStore {
+trait HistoryStore:
   def load(): Vector[String]
   def append(entry: String): Unit
-}
 
 /** Simple file-backed implementation of HistoryStore. */
-final case class FileHistoryStore(path: Path, maxEntries: Int = 200) extends HistoryStore {
+final case class FileHistoryStore(path: Path, maxEntries: Int = 200) extends HistoryStore:
 
-  private def ensureDir(): Unit = {
+  private def ensureDir(): Unit =
     val parent = path.getParent
-    if (parent != null && !Files.exists(parent)) {
-      Files.createDirectories(parent): Unit
-    }
-  }
+    if parent != null && !Files.exists(parent) then Files.createDirectories(parent): Unit
 
   override def load(): Vector[String] =
-    try {
+    try
       ensureDir()
-      if (Files.exists(path)) {
+      if Files.exists(path) then
         val all = Files.readAllLines(path).asScala.toVector
         // Keep the most recent entries, preserving full chronological history.
         all.takeRight(maxEntries)
-      } else Vector.empty
-    } catch {
-      case _: Throwable => Vector.empty
-    }
+      else Vector.empty
+    catch case _: Throwable => Vector.empty
 
   override def append(entry: String): Unit =
-    if (entry.trim.nonEmpty) {
-      try {
+    if entry.trim.nonEmpty then
+      try
         ensureDir()
         val line = entry + System.lineSeparator()
         Files.write(
@@ -48,14 +42,10 @@ final case class FileHistoryStore(path: Path, maxEntries: Int = 200) extends His
           StandardOpenOption.CREATE,
           StandardOpenOption.APPEND
         ): Unit
-      } catch {
-        case _: Throwable => ()
-      }
-    }
-}
+      catch case _: Throwable => ()
 
 /** Prompt + history wrapper with ArrowUp/ArrowDown support. */
-object PromptHistory {
+object PromptHistory:
 
   final case class State(
     prompt: Prompt.State,
@@ -83,7 +73,7 @@ object PromptHistory {
     Prompt.renderWithPrefix(state.prompt, prefix)
 
   def handleKey[G](state: State, k: InputKey)(toMsg: PromptLine => Result[G]): (State, Option[Cmd[G]]) =
-    k match {
+    k match
       // History navigation
       case KeyDecoder.InputKey.ArrowUp =>
         (historyUp(state), None)
@@ -129,33 +119,30 @@ object PromptHistory {
             searchPrefix = None
           )
         (nextState, maybeCmd)
-    }
 
   private def addToHistory(
     history: Vector[String],
     store: HistoryStore,
     line: String
-  ): (Vector[String], HistoryStore) = {
+  ): (Vector[String], HistoryStore) =
     val trimmed = line.trim
-    if (trimmed.isEmpty) (history, store)
-    else if (history.lastOption.contains(trimmed)) (history, store)
-    else {
+    if trimmed.isEmpty then (history, store)
+    else if history.lastOption.contains(trimmed) then (history, store)
+    else
       store.append(trimmed)
       (history :+ trimmed, store)
-    }
-  }
 
   private def historyUp(state: State): State =
-    if (state.history.isEmpty) state
-    else {
+    if state.history.isEmpty then state
+    else
       val currentLine = Prompt.render(state.prompt)
 
-      state.searchPrefix match {
+      state.searchPrefix match
         // Active prefix search: keep using the stored prefix, independent of current line content.
         case Some(prefix) =>
           val startFromIdx = state.index.map(_ - 1).getOrElse(state.history.length - 1)
           val nextIdxOpt   = searchUp(state.history, startFromIdx, prefix)
-          nextIdxOpt match {
+          nextIdxOpt match
             case None => state
             case Some(newIndex) =>
               val line      = state.history(newIndex)
@@ -164,18 +151,17 @@ object PromptHistory {
                 prompt = newPrompt,
                 index = Some(newIndex)
               )
-          }
 
         // No active prefix search: either start one (if at index=None and prefix typed), or do plain scrolling.
         case None =>
-          state.index match {
+          state.index match
             case None =>
               val typedPrefix = currentLine.take(state.prompt.cursor).trim
-              if (typedPrefix.nonEmpty) {
+              if typedPrefix.nonEmpty then
                 // Start a prefix-based search from the end.
                 val startFromIdx = state.history.length - 1
                 val nextIdxOpt   = searchUp(state.history, startFromIdx, typedPrefix)
-                nextIdxOpt match {
+                nextIdxOpt match
                   case None => state
                   case Some(newIndex) =>
                     val line      = state.history(newIndex)
@@ -186,8 +172,7 @@ object PromptHistory {
                       savedCurrent = Some(currentLine),
                       searchPrefix = Some(typedPrefix)
                     )
-                }
-              } else {
+              else
                 // First plain history step: jump to last entry.
                 val newIndex  = state.history.length - 1
                 val line      = state.history(newIndex)
@@ -197,7 +182,6 @@ object PromptHistory {
                   index = Some(newIndex),
                   savedCurrent = Some(currentLine)
                 )
-              }
 
             case Some(i) =>
               // Already in plain history mode: move further up, ignoring any current line content.
@@ -208,21 +192,18 @@ object PromptHistory {
                 prompt = newPrompt,
                 index = Some(newIndex)
               )
-          }
-      }
-    }
 
   private def historyDown(state: State): State =
-    state.index match {
+    state.index match
       case None => state
       case Some(currentIdx) =>
-        state.searchPrefix match {
+        state.searchPrefix match
           // Prefix search scrolling when a prefix is active.
           case Some(prefix) =>
             val startFromIdx = currentIdx + 1
             val nextIdxOpt   = searchDown(state.history, startFromIdx, prefix)
 
-            nextIdxOpt match {
+            nextIdxOpt match
               case Some(newIndex) =>
                 val line      = state.history(newIndex)
                 val newPrompt = Prompt.State(buffer = line.toVector, cursor = line.length)
@@ -240,11 +221,10 @@ object PromptHistory {
                   savedCurrent = None,
                   searchPrefix = None
                 )
-            }
 
           // Plain scrolling when no prefix search is active.
           case None =>
-            if (currentIdx >= state.history.length - 1) {
+            if currentIdx >= state.history.length - 1 then
               // Move past the most recent entry: restore original line (if any) and exit history mode.
               val restoredLine   = state.savedCurrent.getOrElse("")
               val restoredPrompt = Prompt.State(buffer = restoredLine.toVector, cursor = restoredLine.length)
@@ -253,7 +233,7 @@ object PromptHistory {
                 index = None,
                 savedCurrent = None
               )
-            } else {
+            else
               val newIndex  = currentIdx + 1
               val line      = state.history(newIndex)
               val newPrompt = Prompt.State(buffer = line.toVector, cursor = line.length)
@@ -261,25 +241,19 @@ object PromptHistory {
                 prompt = newPrompt,
                 index = Some(newIndex)
               )
-            }
-        }
-    }
 
-  private def searchUp(history: Vector[String], startFrom: Int, prefix: String): Option[Int] = {
+  private def searchUp(history: Vector[String], startFrom: Int, prefix: String): Option[Int] =
     @annotation.tailrec
     def loop(i: Int): Option[Int] =
-      if (i < 0) None
-      else if (history(i).startsWith(prefix)) Some(i)
+      if i < 0 then None
+      else if history(i).startsWith(prefix) then Some(i)
       else loop(i - 1)
     loop(startFrom)
-  }
 
-  private def searchDown(history: Vector[String], startFrom: Int, prefix: String): Option[Int] = {
+  private def searchDown(history: Vector[String], startFrom: Int, prefix: String): Option[Int] =
     @annotation.tailrec
     def loop(i: Int): Option[Int] =
-      if (i >= history.length) None
-      else if (history(i).startsWith(prefix)) Some(i)
+      if i >= history.length then None
+      else if history(i).startsWith(prefix) then Some(i)
       else loop(i + 1)
     loop(startFrom)
-  }
-}

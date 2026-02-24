@@ -7,19 +7,17 @@ import java.io.InputStreamReader
 import java.io.Reader
 
 /** Basic read-only terminal information. */
-trait TerminalInfo {
+trait TerminalInfo:
   def width: Int
   def height: Int
-}
 
 /** Backend that provides terminal dimensions and a reader for raw key input. */
-trait TerminalBackend extends TerminalInfo {
+trait TerminalBackend extends TerminalInfo:
   def reader: Reader
   def close(): Unit
-}
 
 /** Default JLine-backed terminal implementation. */
-final class JLineTerminalBackend extends TerminalBackend {
+final class JLineTerminalBackend extends TerminalBackend:
   private val terminal: Terminal =
     TerminalBuilder
       .builder()
@@ -40,4 +38,3 @@ final class JLineTerminalBackend extends TerminalBackend {
 
   override def close(): Unit =
     terminal.close()
-}

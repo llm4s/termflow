@@ -1,9 +1,8 @@
 package termflow.tui
 
 /** Basic colour palette for text and borders. */
-enum Color {
+enum Color:
   case Default, Black, Red, Green, Yellow, Blue, Magenta, Cyan, White
-}
 
 final case class Style(
   fg: Color = Color.Default,
@@ -15,7 +14,7 @@ final case class Style(
 
 final case class Text(txt: String, style: Style)
 
-enum VNode {
+enum VNode:
   case TextNode(
     override val x: XCoord,
     override val y: YCoord,
@@ -38,37 +37,31 @@ enum VNode {
     lineWidth: Int = 0 // 0 means use prompt length
   )
 
-  def x: XCoord = this match {
+  def x: XCoord = this match
     case TextNode(x, _, _)           => x
     case BoxNode(x, _, _, _, _, _)   => x
     case InputNode(x, _, _, _, _, _) => x
-  }
 
-  def y: YCoord = this match {
+  def y: YCoord = this match
     case TextNode(_, y, _)           => y
     case BoxNode(_, y, _, _, _, _)   => y
     case InputNode(_, y, _, _, _, _) => y
-  }
 
-  def width: Int = this match {
+  def width: Int = this match
     case TextNode(_, _, _)             => 1
     case BoxNode(_, _, width, _, _, _) => width
     case InputNode(_, _, prompt, _, _, lineWidth) =>
-      if (lineWidth > 0) lineWidth else prompt.length + 1
-  }
+      if lineWidth > 0 then lineWidth else prompt.length + 1
 
-  def height: Int = this match {
+  def height: Int = this match
     case TextNode(_, _, _)              => 1
     case BoxNode(_, _, _, height, _, _) => height
     case InputNode(_, _, _, _, _, _)    => 1
-  }
 
-  def style: Style = this match {
+  def style: Style = this match
     case TextNode(_, _, _)               => Style()
     case BoxNode(_, _, _, _, _, style)   => style
     case InputNode(_, _, _, style, _, _) => style
-  }
-}
 
 // Compatibility aliases so call sites can keep using TextNode/BoxNode/InputNode directly.
 type TextNode = VNode.TextNode

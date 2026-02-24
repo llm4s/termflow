@@ -32,6 +32,9 @@ jobs:
       - name: Setup sbt
         uses: sbt/setup-sbt@v1
 
+      - name: Scala 3 style syntax gate
+        run: ./scripts/check_scala3_style.sh
+
       - name: CI checks (format, scalafix, test)
         run: sbt --batch ciCheck
 

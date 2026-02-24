@@ -17,4 +17,9 @@
 - New files must follow current style policy.
 - Existing files should be style-aligned only in touched sections, unless the PR is explicitly style-only.
 
+## Local Gates
+- Run `./scripts/check_scala3_style.sh` before opening a PR.
+- Run `sbt --batch ciCheck` before opening a PR.
+- Run `sbt --batch coverageLib` when touching library logic or tests.
+
 </INSTRUCTIONS>

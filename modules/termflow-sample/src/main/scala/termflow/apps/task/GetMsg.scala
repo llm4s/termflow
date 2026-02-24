@@ -1,6 +1,6 @@
 package termflow.apps.task
 
-import termflow.apps.task.Task.Msg
+import termflow.apps.task.Task.{ Msg, TaskId }
 import termflow.tui.{ TermFlowError, TuiPrelude }
 import TuiPrelude.Result
 
@@ -40,11 +40,11 @@ object GetMsg {
   def apply(input: String): Result[Msg] =
     Try {
       input.trim match {
-        case Add(taskId) if taskId.nonEmpty            => Msg.Add(taskId)
-        case Remove(taskId) if taskId.nonEmpty         => Msg.Remove(taskId)
-        case MarkInProgress(taskId) if taskId.nonEmpty => Msg.MarkInProgress(taskId)
-        case MarkDone(taskId) if taskId.nonEmpty       => Msg.MarkDone(taskId)
-        case MarkCancel(taskId) if taskId.nonEmpty     => Msg.MarkCancel(taskId)
+        case Add(taskId) if taskId.nonEmpty            => Msg.Add(TaskId(taskId))
+        case Remove(taskId) if taskId.nonEmpty         => Msg.Remove(TaskId(taskId))
+        case MarkInProgress(taskId) if taskId.nonEmpty => Msg.MarkInProgress(TaskId(taskId))
+        case MarkDone(taskId) if taskId.nonEmpty       => Msg.MarkDone(TaskId(taskId))
+        case MarkCancel(taskId) if taskId.nonEmpty     => Msg.MarkCancel(TaskId(taskId))
         case "all"                                     => Msg.ListAll
         case "inprogress"                              => Msg.ListInProgress
         case "done"                                    => Msg.ListDone

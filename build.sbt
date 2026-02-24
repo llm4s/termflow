@@ -89,7 +89,8 @@ lazy val termflowSample = (project in file("modules/termflow-sample"))
     name := "termflow-sample",
     commonSettings,
     libraryDependencies ++= Seq(
-      Deps.jline
+      Deps.jline,
+      Deps.scalatest % Test
     ),
     coverageEnabled := false,
     publish / skip := true

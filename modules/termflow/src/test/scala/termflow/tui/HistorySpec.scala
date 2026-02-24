@@ -97,4 +97,22 @@ class HistorySpec extends AnyFunSuite {
     Files.deleteIfExists(path)
     Files.deleteIfExists(tmp)
   }
+
+  test("FileHistoryStore creates parent directories when missing") {
+    import java.nio.file.Files
+    val tmp    = Files.createTempDirectory("history-missing-parent")
+    val parent = tmp.resolve("nested")
+    val path   = parent.resolve("hist.log")
+    val store  = FileHistoryStore(path, maxEntries = 10)
+
+    assert(!Files.exists(parent))
+    store.append("entry")
+
+    assert(Files.exists(parent))
+    assert(store.load().contains("entry"))
+
+    Files.deleteIfExists(path)
+    Files.deleteIfExists(parent)
+    Files.deleteIfExists(tmp)
+  }
 }

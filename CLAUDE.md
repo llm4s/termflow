@@ -11,14 +11,11 @@ sbt compile
 # Run tests
 sbt test
 
+# CI-equivalent local check
+sbt ciCheck
+
 # Format code
 sbt scalafmtAll
-
-# Check formatting (CI)
-sbt scalafmtCheckAll
-
-# Scalafix check
-sbt "scalafixAll --check"
 
 # Scalafix rewrite
 sbt scalafixAll

@@ -28,21 +28,19 @@ object Tui {
 
 }
 
-sealed trait Cmd[+Msg]
+enum Cmd[+Msg] {
+  case NoCmd extends Cmd[Nothing]
+  case Exit  extends Cmd[Nothing]
 
-object Cmd {
-  case object NoCmd extends Cmd[Nothing]
-  case object Exit  extends Cmd[Nothing]
+  case GCmd[Msg](msg: Msg) extends Cmd[Msg]
 
-  final case class GCmd[Msg](msg: Msg) extends Cmd[Msg]
-
-  final case class FCmd[A, Msg](
+  case FCmd[A, Msg](
     task: Future[A],
     toCMD: A => Cmd[Msg],
     onEnqueue: Option[Msg] = None
   ) extends Cmd[Msg]
 
-  final case class TermFlowErrorCmd[Msg](msg: TermFlowError) extends Cmd[Msg]
+  case TermFlowErrorCmd[Msg](msg: TermFlowError) extends Cmd[Msg]
 }
 
 /**

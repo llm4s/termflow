@@ -57,10 +57,10 @@ debug key sequences and line editing behaviour.
 
 - Compile: `sbt compile`
 - Format: `sbt scalafmtAll`
-- CI-equivalent local check: `sbt ciCheck`
+- CI-equivalent local check: `sbt --batch ciCheck`
 - Scalafix rewrite: `sbt scalafixAll`
 - Tests: `sbt test`
-- Library coverage report: `sbt coverageLib`
+- Library coverage report: `sbt --batch coverageLib`
 - Publish locally (for integration testing): `sbt publishLocal`
 
 ## Scala 3 Conventions
@@ -70,6 +70,12 @@ debug key sequences and line editing behaviour.
 - Prefer `extension` methods over implicit classes.
 - Avoid implicit conversions; return explicit `Tui` values (for example, `model.tui`).
 - Keep migration changes behavior-preserving unless a PR states otherwise.
+
+## Development Guidelines
+
+For canonical style, PR scoping, and compiler option rationale, see:
+
+- `docs/development-guidelines.md`
 
 ## Versioning
 

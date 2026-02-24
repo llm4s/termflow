@@ -20,6 +20,9 @@ sbt scalafmtAll
 # Scalafix rewrite
 sbt scalafixAll
 
+# Library coverage report
+sbt coverageLib
+
 # Publish locally
 sbt publishLocal
 ```

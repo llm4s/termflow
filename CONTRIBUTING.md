@@ -11,6 +11,7 @@
 - CI-equivalent local check: `sbt ciCheck`
 - Scalafix rewrite: `sbt scalafixAll`
 - Tests: `sbt test`
+- Library coverage report: `sbt coverageLib`
 - Publish locally (for integration testing): `sbt publishLocal`
 
 ## Scala 3 Style

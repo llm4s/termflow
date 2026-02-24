@@ -71,6 +71,16 @@ class TuiRuntimeSpec extends AnyFunSuite:
     bus.cancelAllSubscriptions()
     assert(called.get())
 
+  test("unexpectedMessage falls back to exception class when message is null or blank"):
+    val nullMessageEx = new RuntimeException(null: String)
+    assert(TuiRuntime.unexpectedMessage(nullMessageEx) == "RuntimeException")
+
+    val blankMessageEx = new IllegalStateException("   ")
+    assert(TuiRuntime.unexpectedMessage(blankMessageEx) == "IllegalStateException")
+
+    val messageEx = new IllegalArgumentException("boom")
+    assert(TuiRuntime.unexpectedMessage(messageEx) == "boom")
+
   test("runtime shutdown closes terminal backend and omits goodbye text"):
     val backend = new TrackingTerminalBackend
 

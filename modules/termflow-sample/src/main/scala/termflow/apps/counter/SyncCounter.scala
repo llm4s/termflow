@@ -87,7 +87,7 @@ object SyncCounter {
 
     override def toMsg(input: PromptLine): Result[Msg] =
       Try {
-        input.trim.toLowerCase match {
+        input.value.trim.toLowerCase match {
           case "increment" | "+" =>
             Increment
           case "decrement" | "-" =>

@@ -16,7 +16,7 @@ class HistorySpec extends AnyFunSuite {
   private def renderLine(state: PromptHistory.State): String =
     Prompt.render(state.prompt)
 
-  private def toMsg(line: String): Result[String] = Right(line)
+  private def toMsg(line: PromptLine): Result[String] = Right(line.value)
 
   private def step(
     state: PromptHistory.State,

@@ -27,7 +27,7 @@ object Prompt {
     if (clamped == state.cursor) state else state.copy(cursor = clamped)
   }
 
-  def handleKey[G](state: State, k: InputKey)(toMsg: String => Result[G]): (State, Option[Cmd[G]]) =
+  def handleKey[G](state: State, k: InputKey)(toMsg: PromptLine => Result[G]): (State, Option[Cmd[G]]) =
     k match {
       // Clean exit via Ctrl+C or Ctrl+D
       case KeyDecoder.InputKey.Ctrl('C') | KeyDecoder.InputKey.Ctrl('D') =>
@@ -35,7 +35,7 @@ object Prompt {
 
       case KeyDecoder.InputKey.Ctrl('M') | KeyDecoder.InputKey.Enter =>
         val raw = render(state)
-        val cmd = toMsg(raw).fold(err => Cmd.TermFlowErrorCmd(err), g => Cmd.GCmd(g))
+        val cmd = toMsg(PromptLine(raw)).fold(err => Cmd.TermFlowErrorCmd(err), g => Cmd.GCmd(g))
         (State(Vector.empty, 0), Some(cmd))
 
       case KeyDecoder.InputKey.Backspace =>

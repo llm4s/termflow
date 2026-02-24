@@ -4,7 +4,14 @@ package termflow.tui
 object TuiPrelude {
 
   /** Fully edited line accepted from the prompt. */
-  type PromptLine = String
+  opaque type PromptLine = String
+  object PromptLine {
+    def apply(value: String): PromptLine = value
+
+    extension (line: PromptLine) {
+      def value: String = line
+    }
+  }
 
   /** Result type used by TUI parsing and commands. */
   type Result[A] = Either[TermFlowError, A]

@@ -35,20 +35,19 @@ object Task {
     case AppErrorMsg(erroMsg: String)
   }
 
-  sealed trait Msg
-  object Msg {
-    final case class Add(id: TaskId)                           extends Msg
-    final case class Remove(id: TaskId)                        extends Msg
-    final case class MarkInProgress(id: TaskId)                extends Msg
-    final case class MarkDone(id: TaskId)                      extends Msg
-    final case class MarkCancel(id: TaskId)                    extends Msg
-    case object ListAll                                        extends Msg
-    case object ListInProgress                                 extends Msg
-    case object ListDone                                       extends Msg
-    case object ListCancelled                                  extends Msg
-    final case class InvalidCmd(msg: String)                   extends Msg
-    final case class ConsoleInputKey(key: KeyDecoder.InputKey) extends Msg
-    final case class ConsoleInputError(error: Throwable)       extends Msg
+  enum Msg {
+    case Add(id: TaskId)
+    case Remove(id: TaskId)
+    case MarkInProgress(id: TaskId)
+    case MarkDone(id: TaskId)
+    case MarkCancel(id: TaskId)
+    case ListAll
+    case ListInProgress
+    case ListDone
+    case ListCancelled
+    case InvalidCmd(msg: String)
+    case ConsoleInputKey(key: KeyDecoder.InputKey)
+    case ConsoleInputError(error: Throwable)
   }
 
   import Msg._

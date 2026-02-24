@@ -33,10 +33,10 @@ jobs:
         uses: sbt/setup-sbt@v1
 
       - name: CI checks (format, scalafix, test)
-        run: sbt ciCheck
+        run: sbt --batch ciCheck
 
       - name: Coverage tests (Scala 3 only)
-        run: sbt coverageLib
+        run: sbt --batch coverageLib
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4

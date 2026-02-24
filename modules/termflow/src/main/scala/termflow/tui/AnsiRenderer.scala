@@ -149,7 +149,9 @@ final case class SimpleANSIRenderer() extends TuiRenderer:
     lastRoot = Some(textNode)
 
 object ACSUtils:
-  def EnterAlternatBuffer(): Unit = print("\u001b[?1049h")
+  def EnterAlternateBuffer(): Unit = print("\u001b[?1049h")
+  @deprecated("Use EnterAlternateBuffer", "0.1.0")
+  def EnterAlternatBuffer(): Unit = EnterAlternateBuffer()
   def EnterNormalBuffer(): Unit   = print("\u001b[?1049l")
   def SaveCursor(): Unit          = print("\u001b7")
   def RestoreCursor(): Unit       = print("\u001b8")

@@ -80,7 +80,7 @@ object TuiRuntime:
     val bus: CmdBus[Msg] = new LocalCmdBus[Msg](terminalBackend)
 
     // Enter alternate buffer and set up terminal
-    EnterAlternatBuffer()
+    EnterAlternateBuffer()
     ClearScreen()
     print(ANSI.showCursor)
 

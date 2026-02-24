@@ -7,7 +7,7 @@ object KeyPressInspectorMain:
   def main(args: Array[String]): Unit =
     val _         = args
     val inputKeys = ConsoleKeyPressSource()
-    ACSUtils.EnterAlternatBuffer()
+    ACSUtils.EnterAlternateBuffer()
     println("🧭  Raw Input Inspector")
     println("Press any key to see its details, Ctrl+C or Ctrl+D to exit.\n")
 

@@ -49,9 +49,14 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
+  // Scala 3 compiler option reference:
+  // https://docs.scala-lang.org/scala3/guides/migration/options-intro.html
   scalacOptions ++= Seq(
     "-deprecation",
-    "-feature"
+    "-feature",
+    "-unchecked",
+    "-Wvalue-discard",  // warn when non-Unit results are ignored
+    "-source:3.7-migration" // emit migration guidance without failing builds
   ),
   Test / fork := true
 )

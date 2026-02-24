@@ -61,7 +61,7 @@ final class LocalCmdBus[Msg](val terminal: TerminalBackend) extends CmdBus[Msg] 
 
 object TuiRuntime {
 
-  implicit val ec: ExecutionContext = ExecutionContext.global
+  given ExecutionContext = ExecutionContext.global
 
   /**
    * Run a TUI application with the given renderer and terminal backend.
@@ -114,7 +114,7 @@ object TuiRuntime {
                 bus.publish(toCmd(result))
               case Failure(e) =>
                 bus.publish(Cmd.TermFlowErrorCmd(TermFlowError.Unexpected(e.getMessage, Some(e))))
-            }(using ec)
+            }
             onEnqueue match {
               case Some(msg) => bus.publish(Cmd.GCmd(msg))
               case None      => bus.publish(Cmd.NoCmd)

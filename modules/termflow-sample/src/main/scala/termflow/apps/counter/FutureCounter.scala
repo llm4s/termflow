@@ -9,7 +9,7 @@ import scala.concurrent.ExecutionContext
 import scala.util.Try
 
 object FutureCounter {
-  implicit val ec: ExecutionContext = ExecutionContext.global
+  given ExecutionContext = ExecutionContext.global
 
   final case class Model(
     terminalWidth: Int,
@@ -54,7 +54,7 @@ object FutureCounter {
           Tui(
             m,
             Cmd.FCmd(
-              m.count.asyncIncrement()(using ec),
+              m.count.asyncIncrement(),
               (c: Counter) => Cmd.GCmd(UpdateWith(c)),
               onEnqueue = Some(Busy(s"InCrementING::${TimeFormatter.getCurrentTime}"))
             )
@@ -63,7 +63,7 @@ object FutureCounter {
           Tui(
             m,
             Cmd.FCmd(
-              m.count.asyncDecrement()(using ec),
+              m.count.asyncDecrement(),
               (c: Counter) => Cmd.GCmd(UpdateWith(c)),
               onEnqueue = Some(Busy(s"DeCrementING::${TimeFormatter.getCurrentTime}"))
             )

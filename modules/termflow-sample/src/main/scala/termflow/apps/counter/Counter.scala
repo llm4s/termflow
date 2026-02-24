@@ -1,6 +1,7 @@
 package termflow.apps.counter
 
-import scala.concurrent.{ ExecutionContext, Future }
+import scala.concurrent.ExecutionContext
+import scala.concurrent.Future
 
 opaque type Counter = Int
 

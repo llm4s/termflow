@@ -5,7 +5,8 @@ import termflow.tui.ACSUtils._
 import java.util.concurrent.LinkedBlockingQueue
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
-import scala.util.{ Failure, Success }
+import scala.util.Failure
+import scala.util.Success
 
 /**
  * Renderer responsible for converting virtual DOM to terminal output.

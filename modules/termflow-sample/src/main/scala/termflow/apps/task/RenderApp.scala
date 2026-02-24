@@ -1,8 +1,8 @@
 package termflow.apps.task
 
 import termflow.apps.task.Task._
-import termflow.tui._
 import termflow.tui.TuiPrelude._
+import termflow.tui._
 
 object RenderApp {
 

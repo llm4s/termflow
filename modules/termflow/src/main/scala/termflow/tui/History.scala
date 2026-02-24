@@ -4,7 +4,9 @@ import termflow.tui.KeyDecoder.InputKey
 import termflow.tui.TuiPrelude._
 
 import java.nio.charset.StandardCharsets
-import java.nio.file.{ Files, Path, StandardOpenOption }
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.StandardOpenOption
 import scala.jdk.CollectionConverters._
 
 /** Abstraction for loading and persisting command history. */

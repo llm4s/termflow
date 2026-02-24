@@ -1,10 +1,12 @@
 package termflow.apps.counter
 
-import termflow.tui._
-import termflow.tui.TuiPrelude._
-import termflow.tui.Color.{ Blue, Green, Yellow }
-import termflow.tui.Tui.*
 import termflow.TimeFormatter
+import termflow.tui.Color.Blue
+import termflow.tui.Color.Green
+import termflow.tui.Color.Yellow
+import termflow.tui.Tui._
+import termflow.tui.TuiPrelude._
+import termflow.tui._
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
@@ -100,7 +102,7 @@ object FutureCounter {
             2.x,
             2.y,
             List(
-              s"Current count: ".text,
+              "Current count: ".text,
               Text(s"${m.count.count}", renderCount(m.count.count))
             )
           ),

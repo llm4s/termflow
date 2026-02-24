@@ -1,7 +1,7 @@
 package termflow.run.jline
 
-import termflow.tui.ConsoleKeyPressSource
 import termflow.tui.ACSUtils
+import termflow.tui.ConsoleKeyPressSource
 
 object KeyPressInspectorMain {
   def main(args: Array[String]): Unit = {

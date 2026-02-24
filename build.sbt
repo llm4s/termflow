@@ -8,6 +8,8 @@ inThisBuild(
     organization       := "org.llm4s",
     organizationName   := "llm4s",
     scalaVersion       := scala3,
+    semanticdbEnabled  := true,
+    semanticdbVersion  := scalafixSemanticdb.revision,
     versionScheme      := Some("early-semver"),
     homepage           := Some(url("https://github.com/llm4s/termflow")),
     licenses           := List("MIT" -> url("https://mit-license.org/")),

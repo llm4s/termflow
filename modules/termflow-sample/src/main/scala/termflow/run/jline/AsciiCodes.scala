@@ -4,7 +4,7 @@ object AsciiTables {
 
   def printAsciiTable(args: Array[String]): Unit = {
     val _ = args
-    println(f"ASCII Table (0–127):")
+    println("ASCII Table (0–127):")
     for (i <- 0 to 127) {
       val ch = i.toChar
       val display =
@@ -53,9 +53,9 @@ object AsciiTables {
       127 -> "DEL (Delete)"
     )
 
-    println(f"Full ASCII Table (0–127):\n")
-    println(f"Code | Char | Description")
-    println(f"-----+------+-----------------------------")
+    println("Full ASCII Table (0–127):\n")
+    println("Code | Char | Description")
+    println("-----+------+-----------------------------")
 
     for (i <- 0 to 127) {
       val desc =

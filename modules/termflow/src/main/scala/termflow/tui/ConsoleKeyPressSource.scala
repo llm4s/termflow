@@ -1,11 +1,14 @@
 package termflow.tui
 
-import org.jline.terminal.{ Terminal, TerminalBuilder }
+import org.jline.terminal.Terminal
+import org.jline.terminal.TerminalBuilder
 import termflow.tui.AsciiControl._
 import termflow.tui.KeyDecoder.InputKey
 
-import java.io.{ InputStreamReader, Reader }
-import java.util.concurrent.{ BlockingQueue, LinkedBlockingQueue }
+import java.io.InputStreamReader
+import java.io.Reader
+import java.util.concurrent.BlockingQueue
+import java.util.concurrent.LinkedBlockingQueue
 import scala.annotation.tailrec
 import scala.util.Try
 

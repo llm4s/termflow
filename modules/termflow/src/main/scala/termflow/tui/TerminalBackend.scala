@@ -1,8 +1,10 @@
 package termflow.tui
 
-import org.jline.terminal.{ Terminal, TerminalBuilder }
+import org.jline.terminal.Terminal
+import org.jline.terminal.TerminalBuilder
 
-import java.io.{ InputStreamReader, Reader }
+import java.io.InputStreamReader
+import java.io.Reader
 
 /** Basic read-only terminal information. */
 trait TerminalInfo {

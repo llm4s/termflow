@@ -1,6 +1,7 @@
 package termflow.tui
 
 import termflow.tui.TuiPrelude._
+
 import scala.concurrent.Future
 
 /** Error ADT used by TermFlow. */

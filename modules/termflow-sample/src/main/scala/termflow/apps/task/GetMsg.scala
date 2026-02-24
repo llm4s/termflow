@@ -1,10 +1,13 @@
 package termflow.apps.task
 
-import termflow.apps.task.Task.{ Msg, TaskId }
-import termflow.tui.{ TermFlowError, TuiPrelude }
-import TuiPrelude.Result
+import termflow.apps.task.Task.Msg
+import termflow.apps.task.Task.TaskId
+import termflow.tui.TermFlowError
+import termflow.tui.TuiPrelude
 
 import scala.util.Try
+
+import TuiPrelude.Result
 
 object Add {
   def unapply(input: String): Option[String] =

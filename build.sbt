@@ -94,3 +94,5 @@ lazy val termflowSample = (project in file("modules/termflow-sample"))
     coverageEnabled := false,
     publish / skip := true
   )
+
+addCommandAlias("ciCheck", ";scalafmtCheckAll;scalafixAll --check;test")

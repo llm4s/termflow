@@ -35,8 +35,7 @@ jobs:
       - name: Format check
         run: sbt scalafmtCheckAll
 
-      - name: Scalafix check (informational)
-        continue-on-error: true
+      - name: Scalafix check
         run: sbt "scalafixAll --check"
 
       - name: Compile (Scala 3)

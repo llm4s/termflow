@@ -7,12 +7,8 @@ import termflow.tui.Tui.*
 object Task {
   type TaskId = String
 
-  sealed trait TaskStatus
-  object TaskStatus {
-    case object Pending    extends TaskStatus
-    case object InProgress extends TaskStatus
-    case object Done       extends TaskStatus
-    case object Cancelled  extends TaskStatus
+  enum TaskStatus {
+    case Pending, InProgress, Done, Cancelled
   }
 
   final case class Task(id: TaskId, status: TaskStatus)
@@ -27,16 +23,9 @@ object Task {
     prompt: Prompt.State
   )
 
-  sealed trait RenderMode
-  object RenderMode {
-    case object Init                              extends RenderMode
-    case object Add                               extends RenderMode
-    case object All                               extends RenderMode
-    case object InProgress                        extends RenderMode
-    case object Cancelled                         extends RenderMode
-    case object Done                              extends RenderMode
-    case object Count                             extends RenderMode
-    final case class AppErrorMsg(erroMsg: String) extends RenderMode
+  enum RenderMode {
+    case Init, Add, All, InProgress, Cancelled, Done, Count
+    case AppErrorMsg(erroMsg: String)
   }
 
   sealed trait Msg

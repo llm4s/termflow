@@ -77,7 +77,7 @@ object RenderApp {
     )
   }
 
-  private def renderTasks(tasks: List[Task]): List[TextNode] =
+  private def renderTasks(tasks: List[Task]): List[VNode] =
     if (tasks.isEmpty)
       List(
         TextNode(

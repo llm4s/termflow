@@ -49,9 +49,16 @@ inThisBuild(
 )
 
 lazy val commonSettings = Seq(
+  // Scala 3 compiler option reference:
+  // https://docs.scala-lang.org/scala3/guides/migration/options-intro.html
   scalacOptions ++= Seq(
+    // Baseline safety/quality signals
     "-deprecation",
-    "-feature"
+    "-feature",
+    "-unchecked",
+    "-Wvalue-discard",
+    // Migration mode: surfaces modernization opportunities without failing builds
+    "-source:3.7-migration"
   ),
   Test / fork := true
 )

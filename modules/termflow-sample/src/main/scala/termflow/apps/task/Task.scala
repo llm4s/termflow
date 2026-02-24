@@ -5,7 +5,14 @@ import termflow.tui.TuiPrelude._
 import termflow.tui.Tui.*
 
 object Task {
-  type TaskId = String
+  opaque type TaskId = String
+  object TaskId {
+    def apply(value: String): TaskId = value
+
+    extension (id: TaskId) {
+      def value: String = id
+    }
+  }
 
   enum TaskStatus {
     case Pending, InProgress, Done, Cancelled

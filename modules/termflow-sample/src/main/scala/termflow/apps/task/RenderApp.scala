@@ -103,7 +103,7 @@ object RenderApp {
         val rowY   = (3 + index).y
         val number = TextNode(2.x, rowY, List(Text(s"${index + 1}.", Style(fg = Color.Black, bold = true))))
         val status = TextNode(6.x, rowY, List(Text(statusIcon, Style(fg = statusColor, bold = true))))
-        val taskId = TextNode(10.x, rowY, List(Text(task.id, Style(fg = Color.Black, bold = true))))
+        val taskId = TextNode(10.x, rowY, List(Text(task.id.value, Style(fg = Color.Black, bold = true))))
 
         List(number, status, taskId)
       }

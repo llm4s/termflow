@@ -17,7 +17,4 @@
 - New files must follow current style policy.
 - Existing files should be style-aligned only in touched sections, unless the PR is explicitly style-only.
 
-## Canonical Reference
-- See `docs/development-guidelines.md` for full style policy, PR scoping rules, and compiler option rationale.
-
 </INSTRUCTIONS>

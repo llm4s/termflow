@@ -3,6 +3,7 @@ package termflow.apps.echo
 import termflow.tui._
 import termflow.tui.TuiPrelude._
 import termflow.tui.Color._
+import termflow.tui.Tui.*
 
 object EchoApp {
 
@@ -39,7 +40,7 @@ object EchoApp {
         maxWidth = math.max(40, ctx.terminal.width - 10),
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         prompt = Prompt.State()
-      )
+      ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       msg match {
@@ -47,10 +48,10 @@ object EchoApp {
           // Wrap long input into lines that fit in the box
           val wrappedLines = wrapText(input, m.maxWidth - 4)
           val newMsgs      = m.messages ++ wrappedLines
-          m.copy(messages = newMsgs.takeRight(30))
+          m.copy(messages = newMsgs.takeRight(30)).tui
 
         case Clear =>
-          m.copy(messages = Nil)
+          m.copy(messages = Nil).tui
 
         case Exit =>
           Tui(m, Cmd.Exit)
@@ -59,11 +60,11 @@ object EchoApp {
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
           maybeCmd match {
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt)
+            case None      => m.copy(prompt = nextPrompt).tui
           }
 
         case ConsoleInputError(_) =>
-          m // ignore for now
+          m.tui // ignore for now
       }
 
     override def view(m: Model): RootNode = {

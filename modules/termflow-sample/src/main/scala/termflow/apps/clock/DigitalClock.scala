@@ -3,6 +3,7 @@ package termflow.apps.clock
 import termflow.tui._
 import termflow.tui.TuiPrelude._
 import termflow.tui.Color.{ Blue, Red }
+import termflow.tui.Tui.*
 
 import java.time.LocalTime
 
@@ -47,25 +48,25 @@ object DigitalClock {
         None,
         Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         Prompt.State()
-      )
+      ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       msg match {
         case Tick =>
-          m.copy(clock = m.clock.copy(value = LocalTime.now().toString))
+          m.copy(clock = m.clock.copy(value = LocalTime.now().toString)).tui
 
         case StartClock =>
           if (m.clock.sub.isActive)
-            m.copy(error = Some("⏱️ Clock already running"))
+            m.copy(error = Some("⏱️ Clock already running")).tui
           else
-            m.copy(clock = m.clock.copy(sub = Sub.Every(1000, () => Tick, ctx)), error = None)
+            m.copy(clock = m.clock.copy(sub = Sub.Every(1000, () => Tick, ctx)), error = None).tui
 
         case StopClock =>
           m.clock.sub.cancel()
-          m.copy(clock = m.clock.copy(sub = Sub.NoSub), messages = "🛑 Clock stopped" :: m.messages)
+          m.copy(clock = m.clock.copy(sub = Sub.NoSub), messages = "🛑 Clock stopped" :: m.messages).tui
 
         case AddMessage(input) =>
-          m.copy(messages = s"💬 You said: $input" :: m.messages)
+          m.copy(messages = s"💬 You said: $input" :: m.messages).tui
 
         case Exit =>
           Tui(m, Cmd.Exit)
@@ -74,11 +75,11 @@ object DigitalClock {
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
           maybeCmd match {
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt)
+            case None      => m.copy(prompt = nextPrompt).tui
           }
 
         case ConsoleInputError(e) =>
-          m.copy(messages = m.messages :+ s"Console Input Error: ${e.getMessage}")
+          m.copy(messages = m.messages :+ s"Console Input Error: ${e.getMessage}").tui
       }
 
     override def view(m: Model): RootNode = {

@@ -3,6 +3,7 @@ package termflow.apps.counter
 import termflow.tui.Color.Blue
 import termflow.tui._
 import termflow.tui.TuiPrelude._
+import termflow.tui.Tui.*
 
 import scala.util.Try
 
@@ -34,21 +35,21 @@ object SyncCounter {
         counter = Counter(0),
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         prompt = Prompt.State()
-      )
+      ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       msg match {
         case Increment =>
-          m.copy(counter = m.counter.syncIncrement())
+          m.copy(counter = m.counter.syncIncrement()).tui
         case Decrement =>
-          m.copy(counter = m.counter.syncDecrement())
+          m.copy(counter = m.counter.syncDecrement()).tui
         case ConsoleInputKey(k) =>
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
           maybeCmd match {
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt)
+            case None      => m.copy(prompt = nextPrompt).tui
           }
-        case ConsoleInputError(_) => m
+        case ConsoleInputError(_) => m.tui
       }
 
     override def view(m: Model): RootNode = {

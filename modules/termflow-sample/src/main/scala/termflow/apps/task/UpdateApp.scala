@@ -4,6 +4,7 @@ import termflow.apps.task.Task.Msg._
 import termflow.apps.task.Task.RenderMode._
 import termflow.apps.task.Task.{ Model, Msg, RenderMode, TaskId, TaskStatus }
 import termflow.tui.Tui
+import termflow.tui.Tui.*
 
 object UpdateApp {
 
@@ -11,11 +12,11 @@ object UpdateApp {
     msg match {
       case Msg.ConsoleInputKey(_) =>
         // Handled in Task.App; keep here for exhaustivity
-        m
+        m.tui
       case Msg.ConsoleInputError(e) =>
-        m.copy(renderList = AppErrorMsg(s"Console Input Error: ${e.getMessage}"))
+        m.copy(renderList = AppErrorMsg(s"Console Input Error: ${e.getMessage}")).tui
       case Msg.Add(id) =>
-        if (m.tasks.contains(id)) m.copy(renderList = AppErrorMsg(s"$id already exist"))
+        if (m.tasks.contains(id)) m.copy(renderList = AppErrorMsg(s"$id already exist")).tui
         else {
           val task     = Task.Task(id, TaskStatus.Pending)
           val newTasks = m.tasks + (id -> task)
@@ -23,32 +24,32 @@ object UpdateApp {
             tasks = newTasks,
             filteredList = recomputeFiltered(newTasks, RenderMode.All),
             renderList = RenderMode.All
-          )
+          ).tui
         }
 
       case Msg.Remove(id) =>
-        if (!m.tasks.contains(id)) m.copy(renderList = AppErrorMsg(s"$id does not exist"))
+        if (!m.tasks.contains(id)) m.copy(renderList = AppErrorMsg(s"$id does not exist")).tui
         else {
           val newTasks = m.tasks - id
-          m.copy(tasks = newTasks, filteredList = recomputeFiltered(newTasks, m.renderList))
+          m.copy(tasks = newTasks, filteredList = recomputeFiltered(newTasks, m.renderList)).tui
         }
 
       case Msg.MarkInProgress(id) =>
-        updateTaskStatus(m, id, TaskStatus.InProgress)
+        updateTaskStatus(m, id, TaskStatus.InProgress).tui
       case Msg.MarkDone(id) =>
-        updateTaskStatus(m, id, TaskStatus.Done)
+        updateTaskStatus(m, id, TaskStatus.Done).tui
       case Msg.MarkCancel(id) =>
-        updateTaskStatus(m, id, TaskStatus.Cancelled)
+        updateTaskStatus(m, id, TaskStatus.Cancelled).tui
       case ListAll =>
-        m.copy(filteredList = recomputeFiltered(m.tasks, All), renderList = All)
+        m.copy(filteredList = recomputeFiltered(m.tasks, All), renderList = All).tui
       case ListInProgress =>
-        m.copy(filteredList = recomputeFiltered(m.tasks, InProgress), renderList = InProgress)
+        m.copy(filteredList = recomputeFiltered(m.tasks, InProgress), renderList = InProgress).tui
       case ListDone =>
-        m.copy(filteredList = recomputeFiltered(m.tasks, Done), renderList = Done)
+        m.copy(filteredList = recomputeFiltered(m.tasks, Done), renderList = Done).tui
       case ListCancelled =>
-        m.copy(filteredList = recomputeFiltered(m.tasks, Cancelled), renderList = Cancelled)
+        m.copy(filteredList = recomputeFiltered(m.tasks, Cancelled), renderList = Cancelled).tui
       case InvalidCmd(msg) =>
-        m.copy(renderList = AppErrorMsg(msg))
+        m.copy(renderList = AppErrorMsg(msg)).tui
     }
 
   private def updateTaskStatus(m: Model, id: TaskId, status: TaskStatus): Model =

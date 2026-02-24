@@ -2,7 +2,6 @@ package termflow.tui
 
 import termflow.tui.TuiPrelude._
 import scala.concurrent.Future
-import scala.language.implicitConversions
 
 /** Error ADT used by TermFlow. */
 sealed trait TermFlowError
@@ -24,14 +23,11 @@ final case class Tui[Model, Msg](
 object Tui {
 
   /** Syntax helpers for lifting a model into a `Tui`. */
-  implicit final class TuiOps[Model](private val m: Model) extends AnyVal {
+  extension [Model](m: Model) {
     def tui[Msg]: Tui[Model, Msg]            = Tui(m)
     def gCmd[Msg](msg: Msg): Tui[Model, Msg] = Tui(m, Cmd.GCmd(msg))
   }
 
-  /** Implicit conversion to treat a bare model as `Tui(model, NoCmd)`. */
-  implicit def modelToTui[Model, Msg](m: Model): Tui[Model, Msg] =
-    Tui(m, Cmd.NoCmd)
 }
 
 sealed trait Cmd[+Msg]

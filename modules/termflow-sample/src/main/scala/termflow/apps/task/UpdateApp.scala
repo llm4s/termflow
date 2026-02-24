@@ -20,7 +20,7 @@ object UpdateApp {
       case Msg.ConsoleInputError(e) =>
         m.copy(renderList = AppErrorMsg(s"Console Input Error: ${e.getMessage}")).tui
       case Msg.Add(id) =>
-        if (m.tasks.contains(id)) m.copy(renderList = AppErrorMsg(s"$id already exist")).tui
+        if (m.tasks.contains(id)) m.copy(renderList = AppErrorMsg(s"$id already exists")).tui
         else {
           val task     = Task.Task(id, TaskStatus.Pending)
           val newTasks = m.tasks + (id -> task)

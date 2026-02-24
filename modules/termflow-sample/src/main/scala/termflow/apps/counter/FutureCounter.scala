@@ -54,7 +54,7 @@ object FutureCounter {
           Tui(
             m,
             Cmd.FCmd(
-              m.count.asyncIncrement()(ec),
+              m.count.asyncIncrement()(using ec),
               (c: Counter) => Cmd.GCmd(UpdateWith(c)),
               onEnqueue = Some(Busy(s"InCrementING::${TimeFormatter.getCurrentTime}"))
             )
@@ -63,7 +63,7 @@ object FutureCounter {
           Tui(
             m,
             Cmd.FCmd(
-              m.count.asyncDecrement()(ec),
+              m.count.asyncDecrement()(using ec),
               (c: Counter) => Cmd.GCmd(UpdateWith(c)),
               onEnqueue = Some(Busy(s"DeCrementING::${TimeFormatter.getCurrentTime}"))
             )

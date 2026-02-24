@@ -114,7 +114,7 @@ object TuiRuntime {
                 bus.publish(toCmd(result))
               case Failure(e) =>
                 bus.publish(Cmd.TermFlowErrorCmd(TermFlowError.Unexpected(e.getMessage, Some(e))))
-            }(ec)
+            }(using ec)
             onEnqueue match {
               case Some(msg) => bus.publish(Cmd.GCmd(msg))
               case None      => bus.publish(Cmd.NoCmd)

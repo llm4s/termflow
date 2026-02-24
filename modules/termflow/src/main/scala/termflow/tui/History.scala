@@ -19,7 +19,7 @@ final case class FileHistoryStore(path: Path, maxEntries: Int = 200) extends His
   private def ensureDir(): Unit = {
     val parent = path.getParent
     if (parent != null && !Files.exists(parent)) {
-      Files.createDirectories(parent)
+      Files.createDirectories(parent): Unit
     }
   }
 
@@ -45,7 +45,7 @@ final case class FileHistoryStore(path: Path, maxEntries: Int = 200) extends His
           line.getBytes(StandardCharsets.UTF_8),
           StandardOpenOption.CREATE,
           StandardOpenOption.APPEND
-        )
+        ): Unit
       } catch {
         case _: Throwable => ()
       }

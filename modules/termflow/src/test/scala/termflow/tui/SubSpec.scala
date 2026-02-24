@@ -101,3 +101,29 @@ class SubSpec extends AnyFunSuite:
     Thread.sleep(80)
     assert(!sub.isActive)
     assert(sink.messages.size == beforeCancel)
+
+  test("InputKeyFromSource cancel does not emit interruption error"):
+    final class BlockingSource(started: CountDownLatch) extends TerminalKeySource:
+      override def next(): Try[KeyDecoder.InputKey] =
+        Try {
+          started.countDown()
+          Thread.sleep(10_000)
+          KeyDecoder.InputKey.CharKey('x')
+        }
+      override def close(): Unit = ()
+
+    val started = new CountDownLatch(1)
+    val source  = new BlockingSource(started)
+    val sink    = new TestSink[String]
+    val sub = Sub.InputKeyFromSource[String](
+      source,
+      key => s"key:$key",
+      err => s"err:${err.getClass.getSimpleName}",
+      sink
+    )
+
+    assert(started.await(1, TimeUnit.SECONDS))
+    sub.cancel()
+    Thread.sleep(50)
+    val msgs = sink.messages.collect { case Cmd.GCmd(v: String) => v }
+    assert(msgs.isEmpty)

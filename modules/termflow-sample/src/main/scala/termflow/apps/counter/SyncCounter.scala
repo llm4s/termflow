@@ -17,12 +17,11 @@ object SyncCounter {
     prompt: Prompt.State
   )
 
-  sealed trait Msg
-  object Msg {
-    case object Increment                                      extends Msg
-    case object Decrement                                      extends Msg
-    final case class ConsoleInputKey(key: KeyDecoder.InputKey) extends Msg
-    final case class ConsoleInputError(error: Throwable)       extends Msg
+  enum Msg {
+    case Increment
+    case Decrement
+    case ConsoleInputKey(key: KeyDecoder.InputKey)
+    case ConsoleInputError(error: Throwable)
   }
 
   import Msg._

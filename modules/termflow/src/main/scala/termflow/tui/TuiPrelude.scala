@@ -10,13 +10,13 @@ object TuiPrelude {
   type Result[A] = Either[TermFlowError, A]
 
   /** Syntax helpers: `2.x`, `3.y`. */
-  implicit final class CoordsIntOps(val i: Int) extends AnyVal {
+  extension (i: Int) {
     def x: XCoord = XCoord(i)
     def y: YCoord = YCoord(i)
   }
 
   /** String syntax helpers for creating styled text nodes. */
-  implicit final class StringTextOps(val txt: String) extends AnyVal {
+  extension (txt: String) {
     def text: Text                                      = Text(txt, Style())
     def text(style: Style): Text                        = Text(txt, style)
     def text(fg: Color): Text                           = Text(txt, Style(fg = fg))

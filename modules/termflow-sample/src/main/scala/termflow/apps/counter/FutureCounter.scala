@@ -3,6 +3,7 @@ package termflow.apps.counter
 import termflow.tui._
 import termflow.tui.TuiPrelude._
 import termflow.tui.Color.{ Blue, Green, Yellow }
+import termflow.tui.Tui.*
 import termflow.TimeFormatter
 
 import scala.concurrent.ExecutionContext
@@ -46,7 +47,7 @@ object FutureCounter {
         prompt = Prompt.State(),
         spinner = Sub.NoSub,
         spinnerIndex = 0
-      )
+      ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       msg match {
@@ -71,20 +72,20 @@ object FutureCounter {
         case UpdateWith(c) =>
           // stop spinner when work completes
           if (m.spinner.isActive) m.spinner.cancel()
-          m.copy(count = c, staus = s"done::${TimeFormatter.getCurrentTime}", spinner = Sub.NoSub, spinnerIndex = 0)
+          m.copy(count = c, staus = s"done::${TimeFormatter.getCurrentTime}", spinner = Sub.NoSub, spinnerIndex = 0).tui
         case Busy(action) =>
           // start spinner if not already active
-          if (m.spinner.isActive) m.copy(staus = action)
-          else m.copy(staus = action, spinner = Sub.Every(200, () => SpinnerTick, ctx))
+          if (m.spinner.isActive) m.copy(staus = action).tui
+          else m.copy(staus = action, spinner = Sub.Every(200, () => SpinnerTick, ctx)).tui
         case SpinnerTick =>
-          m.copy(spinnerIndex = (m.spinnerIndex + 1) % 4)
+          m.copy(spinnerIndex = (m.spinnerIndex + 1) % 4).tui
         case ConsoleInputKey(k) =>
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
           maybeCmd match {
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt)
+            case None      => m.copy(prompt = nextPrompt).tui
           }
-        case ConsoleInputError(_) => m
+        case ConsoleInputError(_) => m.tui
       }
 
     override def view(m: Model): RootNode = {

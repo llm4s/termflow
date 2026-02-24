@@ -2,6 +2,7 @@ package termflow.apps.task
 
 import termflow.tui._
 import termflow.tui.TuiPrelude._
+import termflow.tui.Tui.*
 
 object Task {
   type TaskId = String
@@ -66,7 +67,7 @@ object Task {
         renderList = RenderMode.Init,
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         prompt = Prompt.State()
-      )
+      ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       msg match {
@@ -74,11 +75,11 @@ object Task {
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
           maybeCmd match {
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt)
+            case None      => m.copy(prompt = nextPrompt).tui
           }
         case ConsoleInputError(e) =>
           // Surface the decoding error as InvalidCmd
-          m.copy(renderList = RenderMode.AppErrorMsg(s"Console Input Error: ${e.getMessage}"))
+          m.copy(renderList = RenderMode.AppErrorMsg(s"Console Input Error: ${e.getMessage}")).tui
         case other =>
           UpdateApp(m, other)
       }

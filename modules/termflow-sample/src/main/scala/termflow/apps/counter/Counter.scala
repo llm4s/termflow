@@ -6,7 +6,7 @@ final case class Counter(count: Int)
 
 object Counter {
 
-  implicit final class CounterOps(val c: Counter) extends AnyVal {
+  extension (c: Counter) {
     def syncIncrement(): Counter = Counter(c.count + 1)
     def syncDecrement(): Counter = Counter(c.count - 1)
 

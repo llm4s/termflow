@@ -4,6 +4,7 @@ import termflow.tui._
 import termflow.tui.TuiPrelude._
 import termflow.tui.RandomUtil.RandomSourceAtFixedRate
 import termflow.tui.Color.{ Blue, Red }
+import termflow.tui.Tui.*
 
 import java.time.LocalTime
 import scala.util.Random
@@ -58,19 +59,19 @@ object DigitalClockWithRandomSource {
         None,
         Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         Prompt.State()
-      )
+      ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       msg match {
         case Tick =>
-          m.copy(clock = m.clock.copy(value = LocalTime.now().toString))
+          m.copy(clock = m.clock.copy(value = LocalTime.now().toString)).tui
 
         case RandomValue(v) =>
-          m.copy(random = m.random.copy(value = v))
+          m.copy(random = m.random.copy(value = v)).tui
 
         case StartRandom =>
           if (m.random.sub.isActive)
-            m.copy(error = Some("You  have attempted to start random generator while it is already running"))
+            m.copy(error = Some("You  have attempted to start random generator while it is already running")).tui
           else
             m.copy(
               random = m.random.copy(
@@ -78,19 +79,19 @@ object DigitalClockWithRandomSource {
                   new RandomSourceAtFixedRate[Int, Msg](1700, () => Random.nextInt(5000), (v: Int) => RandomValue(v))
                     .asEventSource(ctx)
               )
-            )
+            ).tui
 
         case StopRandom =>
           m.random.sub.cancel()
-          m.copy(random = m.random.copy(sub = Sub.NoSub), messages = "🛑 Random Generator Stopped" :: m.messages)
+          m.copy(random = m.random.copy(sub = Sub.NoSub), messages = "🛑 Random Generator Stopped" :: m.messages).tui
 
         case StopClock =>
           m.clock.sub.cancel()
-          m.copy(clock = m.clock.copy(sub = Sub.NoSub), messages = "🛑 Clock stopped" :: m.messages)
+          m.copy(clock = m.clock.copy(sub = Sub.NoSub), messages = "🛑 Clock stopped" :: m.messages).tui
 
         case AddMessage(input) =>
           val updatedMsgs = s"💬 You said: $input" :: m.messages
-          m.copy(messages = updatedMsgs)
+          m.copy(messages = updatedMsgs).tui
 
         case Exit =>
           Tui(m, Cmd.Exit)
@@ -99,10 +100,10 @@ object DigitalClockWithRandomSource {
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
           maybeCmd match {
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt)
+            case None      => m.copy(prompt = nextPrompt).tui
           }
         case ConsoleInputError(e) =>
-          m.copy(messages = m.messages :+ s"Console Input Error: ${e.getMessage}")
+          m.copy(messages = m.messages :+ s"Console Input Error: ${e.getMessage}").tui
       }
 
     override def view(m: Model): RootNode = {

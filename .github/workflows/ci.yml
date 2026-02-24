@@ -35,20 +35,20 @@ jobs:
       - name: Format check
         run: sbt scalafmtCheckAll
 
-      - name: Compile (Scala 2.13 and 3)
-        run: sbt +compile
+      - name: Compile
+        run: sbt compile
 
-      - name: Tests (Scala 2.13 and 3)
-        run: sbt +test
+      - name: Tests
+        run: sbt test
 
-      - name: Coverage tests (Scala 3 only)
-        run: sbt ++3.7.1 "project termflow" coverage test coverageReport
+      - name: Coverage tests
+        run: sbt "project termflow" coverage test coverageReport
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: modules/termflow/target/scala-3.7.1/scoverage-report/scoverage.xml
+          files: modules/termflow/target/scala-2.13/scoverage-report/scoverage.xml
           slug: llm4s/termflow
           fail_ci_if_error: false
           verbose: true
@@ -58,5 +58,5 @@ jobs:
         with:
           name: scoverage-report
           path: |
-            modules/termflow/target/scala-3.7.1/scoverage-report/
+            modules/termflow/target/scala-2.13/scoverage-report/
           retention-days: 14

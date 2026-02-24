@@ -5,11 +5,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 
 ```bash
-# Compile (cross-builds Scala 2.13 and 3)
-sbt +compile
+# Compile
+sbt compile
 
 # Run tests
-sbt +test
+sbt test
 
 # Format code
 sbt scalafmtAll
@@ -18,7 +18,7 @@ sbt scalafmtAll
 sbt scalafmtCheckAll
 
 # Publish locally
-sbt +publishLocal
+sbt publishLocal
 ```
 
 ## Running Sample Apps
@@ -81,4 +81,4 @@ Event streams that push `Cmd`s to the bus:
 
 ## Scala Versions
 
-Cross-builds for Scala 2.13 and Scala 3. Scala 3-first is the long-term direction.
+Targets Scala 2.13 only.

@@ -26,7 +26,7 @@ for high-frequency updates like spinners and streaming text).
 
 ## Scala Versions
 
-TermFlow targets Scala 3.
+TermFlow targets Scala 2.13.
 
 ## Modules
 

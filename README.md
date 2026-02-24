@@ -57,8 +57,7 @@ debug key sequences and line editing behaviour.
 
 - Compile: `sbt compile`
 - Format: `sbt scalafmtAll`
-- Format check (CI): `sbt scalafmtCheckAll`
-- Scalafix check: `sbt "scalafixAll --check"`
+- CI-equivalent local check: `sbt ciCheck`
 - Scalafix rewrite: `sbt scalafixAll`
 - Tests: `sbt test`
 - Publish locally (for integration testing): `sbt publishLocal`

@@ -35,6 +35,10 @@ jobs:
       - name: Format check
         run: sbt scalafmtCheckAll
 
+      - name: Scalafix check (informational)
+        continue-on-error: true
+        run: sbt "scalafixAll --check"
+
       - name: Compile (Scala 3)
         run: sbt compile
 
@@ -60,3 +64,19 @@ jobs:
           path: |
             modules/termflow/target/scala-3.7.1/scoverage-report/
           retention-days: 14
+
+      - name: Coverage summary (informational)
+        if: always()
+        continue-on-error: true
+        run: |
+          if [ -f modules/termflow/target/scala-3.7.1/scoverage-report/scoverage.xml ]; then
+            RATE=$(grep -o 'statement-rate="[^"]*"' modules/termflow/target/scala-3.7.1/scoverage-report/scoverage.xml | head -n1 | cut -d'"' -f2)
+            if [ -n "$RATE" ]; then
+              PCT=$(awk "BEGIN { printf \"%.2f\", $RATE * 100 }")
+              echo "Library statement coverage: ${PCT}%"
+            else
+              echo "Coverage report found, but statement-rate was not parsed."
+            fi
+          else
+            echo "Coverage report file not found."
+          fi

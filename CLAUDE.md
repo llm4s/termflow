@@ -17,6 +17,12 @@ sbt scalafmtAll
 # Check formatting (CI)
 sbt scalafmtCheckAll
 
+# Scalafix check
+sbt "scalafixAll --check"
+
+# Scalafix rewrite
+sbt scalafixAll
+
 # Publish locally
 sbt publishLocal
 ```

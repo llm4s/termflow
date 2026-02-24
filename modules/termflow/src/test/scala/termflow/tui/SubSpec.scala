@@ -65,10 +65,12 @@ class SubSpec extends AnyFunSuite:
 
   test("InputKeyFromSource publishes mapped key and mapped error"):
     final class StubSource(results: List[Try[KeyDecoder.InputKey]]) extends TerminalKeySource:
-      private val queue = new java.util.concurrent.ConcurrentLinkedQueue[Try[KeyDecoder.InputKey]](results.asJava)
+      private val queue  = new java.util.concurrent.ConcurrentLinkedQueue[Try[KeyDecoder.InputKey]](results.asJava)
+      private val closed = new AtomicInteger(0)
       override def next(): Try[KeyDecoder.InputKey] =
         Option(queue.poll()).getOrElse(Failure(new InterruptedException("done")))
-      override def close(): Unit = ()
+      override def close(): Unit = closed.incrementAndGet(): Unit
+      def closeCount: Int        = closed.get()
 
     val source = new StubSource(List(Success(KeyDecoder.InputKey.CharKey('a')), Failure(new RuntimeException("boom"))))
     val sink   = new TestSink[String]
@@ -82,6 +84,7 @@ class SubSpec extends AnyFunSuite:
     assert(sink.awaitFirst(500))
     Thread.sleep(50)
     sub.cancel()
+    assert(source.closeCount == 1)
     val msgs = sink.messages.collect { case Cmd.GCmd(v: String) => v }
     assert(msgs.exists(_.startsWith("key:")))
     assert(msgs.exists(_.startsWith("err:")))

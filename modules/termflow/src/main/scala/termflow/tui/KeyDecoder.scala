@@ -1,9 +1,9 @@
 package termflow.tui
 
-object KeyDecoder {
+object KeyDecoder:
 
   /** Normalised key representation used by the TUI. */
-  enum InputKey {
+  enum InputKey:
     case CharKey(ch: Char)
     case Ctrl(ch: Char)
     case Backspace
@@ -30,12 +30,11 @@ object KeyDecoder {
     case F12
     case Unknown(seq: String)
     case EndOfInput
-  }
 
   import InputKey._
 
   def decode(key: Int): InputKey =
-    key match {
+    key match
       case 10  => Enter
       case 127 => Backspace
       case code if code >= 1 && code <= 26 =>
@@ -44,10 +43,8 @@ object KeyDecoder {
         CharKey(code.toChar)
       case _ =>
         Unknown(key.toString)
-    }
-}
 
-object AsciiControl {
+object AsciiControl:
   val ESC     = 27
   val O       = 79
   val `[`     = 91
@@ -73,4 +70,3 @@ object AsciiControl {
   val `~`     = 126
   val `CTR+C` = 3
   val `CTR+D` = 4
-}

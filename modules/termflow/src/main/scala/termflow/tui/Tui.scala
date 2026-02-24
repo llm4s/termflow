@@ -29,15 +29,15 @@ enum Cmd[+Msg]:
   case NoCmd extends Cmd[Nothing]
   case Exit  extends Cmd[Nothing]
 
-  case GCmd[Msg](msg: Msg) extends Cmd[Msg]
+  case GCmd(msg: Msg) extends Cmd[Msg]
 
-  case FCmd[A, Msg](
+  case FCmd[A, M](
     task: Future[A],
-    toCMD: A => Cmd[Msg],
-    onEnqueue: Option[Msg] = None
-  ) extends Cmd[Msg]
+    toCMD: A => Cmd[M],
+    onEnqueue: Option[M] = None
+  ) extends Cmd[M]
 
-  case TermFlowErrorCmd[Msg](msg: TermFlowError) extends Cmd[Msg]
+  case TermFlowErrorCmd(msg: TermFlowError) extends Cmd[Msg]
 
 /**
  * Main trait for TermFlow applications following the Elm architecture.

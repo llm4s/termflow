@@ -125,8 +125,8 @@ object TuiRuntime:
     finally
       // Cancel all registered subscriptions to stop background threads
       bus.cancelAllSubscriptions()
-      // Always restore terminal state, even on crash
+      // Always restore terminal state, even on crash.
       print(ANSI.showCursor)
       EnterNormalBuffer()
-      println("Goodbye from TermFlow!")
+      // Close the backend last; avoid extra terminal output during shutdown.
       terminalBackend.close()

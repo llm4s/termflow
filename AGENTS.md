@@ -8,6 +8,13 @@
 ## Style
 - Use the repo `.scalafmt.conf` (`sbt scalafmtAll`).
 - Prefer small, composable functions; avoid side effects in core render/update logic.
+- Prefer significant indentation by default; use optional braces only when readability improves.
+- Do not submit broad style churn with behavior changes.
+- Keep style-only rewrites in separate PRs.
+
+## PR Scope
+- Keep PRs small and focused.
+- New files must follow current style policy.
+- Existing files should be style-aligned only in touched sections, unless the PR is explicitly style-only.
 
 </INSTRUCTIONS>
-

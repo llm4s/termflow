@@ -6,12 +6,9 @@ import termflow.tui.RandomUtil.RandomSourceAtFixedRate
 import termflow.tui.Color.{ Blue, Red }
 
 import java.time.LocalTime
-import scala.concurrent.ExecutionContext
 import scala.util.Random
 
 object DigitalClockWithRandomSource {
-
-  implicit val ec: ExecutionContext = ExecutionContext.global
 
   final case class SubSource[T](sub: Sub[Msg], value: T)
 

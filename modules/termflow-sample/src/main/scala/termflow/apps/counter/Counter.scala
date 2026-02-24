@@ -10,13 +10,13 @@ object Counter {
     def syncIncrement(): Counter = Counter(c.count + 1)
     def syncDecrement(): Counter = Counter(c.count - 1)
 
-    def asyncIncrement()(implicit ec: ExecutionContext): Future[Counter] =
+    def asyncIncrement()(using ec: ExecutionContext): Future[Counter] =
       Future {
         Thread.sleep(5000)
         Counter(c.count + 1)
       }
 
-    def asyncDecrement()(implicit ec: ExecutionContext): Future[Counter] =
+    def asyncDecrement()(using ec: ExecutionContext): Future[Counter] =
       Future {
         Thread.sleep(10000)
         Counter(c.count - 1)

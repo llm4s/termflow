@@ -32,17 +32,8 @@ jobs:
       - name: Setup sbt
         uses: sbt/setup-sbt@v1
 
-      - name: Format check
-        run: sbt scalafmtCheckAll
-
-      - name: Scalafix check
-        run: sbt "scalafixAll --check"
-
-      - name: Compile (Scala 3)
-        run: sbt compile
-
-      - name: Tests (Scala 3)
-        run: sbt test
+      - name: CI checks (format, scalafix, test)
+        run: sbt ciCheck
 
       - name: Coverage tests (Scala 3 only)
         run: sbt ++3.7.1 "project termflow" coverage test coverageReport

@@ -9,21 +9,19 @@ import java.io.Reader
 import java.io.StringReader
 import scala.concurrent.Future
 
-class TuiRuntimeSpec extends AnyFunSuite {
+class TuiRuntimeSpec extends AnyFunSuite:
 
-  final private class TestTerminalBackend extends TerminalBackend {
+  final private class TestTerminalBackend extends TerminalBackend:
     override def reader: Reader = new StringReader("")
     override def width: Int     = 80
     override def height: Int    = 24
     override def close(): Unit  = ()
-  }
 
-  final private class NoopRenderer extends TuiRenderer {
+  final private class NoopRenderer extends TuiRenderer:
     override def render(textNode: RootNode, err: Option[TermFlowError]): Unit = ()
-  }
 
-  test("TuiRuntime handles FCmd completion and exits") {
-    object App extends TuiApp[Int, Unit] {
+  test("TuiRuntime handles FCmd completion and exits"):
+    object App extends TuiApp[Int, Unit]:
       override def init(ctx: RuntimeCtx[Unit]): Tui[Int, Unit] =
         Tui(
           model = 0,
@@ -39,16 +37,12 @@ class TuiRuntimeSpec extends AnyFunSuite {
       override def view(model: Int): RootNode = RootNode(80, 24, children = List.empty, input = None)
 
       override def toMsg(input: PromptLine): Result[Unit] = Right(())
-    }
 
-    Console.withOut(new PrintStream(new ByteArrayOutputStream())) {
+    Console.withOut(new PrintStream(new ByteArrayOutputStream())):
       TuiRuntime.run(
         app = App,
         renderer = new NoopRenderer,
         terminalBackend = new TestTerminalBackend
       )
-    }
 
     succeed
-  }
-}

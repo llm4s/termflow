@@ -53,7 +53,7 @@ object Sub {
       override def cancel(): Unit = {
         active = false
         handle.cancel(true)
-        scheduler.shutdownNow()
+        scheduler.shutdownNow(): Unit
       }
     }
 
@@ -129,7 +129,7 @@ object Sub {
       override def cancel(): Unit = {
         active = false
         handle.cancel(true)
-        scheduler.shutdownNow()
+        scheduler.shutdownNow(): Unit
       }
     }
 
@@ -185,7 +185,7 @@ object RandomUtil {
         @volatile private var active = true
         def isActive: Boolean        = active
         def cancel(): Unit = {
-          scheduler.shutdownNow()
+          scheduler.shutdownNow(): Unit
           active = false
         }
       }

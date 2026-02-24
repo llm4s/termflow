@@ -4,19 +4,19 @@ import org.scalatest.funsuite.AnyFunSuite
 import termflow.tui.KeyDecoder.InputKey
 import termflow.tui.TuiPrelude._
 
-class HistorySpec extends AnyFunSuite {
+class HistorySpec extends AnyFunSuite:
 
-  final private class StubStore(initial: Vector[String] = Vector.empty) extends HistoryStore {
+  final private class StubStore(initial: Vector[String] = Vector.empty) extends HistoryStore:
     private val buf                 = scala.collection.mutable.ArrayBuffer.from(initial)
     def load(): Vector[String]      = buf.toVector
     def append(entry: String): Unit = buf += entry
     def contents: Vector[String]    = buf.toVector
-  }
 
   private def renderLine(state: PromptHistory.State): String =
     Prompt.render(state.prompt)
 
-  private def toMsg(line: PromptLine): Result[String] = Right(line.value)
+  private def toMsg(line: PromptLine): Result[String] =
+    Right(line.value)
 
   private def step(
     state: PromptHistory.State,
@@ -24,7 +24,7 @@ class HistorySpec extends AnyFunSuite {
   ): (PromptHistory.State, Option[Cmd[String]]) =
     PromptHistory.handleKey[String](state, key)(toMsg)
 
-  test("ArrowUp navigates backward through history and ArrowDown restores current line") {
+  test("ArrowUp navigates backward through history and ArrowDown restores current line"):
     val store = new StubStore(Vector("one", "two"))
     val start = PromptHistory.initial(store)
 
@@ -39,9 +39,8 @@ class HistorySpec extends AnyFunSuite {
 
     val (restoreCurrent, _) = step(afterDown, InputKey.ArrowDown)
     assert(renderLine(restoreCurrent) == "")
-  }
 
-  test("Enter appends to history and emits a GCmd") {
+  test("Enter appends to history and emits a GCmd"):
     val store = new StubStore()
     val start = PromptHistory.initial(store)
 
@@ -51,9 +50,8 @@ class HistorySpec extends AnyFunSuite {
     assert(cmdOpt.contains(Cmd.GCmd("x")))
     assert(renderLine(afterEnter) == "")
     assert(store.contents.contains("x"))
-  }
 
-  test("Prefix search uses typed prefix when navigating with ArrowUp") {
+  test("Prefix search uses typed prefix when navigating with ArrowUp"):
     val store = new StubStore(Vector("foo", "bar", "fizz"))
     val start = PromptHistory.initial(store)
 
@@ -66,26 +64,23 @@ class HistorySpec extends AnyFunSuite {
 
     val (afterDown, _) = step(afterUp2, InputKey.ArrowDown)
     assert(renderLine(afterDown) == "fizz") // back down within prefix matches
-  }
 
-  test("ArrowUp on empty history is a no-op") {
+  test("ArrowUp on empty history is a no-op"):
     val store        = new StubStore(Vector.empty)
     val start        = PromptHistory.initial(store)
     val (after, cmd) = step(start, InputKey.ArrowUp)
     assert(cmd.isEmpty)
     assert(renderLine(after).isEmpty)
     assert(after.index.isEmpty)
-  }
 
-  test("Enter with empty line does not append to history") {
+  test("Enter with empty line does not append to history"):
     val store       = new StubStore()
     val start       = PromptHistory.initial(store)
     val (_, cmdOpt) = step(start, InputKey.Enter)
     assert(cmdOpt.contains(Cmd.GCmd("")))
     assert(store.contents.isEmpty)
-  }
 
-  test("FileHistoryStore respects maxEntries and round-trips") {
+  test("FileHistoryStore respects maxEntries and round-trips"):
     import java.nio.file.Files
     val tmp   = Files.createTempDirectory("history-test")
     val path  = tmp.resolve("hist.log")
@@ -96,9 +91,8 @@ class HistorySpec extends AnyFunSuite {
     assert(store.load() == Vector("two", "three"))
     Files.deleteIfExists(path)
     Files.deleteIfExists(tmp)
-  }
 
-  test("FileHistoryStore creates parent directories when missing") {
+  test("FileHistoryStore creates parent directories when missing"):
     import java.nio.file.Files
     val tmp    = Files.createTempDirectory("history-missing-parent")
     val parent = tmp.resolve("nested")
@@ -114,5 +108,3 @@ class HistorySpec extends AnyFunSuite {
     Files.deleteIfExists(path)
     Files.deleteIfExists(parent)
     Files.deleteIfExists(tmp)
-  }
-}

@@ -33,7 +33,7 @@ enum Cmd[+Msg]:
 
   case FCmd[A, M](
     task: Future[A],
-    toCMD: A => Cmd[M],
+    toCmd: A => Cmd[M],
     onEnqueue: Option[M] = None
   ) extends Cmd[M]
 

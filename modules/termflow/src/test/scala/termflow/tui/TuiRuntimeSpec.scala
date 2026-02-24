@@ -28,7 +28,7 @@ class TuiRuntimeSpec extends AnyFunSuite:
           model = 0,
           cmd = Cmd.FCmd(
             task = Future.successful(1),
-            toCMD = _ => Cmd.Exit,
+            toCmd = _ => Cmd.Exit,
             onEnqueue = None
           )
         )

@@ -26,7 +26,9 @@ for high-frequency updates like spinners and streaming text).
 
 ## Scala Versions
 
-TermFlow targets Scala 3.
+This branch (`main`) is the Scala 3 line.
+The `legacy-213-track` branch is the Scala 2.13 maintenance line.
+We intend to regularly port applicable fixes and critical updates from `main` to `legacy-213-track`.
 
 ## Modules
 

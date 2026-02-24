@@ -35,11 +35,11 @@ jobs:
       - name: Format check
         run: sbt scalafmtCheckAll
 
-      - name: Compile (Scala 2.13 and 3)
-        run: sbt +compile
+      - name: Compile (Scala 3)
+        run: sbt compile
 
-      - name: Tests (Scala 2.13 and 3)
-        run: sbt +test
+      - name: Tests (Scala 3)
+        run: sbt test
 
       - name: Coverage tests (Scala 3 only)
         run: sbt ++3.7.1 "project termflow" coverage test coverageReport

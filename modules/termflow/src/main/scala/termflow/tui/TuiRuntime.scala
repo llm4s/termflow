@@ -53,7 +53,13 @@ final class LocalCmdBus[Msg](val terminal: TerminalBackend) extends CmdBus[Msg]:
   override def publish(cmd: Cmd[Msg]): Unit           = queue.put(cmd)
   override def take(): Cmd[Msg]                       = queue.take()
   override def registerSub(sub: Sub[Msg]): Sub[Msg]   = { subscriptions.add(sub); sub }
-  override def cancelAllSubscriptions(): Unit         = subscriptions.forEach(_.cancel())
+  override def cancelAllSubscriptions(): Unit =
+    subscriptions.forEach { sub =>
+      try sub.cancel()
+      catch {
+        case _: Throwable => ()
+      }
+    }
 
 object TuiRuntime:
 

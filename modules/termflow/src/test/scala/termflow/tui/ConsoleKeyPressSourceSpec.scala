@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import termflow.tui.KeyDecoder.InputKey
 
 import java.io.StringReader
+import java.util.concurrent.atomic.AtomicInteger
 
 class ConsoleKeyPressSourceSpec extends AnyFunSuite:
 
@@ -24,3 +25,17 @@ class ConsoleKeyPressSourceSpec extends AnyFunSuite:
     assert(source.next().get == InputKey.ArrowUp)
     source.close()
     source.close()
+
+  test("close closes underlying reader once"):
+    final class CountingReader(data: String) extends StringReader(data):
+      val closedCount = new AtomicInteger(0)
+      override def close(): Unit =
+        closedCount.incrementAndGet(): Unit
+        super.close()
+
+    val reader = new CountingReader("a")
+    val source = ConsoleKeyPressSource(reader)
+    assert(source.next().get == InputKey.CharKey('a'))
+    source.close()
+    source.close()
+    assert(reader.closedCount.get() == 1)

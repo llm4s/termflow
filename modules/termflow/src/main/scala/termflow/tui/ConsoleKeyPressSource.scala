@@ -151,3 +151,4 @@ object ConsoleKeyPressSource:
           closed = true
           producerThread.interrupt()
           decoderThread.interrupt()
+          Try(reader.close()): Unit

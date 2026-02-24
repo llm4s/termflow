@@ -71,14 +71,14 @@ object Sub:
               source
                 .next()
                 .fold(
-                  err => sink.publish(Cmd.GCmd(onError(err))),
-                  key => sink.publish(Cmd.GCmd(msg(key)))
+                  err => if active then sink.publish(Cmd.GCmd(onError(err))),
+                  key => if active then sink.publish(Cmd.GCmd(msg(key)))
                 )
           catch {
             case _: InterruptedException =>
               ()
             case e: Throwable =>
-              sink.publish(Cmd.GCmd(onError(e)))
+              if active then sink.publish(Cmd.GCmd(onError(e)))
           }
       })
 

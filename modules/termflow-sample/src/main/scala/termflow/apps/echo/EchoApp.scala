@@ -17,13 +17,12 @@ object EchoApp {
     prompt: Prompt.State
   )
 
-  sealed trait Msg
-  object Msg {
-    final case class AddMessage(input: String)                 extends Msg
-    case object Clear                                          extends Msg
-    case object Exit                                           extends Msg
-    final case class ConsoleInputKey(key: KeyDecoder.InputKey) extends Msg
-    final case class ConsoleInputError(error: Throwable)       extends Msg
+  enum Msg {
+    case AddMessage(input: String)
+    case Clear
+    case Exit
+    case ConsoleInputKey(key: KeyDecoder.InputKey)
+    case ConsoleInputError(error: Throwable)
   }
 
   import Msg._

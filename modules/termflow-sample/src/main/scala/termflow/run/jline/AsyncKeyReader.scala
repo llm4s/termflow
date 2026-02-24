@@ -21,16 +21,13 @@ object AsyncKeyReader:
     val producer = new Thread(
       new Runnable {
         override def run(): Unit =
-          try {
+          try
             var running = true
-            while running do {
+            while running do
               val c = reader.read()
               if c == -1 then running = false
               else queue.put(c)
-            }
-          } catch {
-            case _: InterruptedException => ()
-          }
+          catch case _: InterruptedException => ()
       },
       "stdin-reader"
     )

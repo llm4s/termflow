@@ -115,18 +115,14 @@ object ConsoleKeyPressSource:
     // Producer: read raw ints from the reader
     val producerThread = ThreadUtils.startThread(new Runnable {
       override def run(): Unit =
-        try {
-          def loop(): Unit = {
+        try
+          def loop(): Unit =
             val c = reader.read()
-            if c != -1 then {
+            if c != -1 then
               bridge.put(c)
               loop()
-            }
-          }
           loop()
-        } catch {
-          case _: InterruptedException => ()
-        }
+        catch case _: InterruptedException => ()
     })
 
     val inputKeys = new LinkedBlockingQueue[InputKey]()

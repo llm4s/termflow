@@ -1,15 +1,27 @@
 package termflow.tui
 
 /** X coordinate wrapper (1-based column). */
-final case class XCoord(value: Int) extends AnyVal {
-  def +(dx: Int): XCoord = XCoord(value + dx)
-  def -(dx: Int): XCoord = XCoord(value - dx)
+opaque type XCoord = Int
+object XCoord {
+  def apply(value: Int): XCoord = value
+
+  extension (x: XCoord) {
+    def value: Int         = x
+    def +(dx: Int): XCoord = x + dx
+    def -(dx: Int): XCoord = x - dx
+  }
 }
 
 /** Y coordinate wrapper (1-based row). */
-final case class YCoord(value: Int) extends AnyVal {
-  def +(dy: Int): YCoord = YCoord(value + dy)
-  def -(dy: Int): YCoord = YCoord(value - dy)
+opaque type YCoord = Int
+object YCoord {
+  def apply(value: Int): YCoord = value
+
+  extension (y: YCoord) {
+    def value: Int         = y
+    def +(dy: Int): YCoord = y + dy
+    def -(dy: Int): YCoord = y - dy
+  }
 }
 
 final case class Coord(x: XCoord, y: YCoord)

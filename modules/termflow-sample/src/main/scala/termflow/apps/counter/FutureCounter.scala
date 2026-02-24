@@ -58,7 +58,7 @@ object FutureCounter {
             Cmd.FCmd(
               m.count.asyncIncrement(),
               (c: Counter) => Cmd.GCmd(UpdateWith(c)),
-              onEnqueue = Some(Busy(s"InCrementING::${TimeFormatter.getCurrentTime}"))
+              onEnqueue = Some(Busy(s"incrementing::${TimeFormatter.getCurrentTime}"))
             )
           )
         case Decrement =>
@@ -67,7 +67,7 @@ object FutureCounter {
             Cmd.FCmd(
               m.count.asyncDecrement(),
               (c: Counter) => Cmd.GCmd(UpdateWith(c)),
-              onEnqueue = Some(Busy(s"DeCrementING::${TimeFormatter.getCurrentTime}"))
+              onEnqueue = Some(Busy(s"decrementing::${TimeFormatter.getCurrentTime}"))
             )
           )
         case UpdateWith(c) =>

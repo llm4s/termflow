@@ -88,5 +88,6 @@ lazy val termflowSample = (project in file("modules/termflow-sample"))
     libraryDependencies ++= Seq(
       Deps.jline
     ),
+    coverageEnabled := false,
     publish / skip := true
   )

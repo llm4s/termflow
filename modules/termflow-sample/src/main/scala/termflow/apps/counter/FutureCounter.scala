@@ -23,15 +23,14 @@ object FutureCounter {
     spinnerIndex: Int
   )
 
-  sealed trait Msg
-  object Msg {
-    case object Increment                                      extends Msg
-    case object Decrement                                      extends Msg
-    final case class UpdateWith(counter: Counter)              extends Msg
-    final case class Busy(action: String)                      extends Msg
-    case object SpinnerTick                                    extends Msg
-    final case class ConsoleInputKey(key: KeyDecoder.InputKey) extends Msg
-    final case class ConsoleInputError(error: Throwable)       extends Msg
+  enum Msg {
+    case Increment
+    case Decrement
+    case UpdateWith(counter: Counter)
+    case Busy(action: String)
+    case SpinnerTick
+    case ConsoleInputKey(key: KeyDecoder.InputKey)
+    case ConsoleInputError(error: Throwable)
   }
 
   import Msg._

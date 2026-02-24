@@ -2,11 +2,14 @@ package termflow.apps.counter
 
 import scala.concurrent.{ ExecutionContext, Future }
 
-final case class Counter(count: Int)
+opaque type Counter = Int
 
 object Counter {
+  def apply(count: Int): Counter = count
 
   extension (c: Counter) {
+    def count: Int = c
+
     def syncIncrement(): Counter = Counter(c.count + 1)
     def syncDecrement(): Counter = Counter(c.count - 1)
 

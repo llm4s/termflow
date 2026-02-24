@@ -32,7 +32,7 @@ object Task {
 
   enum RenderMode {
     case Init, Add, All, InProgress, Cancelled, Done, Count
-    case AppErrorMsg(erroMsg: String)
+    case AppErrorMsg(errorMsg: String)
   }
 
   enum Msg {

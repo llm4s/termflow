@@ -84,6 +84,6 @@ object Task {
       RenderApp(m)
 
     override def toMsg(input: PromptLine): Result[Msg] =
-      GetMsg(input)
+      GetMsg(input.value)
   }
 }

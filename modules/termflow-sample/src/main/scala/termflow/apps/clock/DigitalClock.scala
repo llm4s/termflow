@@ -120,7 +120,7 @@ object DigitalClock {
     }
 
     override def toMsg(input: PromptLine): Result[Msg] =
-      input.trim.toLowerCase match {
+      input.value.trim.toLowerCase match {
         case "startclock" => Right(StartClock)
         case "stopclock"  => Right(StopClock)
         case "exit"       => Right(Exit)

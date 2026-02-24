@@ -102,7 +102,7 @@ object EchoApp {
     }
 
     override def toMsg(input: PromptLine): Result[Msg] =
-      input.trim match {
+      input.value.trim match {
         case ""       => Left(termflow.tui.TermFlowError.Validation("Empty input"))
         case "/clear" => Right(Clear)
         case "exit"   => Right(Exit)

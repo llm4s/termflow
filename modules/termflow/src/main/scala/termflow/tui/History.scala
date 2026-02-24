@@ -80,7 +80,7 @@ object PromptHistory {
   def renderWithPrefix(state: State, prefix: String): Prompt.RenderedLine =
     Prompt.renderWithPrefix(state.prompt, prefix)
 
-  def handleKey[G](state: State, k: InputKey)(toMsg: String => Result[G]): (State, Option[Cmd[G]]) =
+  def handleKey[G](state: State, k: InputKey)(toMsg: PromptLine => Result[G]): (State, Option[Cmd[G]]) =
     k match {
       // History navigation
       case KeyDecoder.InputKey.ArrowUp =>
@@ -103,7 +103,7 @@ object PromptHistory {
       case KeyDecoder.InputKey.Ctrl('M') | KeyDecoder.InputKey.Enter =>
         val line                     = Prompt.render(state.prompt)
         val (nextHistory, nextStore) = addToHistory(state.history, state.store, line)
-        val result                   = toMsg(line)
+        val result                   = toMsg(PromptLine(line))
         val cmd                      = result.fold(err => Cmd.TermFlowErrorCmd(err), g => Cmd.GCmd(g))
         val nextState =
           state.copy(

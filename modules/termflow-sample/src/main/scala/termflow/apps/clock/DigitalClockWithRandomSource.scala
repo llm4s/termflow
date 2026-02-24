@@ -147,7 +147,7 @@ object DigitalClockWithRandomSource {
     }
 
     override def toMsg(input: PromptLine): Result[Msg] =
-      input.trim.toLowerCase match {
+      input.value.trim.toLowerCase match {
         case "start"     => Right(StartRandom)
         case "stop"      => Right(StopRandom)
         case "stopclock" => Right(StopClock)

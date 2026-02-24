@@ -6,7 +6,7 @@ import termflow.tui.TuiPrelude._
 
 class PromptSpec extends AnyFunSuite {
 
-  private def noopToMsg(line: String): Result[String] = Right(line)
+  private def noopToMsg(line: PromptLine): Result[String] = Right(line.value)
 
   test("CharKey inserts and moves cursor right") {
     val (next, cmd) = Prompt.handleKey[String](Prompt.State(), InputKey.CharKey('a'))(noopToMsg)

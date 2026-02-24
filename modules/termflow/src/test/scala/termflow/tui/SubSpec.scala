@@ -2,7 +2,8 @@ package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import java.util.concurrent.{ CountDownLatch, TimeUnit }
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 
 class SubSpec extends AnyFunSuite {

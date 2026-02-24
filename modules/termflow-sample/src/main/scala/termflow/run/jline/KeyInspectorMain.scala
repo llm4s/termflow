@@ -3,7 +3,8 @@ package termflow.run.jline
 import termflow.tui.ConsoleKeyPressSource
 import termflow.tui.KeyDecoder
 
-import scala.util.{ Failure, Success }
+import scala.util.Failure
+import scala.util.Success
 
 object KeyInspectorMain {
   def main(args: Array[String]): Unit = {

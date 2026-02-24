@@ -3,7 +3,10 @@ package termflow.tui
 import org.scalatest.funsuite.AnyFunSuite
 import termflow.tui.TuiPrelude._
 
-import java.io.{ ByteArrayOutputStream, PrintStream, Reader, StringReader }
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
+import java.io.Reader
+import java.io.StringReader
 import scala.concurrent.Future
 
 class TuiRuntimeSpec extends AnyFunSuite {

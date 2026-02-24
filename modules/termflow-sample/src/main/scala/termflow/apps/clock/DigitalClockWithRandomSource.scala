@@ -1,10 +1,11 @@
 package termflow.apps.clock
 
-import termflow.tui._
-import termflow.tui.TuiPrelude._
+import termflow.tui.Color.Blue
+import termflow.tui.Color.Red
 import termflow.tui.RandomUtil.RandomSourceAtFixedRate
-import termflow.tui.Color.{ Blue, Red }
-import termflow.tui.Tui.*
+import termflow.tui.Tui._
+import termflow.tui.TuiPrelude._
+import termflow.tui._
 
 import java.time.LocalTime
 import scala.util.Random
@@ -124,14 +125,14 @@ object DigitalClockWithRandomSource {
           ),
           TextNode(2.x, 2.y, List(s"🕒 Time: ${m.clock.value}".text)),
           TextNode(2.x, 3.y, List(s"🎲 Random: ${m.random.value}".text)),
-          TextNode(2.x, 4.y, List(s"──────────────────────────────".text(fg = Red)))
+          TextNode(2.x, 4.y, List("──────────────────────────────".text(fg = Red)))
         ) ++ m.messages.zipWithIndex.map { case (msg, idx) => TextNode(2.x, (5 + idx).y, List(msg.text)) } ++ List(
-          TextNode(2.x, (5 + m.messages.length).y, List(s"──────────────────────────────".text(fg = Blue))),
-          TextNode(2.x, (5 + m.messages.length + 1).y, List(s"Commands:".text)),
-          TextNode(2.x, (5 + m.messages.length + 2).y, List(s"  start    → start random numbers".text)),
-          TextNode(2.x, (5 + m.messages.length + 3).y, List(s"  stop     → stop random numbers".text)),
-          TextNode(2.x, (5 + m.messages.length + 4).y, List(s"  stopclock→ stop ticking".text)),
-          TextNode(2.x, (5 + m.messages.length + 5).y, List(s"  exit     → quit".text))
+          TextNode(2.x, (5 + m.messages.length).y, List("──────────────────────────────".text(fg = Blue))),
+          TextNode(2.x, (5 + m.messages.length + 1).y, List("Commands:".text)),
+          TextNode(2.x, (5 + m.messages.length + 2).y, List("  start    → start random numbers".text)),
+          TextNode(2.x, (5 + m.messages.length + 3).y, List("  stop     → stop random numbers".text)),
+          TextNode(2.x, (5 + m.messages.length + 4).y, List("  stopclock→ stop ticking".text)),
+          TextNode(2.x, (5 + m.messages.length + 5).y, List("  exit     → quit".text))
         ),
         input = Some(
           InputNode(

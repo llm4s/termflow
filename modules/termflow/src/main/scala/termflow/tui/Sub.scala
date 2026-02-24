@@ -3,7 +3,8 @@ package termflow.tui
 import termflow.tui.KeyDecoder.InputKey
 
 import java.io.Reader
-import java.util.concurrent.{ Executors, TimeUnit }
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 /**
  * A subscription represents a long-running background task that emits messages.

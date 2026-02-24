@@ -1,9 +1,12 @@
 package termflow.run.jline
 
-import java.io.{ InputStreamReader, Reader }
-import java.util.concurrent.{ LinkedBlockingQueue, TimeUnit }
 import org.jline.terminal.TerminalBuilder
 import org.jline.utils.InfoCmp.Capability
+
+import java.io.InputStreamReader
+import java.io.Reader
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 
 object AsyncKeyReader {
   def main(args: Array[String]): Unit = {

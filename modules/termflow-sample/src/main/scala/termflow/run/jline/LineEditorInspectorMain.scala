@@ -1,9 +1,11 @@
 package termflow.run.jline
 
-import termflow.tui.{ ConsoleKeyPressSource, Prompt }
+import termflow.tui.ConsoleKeyPressSource
 import termflow.tui.KeyDecoder
+import termflow.tui.Prompt
 
-import scala.util.{ Failure, Success }
+import scala.util.Failure
+import scala.util.Success
 
 object LineEditorInspectorMain {
   def main(args: Array[String]): Unit = {

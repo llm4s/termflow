@@ -1,9 +1,9 @@
 package termflow.apps.counter
 
 import termflow.tui.Color.Blue
-import termflow.tui._
+import termflow.tui.Tui._
 import termflow.tui.TuiPrelude._
-import termflow.tui.Tui.*
+import termflow.tui._
 
 import scala.util.Try
 
@@ -65,7 +65,7 @@ object SyncCounter {
             2.x,
             2.y,
             List(
-              s"Current count: ".text,
+              "Current count: ".text,
               Text(s"${m.counter.count}", renderCount(m.counter.count))
             )
           ),

@@ -1,6 +1,7 @@
 package termflow.tui
 
-import java.util.concurrent.{ Executors, ThreadFactory }
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadFactory
 
 /** Thread utilities that provide virtual threads on Java 21+ with fallback to platform threads. */
 object ThreadUtils {

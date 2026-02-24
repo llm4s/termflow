@@ -1,10 +1,14 @@
 package termflow.apps.task
 
+import termflow.apps.task.Task.Model
+import termflow.apps.task.Task.Msg
 import termflow.apps.task.Task.Msg._
+import termflow.apps.task.Task.RenderMode
 import termflow.apps.task.Task.RenderMode._
-import termflow.apps.task.Task.{ Model, Msg, RenderMode, TaskId, TaskStatus }
+import termflow.apps.task.Task.TaskId
+import termflow.apps.task.Task.TaskStatus
 import termflow.tui.Tui
-import termflow.tui.Tui.*
+import termflow.tui.Tui._
 
 object UpdateApp {
 

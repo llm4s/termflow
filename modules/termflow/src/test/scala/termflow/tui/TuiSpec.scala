@@ -1,7 +1,7 @@
 package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
-import termflow.tui.Tui.*
+import termflow.tui.Tui._
 
 class TuiSpec extends AnyFunSuite {
 

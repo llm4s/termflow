@@ -5,6 +5,10 @@ import org.scalatest.funsuite.AnyFunSuite
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import scala.jdk.CollectionConverters._
+import scala.util.Failure
+import scala.util.Success
+import scala.util.Try
 
 class SubSpec extends AnyFunSuite:
 
@@ -58,3 +62,39 @@ class SubSpec extends AnyFunSuite:
     assert(!noSub.isActive)
     noSub.cancel() // should not throw
     assert(!noSub.isActive)
+
+  test("InputKeyFromSource publishes mapped key and mapped error"):
+    final class StubSource(results: List[Try[KeyDecoder.InputKey]]) extends TerminalKeySource:
+      private val queue = new java.util.concurrent.ConcurrentLinkedQueue[Try[KeyDecoder.InputKey]](results.asJava)
+      override def next(): Try[KeyDecoder.InputKey] =
+        Option(queue.poll()).getOrElse(Failure(new InterruptedException("done")))
+      override def close(): Unit = ()
+
+    val source = new StubSource(List(Success(KeyDecoder.InputKey.CharKey('a')), Failure(new RuntimeException("boom"))))
+    val sink   = new TestSink[String]
+    val sub = Sub.InputKeyFromSource[String](
+      source,
+      key => s"key:$key",
+      err => s"err:${err.getClass.getSimpleName}",
+      sink
+    )
+
+    assert(sink.awaitFirst(500))
+    Thread.sleep(50)
+    sub.cancel()
+    val msgs = sink.messages.collect { case Cmd.GCmd(v: String) => v }
+    assert(msgs.exists(_.startsWith("key:")))
+    assert(msgs.exists(_.startsWith("err:")))
+
+  test("RandomSourceAtFixedRate emits and can be cancelled"):
+    val sink    = new TestSink[Int]
+    val counter = new AtomicInteger(0)
+    val source  = new RandomUtil.RandomSourceAtFixedRate[Int, Int](20, () => counter.incrementAndGet(), identity)
+    val sub     = source.asEventSource(sink)
+
+    assert(sink.awaitFirst(500))
+    val beforeCancel = sink.messages.size
+    sub.cancel()
+    Thread.sleep(80)
+    assert(!sub.isActive)
+    assert(sink.messages.size == beforeCancel)

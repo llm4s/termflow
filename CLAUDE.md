@@ -67,6 +67,13 @@ Apps implement `TuiApp[Model, Msg]` with four methods:
 - `FCmd[A, Msg]` - async Future with result mapper
 - `TermFlowErrorCmd` - surface errors to renderer
 
+## Scala 3 Style
+
+- Prefer `enum` for closed ADTs (`Cmd`, `TermFlowError`, `InputKey`, `Color`, etc.).
+- Prefer `given` / `using` for contextual parameters.
+- Prefer `extension` methods over implicit classes.
+- Avoid implicit conversions; use explicit `Tui` construction (`model.tui`).
+
 ### Subscriptions (Sub)
 Event streams that push `Cmd`s to the bus:
 - `Sub.Every` - timer-based polling

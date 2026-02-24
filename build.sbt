@@ -57,6 +57,7 @@ lazy val commonSettings = Seq(
     "-unchecked",
     "-Wvalue-discard",  // warn when non-Unit results are ignored
     "-Wunused:all", // surface dead code/imports during Scala 3 cleanup
+    "-Wsafe-init", // flag potentially unsafe field initialization order
     "-source:3.7-migration" // emit migration guidance without failing builds
   ),
   Test / fork := true

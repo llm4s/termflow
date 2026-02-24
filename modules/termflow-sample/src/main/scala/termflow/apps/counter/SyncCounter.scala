@@ -7,7 +7,7 @@ import termflow.tui._
 
 import scala.util.Try
 
-object SyncCounter {
+object SyncCounter:
 
   final case class Model(
     terminalWidth: Int,
@@ -17,16 +17,15 @@ object SyncCounter {
     prompt: Prompt.State
   )
 
-  enum Msg {
+  enum Msg:
     case Increment
     case Decrement
     case ConsoleInputKey(key: KeyDecoder.InputKey)
     case ConsoleInputError(error: Throwable)
-  }
 
   import Msg._
 
-  object App extends TuiApp[Model, Msg] {
+  object App extends TuiApp[Model, Msg]:
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -37,21 +36,19 @@ object SyncCounter {
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
-      msg match {
+      msg match
         case Increment =>
           m.copy(counter = m.counter.syncIncrement()).tui
         case Decrement =>
           m.copy(counter = m.counter.syncDecrement()).tui
         case ConsoleInputKey(k) =>
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
-          maybeCmd match {
+          maybeCmd match
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
             case None      => m.copy(prompt = nextPrompt).tui
-          }
         case ConsoleInputError(_) => m.tui
-      }
 
-    override def view(m: Model): RootNode = {
+    override def view(m: Model): RootNode =
       val prefix         = "[]> "
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
       // Use terminal width with a small right margin.
@@ -77,21 +74,17 @@ object SyncCounter {
           InputNode(2.x, 9.y, renderedPrompt.text, Style(), cursor = renderedPrompt.cursorIndex)
         )
       )
-    }
 
     def renderCount(c: Int): Style =
-      if (c == 0) Style(fg = Color.Black)
-      else if (c < 0) Style(fg = Color.Red)
+      if c == 0 then Style(fg = Color.Black)
+      else if c < 0 then Style(fg = Color.Red)
       else Style(fg = Color.Green)
 
     override def toMsg(input: PromptLine): Result[Msg] =
       Try {
-        input.value.trim.toLowerCase match {
+        input.value.trim.toLowerCase match
           case "increment" | "+" =>
             Increment
           case "decrement" | "-" =>
             Decrement
-        }
       }.toEither.left.map(e => TermFlowError.Unexpected(e.getMessage))
-  }
-}

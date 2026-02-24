@@ -11,7 +11,7 @@ import termflow.tui._
 import scala.concurrent.ExecutionContext
 import scala.util.Try
 
-object FutureCounter {
+object FutureCounter:
   given ExecutionContext = ExecutionContext.global
 
   final case class Model(
@@ -25,7 +25,7 @@ object FutureCounter {
     spinnerIndex: Int
   )
 
-  enum Msg {
+  enum Msg:
     case Increment
     case Decrement
     case UpdateWith(counter: Counter)
@@ -33,11 +33,10 @@ object FutureCounter {
     case SpinnerTick
     case ConsoleInputKey(key: KeyDecoder.InputKey)
     case ConsoleInputError(error: Throwable)
-  }
 
   import Msg._
 
-  object App extends TuiApp[Model, Msg] {
+  object App extends TuiApp[Model, Msg]:
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -51,7 +50,7 @@ object FutureCounter {
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
-      msg match {
+      msg match
         case Increment =>
           Tui(
             m,
@@ -72,25 +71,23 @@ object FutureCounter {
           )
         case UpdateWith(c) =>
           // stop spinner when work completes
-          if (m.spinner.isActive) m.spinner.cancel()
+          if m.spinner.isActive then m.spinner.cancel()
           m.copy(count = c, status = s"done::${TimeFormatter.getCurrentTime}", spinner = Sub.NoSub, spinnerIndex = 0)
             .tui
         case Busy(action) =>
           // start spinner if not already active
-          if (m.spinner.isActive) m.copy(status = action).tui
+          if m.spinner.isActive then m.copy(status = action).tui
           else m.copy(status = action, spinner = Sub.Every(200, () => SpinnerTick, ctx)).tui
         case SpinnerTick =>
           m.copy(spinnerIndex = (m.spinnerIndex + 1) % 4).tui
         case ConsoleInputKey(k) =>
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
-          maybeCmd match {
+          maybeCmd match
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
             case None      => m.copy(prompt = nextPrompt).tui
-          }
         case ConsoleInputError(_) => m.tui
-      }
 
-    override def view(m: Model): RootNode = {
+    override def view(m: Model): RootNode =
       val prefix         = "[]> "
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
       val boxWidth       = math.max(40, m.terminalWidth - 4)
@@ -122,26 +119,21 @@ object FutureCounter {
           InputNode(2.x, 11.y, renderedPrompt.text, Style(), cursor = renderedPrompt.cursorIndex)
         )
       )
-    }
 
     def renderCount(c: Int): Style =
-      if (c == 0) Style(fg = Color.Black)
-      else if (c < 0) Style(fg = Color.Red)
+      if c == 0 then Style(fg = Color.Black)
+      else if c < 0 then Style(fg = Color.Red)
       else Style(fg = Color.Green)
 
     override def toMsg(input: PromptLine): Result[Msg] =
       Try {
-        input.value.trim.toLowerCase match {
+        input.value.trim.toLowerCase match
           case "increment" | "+" =>
             Increment
           case "decrement" | "-" =>
             Decrement
-        }
       }.toEither.left.map(e => TermFlowError.Unexpected(e.getMessage))
 
-    private def statusWithSpinner(m: Model): String = {
+    private def statusWithSpinner(m: Model): String =
       val frames = Array("|", "/", "-", "\\")
-      if (m.spinner.isActive) s"${m.status} ${frames(m.spinnerIndex % frames.length)}" else m.status
-    }
-  }
-}
+      if m.spinner.isActive then s"${m.status} ${frames(m.spinnerIndex % frames.length)}" else m.status

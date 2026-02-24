@@ -7,25 +7,24 @@ import termflow.tui.Prompt
 import scala.util.Failure
 import scala.util.Success
 
-object LineEditorInspectorMain {
-  def main(args: Array[String]): Unit = {
+object LineEditorInspectorMain:
+  def main(args: Array[String]): Unit =
     val source  = ConsoleKeyPressSource()
     var state   = Prompt.State()
     var running = true
 
-    def clearScreen(): Unit = {
+    def clearScreen(): Unit =
       // Clear screen and move cursor to home without using the alt buffer
       print("\u001b[2J")
       print("\u001b[H")
-    }
 
     def moveTo(x: Int, y: Int): Unit =
       print(s"\u001b[${y};${x}H")
 
     val prefix = "[]> "
 
-    while (running) {
-      source.next() match {
+    while running do
+      source.next() match
         case Failure(e) =>
           clearScreen()
           moveTo(1, 1)
@@ -34,7 +33,7 @@ object LineEditorInspectorMain {
           println("Press Escape to exit.")
 
         case Success(key) =>
-          key match {
+          key match
             case KeyDecoder.InputKey.Escape =>
               running = false
 
@@ -56,7 +55,7 @@ object LineEditorInspectorMain {
 
               val (left, right) = text.splitAt(cursor)
               print(left)
-              if (right.nonEmpty) {
+              if right.nonEmpty then
                 val ch   = right.head
                 val tail = right.tail
                 // Highlight the character at the cursor with reverse video
@@ -64,10 +63,9 @@ object LineEditorInspectorMain {
                 print(ch)
                 print("\u001b[0m")
                 print(tail)
-              } else {
+              else
                 // Cursor at end: show a highlighted space
                 print("\u001b[7m \u001b[0m")
-              }
 
               // Debug info below
               moveTo(1, 3)
@@ -76,11 +74,6 @@ object LineEditorInspectorMain {
               print(s"CURSOR : $cursor")
               moveTo(1, 5)
               print(s"LAST   : $other")
-          }
-      }
 
       clearScreen()
       println("Exiting LineEditor Inspector.")
-    }
-  }
-}

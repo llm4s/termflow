@@ -9,40 +9,35 @@ import scala.util.Try
 
 import TuiPrelude.Result
 
-object Add {
+object Add:
   def unapply(input: String): Option[String] =
-    if (input.startsWith("add ")) Some(input.drop(4).trim)
+    if input.startsWith("add ") then Some(input.drop(4).trim)
     else None
-}
 
-object Remove {
+object Remove:
   def unapply(input: String): Option[String] =
-    if (input.startsWith("remove ")) Some(input.drop(7).trim)
+    if input.startsWith("remove ") then Some(input.drop(7).trim)
     else None
-}
 
-object MarkInProgress {
+object MarkInProgress:
   def unapply(input: String): Option[String] =
-    if (input.startsWith("inprogress ")) Some(input.drop(11).trim)
+    if input.startsWith("inprogress ") then Some(input.drop(11).trim)
     else None
-}
 
-object MarkDone {
+object MarkDone:
   def unapply(input: String): Option[String] =
-    if (input.startsWith("done ")) Some(input.drop(5).trim)
+    if input.startsWith("done ") then Some(input.drop(5).trim)
     else None
-}
 
-object MarkCancel {
+object MarkCancel:
   def unapply(input: String): Option[String] =
-    if (input.startsWith("cancel ")) Some(input.drop(7).trim)
+    if input.startsWith("cancel ") then Some(input.drop(7).trim)
     else None
-}
 
-object GetMsg {
+object GetMsg:
   def apply(input: String): Result[Msg] =
     Try {
-      input.trim match {
+      input.trim match
         case Add(taskId) if taskId.nonEmpty            => Msg.Add(TaskId(taskId))
         case Remove(taskId) if taskId.nonEmpty         => Msg.Remove(TaskId(taskId))
         case MarkInProgress(taskId) if taskId.nonEmpty => Msg.MarkInProgress(TaskId(taskId))
@@ -53,6 +48,4 @@ object GetMsg {
         case "done"                                    => Msg.ListDone
         case "canceled"                                => Msg.ListCancelled
         case _                                         => Msg.InvalidCmd(input)
-      }
     }.toEither.left.map(e => TermFlowError.Unexpected(e.getMessage))
-}

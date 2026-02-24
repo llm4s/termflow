@@ -6,32 +6,29 @@ import termflow.tui.KeyDecoder
 import scala.util.Failure
 import scala.util.Success
 
-object KeyInspectorMain {
-  def main(args: Array[String]): Unit = {
+object KeyInspectorMain:
+  def main(args: Array[String]): Unit =
     val source  = ConsoleKeyPressSource()
     var running = true
     var history = List.empty[String]
 
-    def clearScreen(): Unit = {
+    def clearScreen(): Unit =
       // Clear screen and move cursor to home without using the alt buffer
       print("\u001b[2J")
       print("\u001b[H")
-    }
 
-    while (running) {
-      source.next() match {
+    while running do
+      source.next() match
         case Failure(e) =>
           history = s"ERROR: ${e.getMessage}" :: history
         case Success(key) =>
           val line = key.toString
           history = line :: history.take(20)
-          key match {
+          key match
             case KeyDecoder.InputKey.Escape =>
               running = false
             case _ =>
               ()
-          }
-      }
 
       clearScreen()
       println("KeyInspector – press keys to see decoded InputKey")
@@ -42,8 +39,5 @@ object KeyInspectorMain {
       println()
       println("Recent keys:")
       history.foreach(k => println(s"  $k"))
-    }
 
     println("Exiting KeyInspector.")
-  }
-}

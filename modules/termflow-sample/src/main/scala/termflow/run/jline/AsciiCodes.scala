@@ -1,20 +1,18 @@
 package termflow.run.jline
 
-object AsciiTables {
+object AsciiTables:
 
-  def printAsciiTable(args: Array[String]): Unit = {
+  def printAsciiTable(args: Array[String]): Unit =
     val _ = args
     println("ASCII Table (0–127):")
-    for (i <- 0 to 127) {
+    for i <- 0 to 127 do
       val ch = i.toChar
       val display =
-        if (ch.isControl) f"\\u${i}%04x" // escape control chars
+        if ch.isControl then f"\\u${i}%04x" // escape control chars
         else s"'$ch'"
       println(f"$i%3d -> $display")
-    }
-  }
 
-  def fullAsciiTable(args: Array[String]): Unit = {
+  def fullAsciiTable(args: Array[String]): Unit =
     val _ = args
     // Control character names (0–31 + 127)
     val controlChars: Map[Int, String] = Map(
@@ -57,12 +55,9 @@ object AsciiTables {
     println("Code | Char | Description")
     println("-----+------+-----------------------------")
 
-    for (i <- 0 to 127) {
+    for i <- 0 to 127 do
       val desc =
-        if (controlChars.contains(i)) controlChars(i)
+        if controlChars.contains(i) then controlChars(i)
         else s"'${i.toChar}'"
-      val printable = if (i >= 32 && i <= 126) i.toChar.toString else ""
+      val printable = if i >= 32 && i <= 126 then i.toChar.toString else ""
       println(f"$i%4d | $printable%-4s | $desc")
-    }
-  }
-}

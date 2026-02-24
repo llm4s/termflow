@@ -5,7 +5,7 @@ import termflow.tui.Tui._
 import termflow.tui.TuiPrelude._
 import termflow.tui._
 
-object EchoApp {
+object EchoApp:
 
   // === Model ===
   final case class Model(
@@ -17,18 +17,17 @@ object EchoApp {
     prompt: Prompt.State
   )
 
-  enum Msg {
+  enum Msg:
     case AddMessage(input: String)
     case Clear
     case Exit
     case ConsoleInputKey(key: KeyDecoder.InputKey)
     case ConsoleInputError(error: Throwable)
-  }
 
   import Msg._
 
   // === App ===
-  object App extends TuiApp[Model, Msg] {
+  object App extends TuiApp[Model, Msg]:
 
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
@@ -42,7 +41,7 @@ object EchoApp {
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
-      msg match {
+      msg match
         case AddMessage(input) =>
           // Wrap long input into lines that fit in the box
           val wrappedLines = wrapText(input, m.maxWidth - 4)
@@ -57,16 +56,14 @@ object EchoApp {
 
         case ConsoleInputKey(k) =>
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
-          maybeCmd match {
+          maybeCmd match
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
             case None      => m.copy(prompt = nextPrompt).tui
-          }
 
         case ConsoleInputError(_) =>
           m.tui // ignore for now
-      }
 
-    override def view(m: Model): RootNode = {
+    override def view(m: Model): RootNode =
       val boxTop         = 1
       val messagesHeight = math.max(8, math.min(20, m.messages.length + 4))
       val boxHeight      = messagesHeight
@@ -98,21 +95,17 @@ object EchoApp {
           )
         )
       )
-    }
 
     override def toMsg(input: PromptLine): Result[Msg] =
-      input.value.trim match {
+      input.value.trim match
         case ""       => Left(termflow.tui.TermFlowError.Validation("Empty input"))
         case "/clear" => Right(Clear)
         case "exit"   => Right(Exit)
         case other    => Right(AddMessage(other))
-      }
 
     // === Helpers ===
     private def wrapText(text: String, maxWidth: Int): List[String] =
       text.split("\n").toList.flatMap { line =>
-        if (line.length <= maxWidth) List(line)
+        if line.length <= maxWidth then List(line)
         else line.grouped(maxWidth).toList
       }
-  }
-}

@@ -4,9 +4,9 @@ import termflow.apps.task.Task._
 import termflow.tui.TuiPrelude._
 import termflow.tui._
 
-object RenderApp {
+object RenderApp:
 
-  def apply(m: Model): RootNode = {
+  def apply(m: Model): RootNode =
     val tasks          = m.filteredList
     val taskCount      = tasks.length
     val boxWidth       = math.max(40, m.terminalWidth - 4)
@@ -14,7 +14,7 @@ object RenderApp {
     val boxHeight      = math.max(8, 5 + taskCount + helpLines)
     val commandsStartY = 4 + taskCount
 
-    val title = m.renderList match {
+    val title = m.renderList match
       case RenderMode.All        => "📋 All Tasks"
       case RenderMode.InProgress => "🔄 Tasks In Progress"
       case RenderMode.Done       => "✅ Completed Tasks"
@@ -23,7 +23,6 @@ object RenderApp {
       case RenderMode.Add        => "➕ New Task Added"
       case RenderMode.Init       => "🎯 Your Tasks"
       case _                     => "📋 Tasks"
-    }
 
     val welcomeText =
       """✨ Welcome to Task Manager! ✨
@@ -40,12 +39,11 @@ object RenderApp {
         BoxNode(1.x, 1.y, boxWidth, boxHeight, children = Nil, style = Style(border = true, fg = Color.Blue)),
         TextNode(2.x, 2.y, List(Text(title, Style(fg = Color.Magenta, bold = true, underline = true))))
       ) ++ {
-        if (m.tasks.isEmpty)
+        if m.tasks.isEmpty then
           welcomeText.split(System.lineSeparator()).toList.zipWithIndex.map { case (s, i) =>
             TextNode(2.x, (3 + i).y, List(Text(s, Style(fg = Color.Cyan, bold = true))))
           }
-        else
-          renderTasks(tasks)
+        else renderTasks(tasks)
       } ++ List(
         TextNode(2.x, commandsStartY.y, List("──────────────────────────────".text(fg = Color.Cyan))),
         TextNode(2.x, (commandsStartY + 1).y, List("Commands:".text(fg = Color.Yellow))),
@@ -75,10 +73,9 @@ object RenderApp {
         )
       }
     )
-  }
 
   private def renderTasks(tasks: List[Task]): List[VNode] =
-    if (tasks.isEmpty)
+    if tasks.isEmpty then
       List(
         TextNode(
           2.x,
@@ -93,12 +90,11 @@ object RenderApp {
       )
     else
       tasks.zipWithIndex.flatMap { case (task, index) =>
-        val (statusIcon, statusColor) = task.status match {
+        val (statusIcon, statusColor) = task.status match
           case TaskStatus.Pending    => ("⏳", Color.Yellow)
           case TaskStatus.InProgress => ("🔄", Color.Blue)
           case TaskStatus.Done       => ("✅", Color.Green)
           case TaskStatus.Cancelled  => ("❌", Color.Red)
-        }
 
         val rowY   = (3 + index).y
         val number = TextNode(2.x, rowY, List(Text(s"${index + 1}.", Style(fg = Color.Black, bold = true))))
@@ -107,4 +103,3 @@ object RenderApp {
 
         List(number, status, taskId)
       }
-}

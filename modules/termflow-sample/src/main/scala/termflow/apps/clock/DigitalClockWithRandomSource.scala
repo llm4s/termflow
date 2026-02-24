@@ -25,17 +25,16 @@ object DigitalClockWithRandomSource {
   )
 
   // --- Messages (Events) ---
-  sealed trait Msg
-  object Msg {
-    case object Tick                                           extends Msg
-    final case class RandomValue(value: Int)                   extends Msg
-    case object StartRandom                                    extends Msg
-    case object StopRandom                                     extends Msg
-    case object StopClock                                      extends Msg
-    final case class AddMessage(input: String)                 extends Msg
-    case object Exit                                           extends Msg
-    final case class ConsoleInputKey(key: KeyDecoder.InputKey) extends Msg
-    final case class ConsoleInputError(error: Throwable)       extends Msg
+  enum Msg {
+    case Tick
+    case RandomValue(value: Int)
+    case StartRandom
+    case StopRandom
+    case StopClock
+    case AddMessage(input: String)
+    case Exit
+    case ConsoleInputKey(key: KeyDecoder.InputKey)
+    case ConsoleInputError(error: Throwable)
   }
 
   import Msg._

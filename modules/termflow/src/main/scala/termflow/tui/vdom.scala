@@ -1,20 +1,8 @@
 package termflow.tui
 
 /** Basic colour palette for text and borders. */
-sealed trait Color {
-  def ordinal: Int
-}
-
-object Color {
-  case object Default extends Color { val ordinal = 0 }
-  case object Black   extends Color { val ordinal = 1 }
-  case object Red     extends Color { val ordinal = 2 }
-  case object Green   extends Color { val ordinal = 3 }
-  case object Yellow  extends Color { val ordinal = 4 }
-  case object Blue    extends Color { val ordinal = 5 }
-  case object Magenta extends Color { val ordinal = 6 }
-  case object Cyan    extends Color { val ordinal = 7 }
-  case object White   extends Color { val ordinal = 8 }
+enum Color {
+  case Default, Black, Red, Green, Yellow, Blue, Magenta, Cyan, White
 }
 
 final case class Style(

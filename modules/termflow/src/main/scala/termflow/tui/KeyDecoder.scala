@@ -3,36 +3,33 @@ package termflow.tui
 object KeyDecoder {
 
   /** Normalised key representation used by the TUI. */
-  sealed trait InputKey
-
-  object InputKey {
-    final case class CharKey(ch: Char) extends InputKey
-    final case class Ctrl(ch: Char)    extends InputKey
-
-    case object Backspace                 extends InputKey
-    case object Delete                    extends InputKey
-    case object Home                      extends InputKey
-    case object End                       extends InputKey
-    case object Enter                     extends InputKey
-    case object Escape                    extends InputKey
-    case object ArrowUp                   extends InputKey
-    case object ArrowDown                 extends InputKey
-    case object ArrowLeft                 extends InputKey
-    case object ArrowRight                extends InputKey
-    case object F1                        extends InputKey
-    case object F2                        extends InputKey
-    case object F3                        extends InputKey
-    case object F4                        extends InputKey
-    case object F5                        extends InputKey
-    case object F6                        extends InputKey
-    case object F7                        extends InputKey
-    case object F8                        extends InputKey
-    case object F9                        extends InputKey
-    case object F10                       extends InputKey
-    case object F11                       extends InputKey
-    case object F12                       extends InputKey
-    final case class Unknown(seq: String) extends InputKey
-    case object EndOfInput                extends InputKey
+  enum InputKey {
+    case CharKey(ch: Char)
+    case Ctrl(ch: Char)
+    case Backspace
+    case Delete
+    case Home
+    case End
+    case Enter
+    case Escape
+    case ArrowUp
+    case ArrowDown
+    case ArrowLeft
+    case ArrowRight
+    case F1
+    case F2
+    case F3
+    case F4
+    case F5
+    case F6
+    case F7
+    case F8
+    case F9
+    case F10
+    case F11
+    case F12
+    case Unknown(seq: String)
+    case EndOfInput
   }
 
   import InputKey._

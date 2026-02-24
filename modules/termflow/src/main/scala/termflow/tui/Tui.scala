@@ -4,15 +4,13 @@ import termflow.tui.TuiPrelude._
 import scala.concurrent.Future
 
 /** Error ADT used by TermFlow. */
-sealed trait TermFlowError
-
-object TermFlowError {
-  final case class ConfigError(msg: String)                                 extends TermFlowError
-  case object ModelNotFound                                                 extends TermFlowError
-  final case class Unexpected(msg: String, cause: Option[Throwable] = None) extends TermFlowError
-  final case class Validation(msg: String)                                  extends TermFlowError
-  final case class CommandError(input: String)                              extends TermFlowError
-  final case class UnknownApp(name: String)                                 extends TermFlowError
+enum TermFlowError {
+  case ConfigError(msg: String)
+  case ModelNotFound
+  case Unexpected(msg: String, cause: Option[Throwable] = None)
+  case Validation(msg: String)
+  case CommandError(input: String)
+  case UnknownApp(name: String)
 }
 
 final case class Tui[Model, Msg](

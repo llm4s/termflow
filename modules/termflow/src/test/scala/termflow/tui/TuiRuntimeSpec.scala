@@ -7,6 +7,7 @@ import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.io.Reader
 import java.io.StringReader
+import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.Future
 
 class TuiRuntimeSpec extends AnyFunSuite:
@@ -46,3 +47,19 @@ class TuiRuntimeSpec extends AnyFunSuite:
       )
 
     succeed
+
+  test("LocalCmdBus.cancelAllSubscriptions continues when one cancel throws"):
+    val bus = new LocalCmdBus[Unit](new TestTerminalBackend)
+
+    val called = new AtomicBoolean(false)
+    bus.registerSub(new Sub[Unit]:
+      override def isActive: Boolean = true
+      override def cancel(): Unit    = throw new RuntimeException("boom")
+    )
+    bus.registerSub(new Sub[Unit]:
+      override def isActive: Boolean = true
+      override def cancel(): Unit    = called.set(true)
+    )
+
+    bus.cancelAllSubscriptions()
+    assert(called.get())

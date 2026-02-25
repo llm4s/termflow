@@ -7,6 +7,10 @@ import termflow.tui._
 
 object EchoApp:
 
+  def main(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(App)
+
   // === Model ===
   final case class Model(
     terminalWidth: Int,
@@ -34,8 +38,8 @@ object EchoApp:
         terminalWidth = ctx.terminal.width,
         terminalHeight = ctx.terminal.height,
         messages = List.empty,
-        // Leave a small margin on both sides for the echo box.
-        maxWidth = math.max(40, ctx.terminal.width - 10),
+        // Keep wrapping width bounded to the current terminal.
+        maxWidth = math.max(8, ctx.terminal.width - 10),
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         prompt = Prompt.State()
       ).tui
@@ -64,31 +68,49 @@ object EchoApp:
           m.tui // ignore for now
 
     override def view(m: Model): RootNode =
-      val boxTop         = 1
-      val messagesHeight = math.max(8, math.min(20, m.messages.length + 4))
-      val boxHeight      = messagesHeight
+      val panelTop = 1
+      // Keep a compact, stable message panel and grow only when needed.
+      val panelHeight    = math.max(6, math.min(16, m.messages.length + 2))
       val prefix         = "[]> "
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
+      val innerHeight    = math.max(1, panelHeight - 2)
+      val visible        = m.messages.takeRight(innerHeight)
+      val startY         = panelTop + 1 + (innerHeight - visible.length)
+      val clearRowWidth  = math.max(1, m.maxWidth)
+
+      // Explicitly clear message rows each frame so shorter content
+      // cannot leave stale characters behind.
+      val clearNodes =
+        (0 until innerHeight).toList.map { i =>
+          TextNode(2.x, (panelTop + 1 + i).y, List(Text(" " * clearRowWidth, Style())))
+        }
+
+      val messageNodes =
+        if visible.nonEmpty then
+          visible.zipWithIndex.map { case (msg, i) =>
+            TextNode(2.x, (startY + i).y, List(msg.text))
+          }
+        else
+          List(
+            TextNode(2.x, (panelTop + 1 + (innerHeight / 2)).y, List("Type a message and press Enter".text(fg = Cyan)))
+          )
 
       RootNode(
         width = m.terminalWidth,
-        height = boxHeight + 8,
+        height = panelHeight + 8,
         children = List(
-          BoxNode(1.x, boxTop.y, m.maxWidth + 2, boxHeight, children = Nil, style = Style(border = true, fg = Blue))
-        ) ++
-          m.messages.takeRight(messagesHeight - 2).zipWithIndex.map { case (msg, i) =>
-            TextNode(3.x, (boxTop + 1 + i).y, List(msg.text))
-          } ++
+          TextNode(2.x, panelTop.y, List(Text("Messages", Style(fg = Blue, underline = true))))
+        ) ++ clearNodes ++ messageNodes ++
           List(
-            TextNode(2.x, (boxTop + boxHeight).y, List("──────────────────────────────".text(fg = Cyan))),
-            TextNode(2.x, (boxTop + boxHeight + 1).y, List("Commands:".text(fg = Yellow))),
-            TextNode(2.x, (boxTop + boxHeight + 2).y, List("  /clear → clear chat".text)),
-            TextNode(2.x, (boxTop + boxHeight + 3).y, List("  exit   → quit".text))
+            TextNode(2.x, (panelTop + panelHeight).y, List("──────────────────────────────".text(fg = Cyan))),
+            TextNode(2.x, (panelTop + panelHeight + 1).y, List("Commands:".text(fg = Yellow))),
+            TextNode(2.x, (panelTop + panelHeight + 2).y, List("  /clear → clear chat".text)),
+            TextNode(2.x, (panelTop + panelHeight + 3).y, List("  exit   → quit".text))
           ),
         input = Some(
           InputNode(
             2.x,
-            (boxTop + boxHeight + 5).y,
+            (panelTop + panelHeight + 5).y,
             prompt = renderedPrompt.text,
             style = Style(fg = Green),
             cursor = renderedPrompt.cursorIndex

@@ -14,6 +14,10 @@ import scala.util.Try
 object FutureCounter:
   given ExecutionContext = ExecutionContext.global
 
+  def main(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(App)
+
   final case class Model(
     terminalWidth: Int,
     terminalHeight: Int,
@@ -90,7 +94,7 @@ object FutureCounter:
     override def view(m: Model): RootNode =
       val prefix         = "[]> "
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
-      val boxWidth       = math.max(40, m.terminalWidth - 4)
+      val boxWidth       = math.max(2, m.terminalWidth - 4)
       RootNode(
         m.terminalWidth,
         14,

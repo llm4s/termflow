@@ -13,6 +13,10 @@ object DigitalClockWithRandomSource {
 
   implicit val ec: ExecutionContext = ExecutionContext.global
 
+  def main(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(App)
+
   final case class SubSource[T](sub: Sub[Msg], value: T)
 
   final case class Model(

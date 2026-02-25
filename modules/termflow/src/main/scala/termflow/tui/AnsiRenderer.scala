@@ -36,7 +36,7 @@ object AnsiRenderer {
 
   private def colorToAnsi(c: Color, isBg: Boolean): String = c match {
     case Color.Default => ""
-    case _ =>
+    case _             =>
       val base = if (isBg) 40 else 30
       s"\u001b[${base + (c.ordinal - 1)}m"
   }
@@ -93,47 +93,28 @@ object AnsiRenderer {
       if (inp.cursor >= 0 && inp.cursor <= rendered.length) inp.cursor
       else rendered.length
 
-    // Split text around the cursor position
-    val (left, right) = rendered.splitAt(cursorIndex)
-
     // Move to input position and clear the whole line to avoid ghost characters
     print(moveTo(inp.x, inp.y))
     print("\u001b[2K")
 
-    // Hide the hardware cursor and draw an inline visual cursor
-    print(ANSI.hideCursor)
-
     val baseStyle = inp.style
     val baseAnsi  = styleToAnsi(baseStyle)
-    // Caret uses reverse video on top of the base style for visibility
-    val caretAnsi = baseAnsi + "\u001b[7m"
-
-    // Print left part with base style
-    print(baseAnsi + left)
-
-    // Print the character at the cursor position with caret style
-    if (right.nonEmpty) {
-      val ch   = right.head
-      val tail = right.tail
-      print(caretAnsi + ch + reset)
-      // Restore base style for the rest
-      print(baseAnsi + tail + reset)
-    } else {
-      // Cursor at end: show a reversed space
-      print(caretAnsi + " " + reset)
-      print(baseAnsi + reset)
-    }
+    // Draw full prompt text and use hardware cursor for caret.
+    print(baseAnsi + rendered + reset)
 
     // Optionally pad the rest of the line so the background spans a fixed width.
     val targetWidth =
       if (inp.lineWidth > 0) inp.lineWidth
-      else rendered.length + 1
+      else rendered.length
 
-    val printedWidth = math.max(rendered.length, cursorIndex + 1)
+    val printedWidth = rendered.length
     if (targetWidth > printedWidth) {
       val padding = " " * (targetWidth - printedWidth)
       print(baseAnsi + padding + reset)
     }
+
+    // Place the hardware cursor at the logical editing position.
+    print(moveTo(inp.x + cursorIndex, inp.y))
   }
 }
 
@@ -154,7 +135,9 @@ final case class SimpleANSIRenderer() extends TuiRenderer {
 }
 
 object ACSUtils {
-  def EnterAlternatBuffer(): Unit = print("\u001b[?1049h")
+  def EnterAlternateBuffer(): Unit = print("\u001b[?1049h")
+  @deprecated("Use EnterAlternateBuffer", "0.1.0")
+  def EnterAlternatBuffer(): Unit = EnterAlternateBuffer()
   def EnterNormalBuffer(): Unit   = print("\u001b[?1049l")
   def SaveCursor(): Unit          = print("\u001b7")
   def RestoreCursor(): Unit       = print("\u001b8")

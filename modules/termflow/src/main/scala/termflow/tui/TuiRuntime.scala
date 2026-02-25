@@ -3,6 +3,7 @@ package termflow.tui
 import termflow.tui.ACSUtils._
 
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
 import scala.util.{ Failure, Success }
@@ -56,12 +57,22 @@ final class LocalCmdBus[Msg](val terminal: TerminalBackend) extends CmdBus[Msg] 
   override def publish(cmd: Cmd[Msg]): Unit           = queue.put(cmd)
   override def take(): Cmd[Msg]                       = queue.take()
   override def registerSub(sub: Sub[Msg]): Sub[Msg]   = { subscriptions.add(sub); sub }
-  override def cancelAllSubscriptions(): Unit         = subscriptions.forEach(_.cancel())
+  override def cancelAllSubscriptions(): Unit = {
+    subscriptions.forEach { sub =>
+      try sub.cancel()
+      catch {
+        case _: Throwable => ()
+      }
+    }
+  }
 }
 
 object TuiRuntime {
 
   implicit val ec: ExecutionContext = ExecutionContext.global
+
+  private[tui] def unexpectedMessage(e: Throwable): String =
+    Option(e.getMessage).filter(_.trim.nonEmpty).getOrElse(e.getClass.getSimpleName)
 
   /**
    * Run a TUI application with the given renderer and terminal backend.
@@ -76,11 +87,30 @@ object TuiRuntime {
   ): Unit = {
 
     val bus: CmdBus[Msg] = new LocalCmdBus[Msg](terminalBackend)
+    val restored         = new AtomicBoolean(false)
+
+    def restoreTerminalState(): Unit =
+      if (restored.compareAndSet(false, true)) {
+        print(ANSI.showCursor)
+        EnterNormalBuffer()
+        Console.out.flush()
+        // Close backend after restoring cursor/buffer state.
+        terminalBackend.close()
+      }
+
+    val shutdownHook = new Thread(
+      new Runnable {
+        override def run(): Unit = restoreTerminalState()
+      },
+      "termflow-shutdown-hook"
+    )
 
     // Enter alternate buffer and set up terminal
-    EnterAlternatBuffer()
+    EnterAlternateBuffer()
     ClearScreen()
     print(ANSI.showCursor)
+    Console.out.flush()
+    Runtime.getRuntime.addShutdownHook(shutdownHook)
 
     try {
       // Build initial model and command using the provided runtime context
@@ -113,7 +143,7 @@ object TuiRuntime {
               case Success(result) =>
                 bus.publish(toCmd(result))
               case Failure(e) =>
-                bus.publish(Cmd.TermFlowErrorCmd(TermFlowError.Unexpected(e.getMessage, Some(e))))
+                bus.publish(Cmd.TermFlowErrorCmd(TermFlowError.Unexpected(unexpectedMessage(e), Some(e))))
             }(ec)
             onEnqueue match {
               case Some(msg) => bus.publish(Cmd.GCmd(msg))
@@ -127,11 +157,12 @@ object TuiRuntime {
     } finally {
       // Cancel all registered subscriptions to stop background threads
       bus.cancelAllSubscriptions()
-      // Always restore terminal state, even on crash
-      print(ANSI.showCursor)
-      EnterNormalBuffer()
-      println("Goodbye from TermFlow!")
-      terminalBackend.close()
+      try Runtime.getRuntime.removeShutdownHook(shutdownHook)
+      catch {
+        case _: IllegalStateException => ()
+      }
+      // Always restore terminal state, even on crash.
+      restoreTerminalState()
     }
   }
 }

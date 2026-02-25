@@ -5,6 +5,7 @@ import termflow.tui.KeyDecoder.InputKey
 import java.io.Reader
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import scala.util.Failure
 
 /**
  * A subscription represents a long-running background task that emits messages.
@@ -86,10 +87,10 @@ object Sub:
 
       override def cancel(): Unit =
         active = false
-        try source.close()
-        catch {
-          case _: Throwable => ()
-        } finally thread.interrupt()
+        source.close() match
+          case Failure(_) => ()
+          case _          => ()
+        thread.interrupt()
 
   /** Poll terminal dimensions and emit a message when they change. */
   def TerminalResize[Msg](

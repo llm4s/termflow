@@ -10,11 +10,12 @@ import java.io.Reader
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.LinkedBlockingQueue
 import scala.annotation.tailrec
+import scala.util.Success
 import scala.util.Try
 
 trait TerminalKeySource:
   def next(): Try[InputKey]
-  def close(): Unit
+  def close(): Try[Unit]
 
 object ConsoleKeyPressSource:
 
@@ -147,9 +148,10 @@ object ConsoleKeyPressSource:
       override def next(): Try[InputKey] =
         Try(inputKeys.take())
 
-      override def close(): Unit =
+      override def close(): Try[Unit] =
         if !closed then
           closed = true
           producerThread.interrupt()
           decoderThread.interrupt()
-          Try(reader.close()): Unit
+          Try(reader.close())
+        else Success(())

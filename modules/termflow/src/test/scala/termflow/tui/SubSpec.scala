@@ -69,8 +69,8 @@ class SubSpec extends AnyFunSuite:
       private val closed = new AtomicInteger(0)
       override def next(): Try[KeyDecoder.InputKey] =
         Option(queue.poll()).getOrElse(Failure(new InterruptedException("done")))
-      override def close(): Unit = closed.incrementAndGet(): Unit
-      def closeCount: Int        = closed.get()
+      override def close(): Try[Unit] = Success(closed.incrementAndGet(): Unit)
+      def closeCount: Int             = closed.get()
 
     val source = new StubSource(List(Success(KeyDecoder.InputKey.CharKey('a')), Failure(new RuntimeException("boom"))))
     val sink   = new TestSink[String]
@@ -110,7 +110,7 @@ class SubSpec extends AnyFunSuite:
           Thread.sleep(10_000)
           KeyDecoder.InputKey.CharKey('x')
         }
-      override def close(): Unit = ()
+      override def close(): Try[Unit] = Success(())
 
     val started = new CountDownLatch(1)
     val source  = new BlockingSource(started)
@@ -136,7 +136,7 @@ class SubSpec extends AnyFunSuite:
           Thread.sleep(10_000)
           KeyDecoder.InputKey.CharKey('x')
         }
-      override def close(): Unit = throw new RuntimeException("close-failed")
+      override def close(): Try[Unit] = Failure(new RuntimeException("close-failed"))
 
     val started = new CountDownLatch(1)
     val source  = new ThrowingCloseSource(started)

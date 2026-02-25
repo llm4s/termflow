@@ -13,11 +13,17 @@ import scala.annotation.tailrec
 import scala.util.Success
 import scala.util.Try
 
+enum InputRead:
+  case Key(key: InputKey)
+  case End
+  case Failed(cause: Throwable)
+
 trait TerminalKeySource:
-  def next(): Try[InputKey]
+  def next(): InputRead
   def close(): Try[Unit]
 
 object ConsoleKeyPressSource:
+  private val EndOfStream = Int.MinValue
 
   /** Default JLine-based reader, mainly used in tests and tools. */
   def JLineReader(): Reader =
@@ -42,6 +48,9 @@ object ConsoleKeyPressSource:
           queueBridge.poll(50, java.util.concurrent.TimeUnit.MILLISECONDS)
         Option(next).map(_.intValue()) match
           case None =>
+            InputKey.Escape
+          case Some(`EndOfStream`) =>
+            queueBridge.put(EndOfStream)
             InputKey.Escape
           case Some(n) =>
             processKey(n, queueBridge, ESC :: Nil)
@@ -114,39 +123,49 @@ object ConsoleKeyPressSource:
     val bridge = new LinkedBlockingQueue[Integer]()
 
     // Producer: read raw ints from the reader
-    val producerThread = ThreadUtils.startThread(new Runnable {
-      override def run(): Unit =
-        try
-          @tailrec
-          def loop(): Unit =
-            val c = reader.read()
-            if c != -1 then
-              bridge.put(c)
-              loop()
-          loop()
-        catch case _: InterruptedException => ()
-    })
+    val producerThread = ThreadUtils.startThread(() =>
+      try
+        @tailrec
+        def loop(): Unit =
+          val c = reader.read()
+          if c == -1 then bridge.put(EndOfStream)
+          else
+            bridge.put(c)
+            loop()
+        loop()
+      catch case _: InterruptedException => ()
+    )
 
-    val inputKeys = new LinkedBlockingQueue[InputKey]()
+    val inputReads = new LinkedBlockingQueue[InputRead]()
     // Decoder: consume ints + escape sequences and emit InputKey
-    val decoderThread = ThreadUtils.startThread(new Runnable {
-      override def run(): Unit =
-        try
-          while true do {
-            val c   = bridge.take().intValue()
-            val key = processKey(c, bridge, Nil)
-            inputKeys.put(key)
-          }
-        catch {
-          case _: InterruptedException => ()
-        }
-    })
+    val decoderThread = ThreadUtils.startThread(() =>
+      try
+        @tailrec
+        def loop(continue: Boolean): Unit =
+          if !continue then ()
+          else
+            val c = bridge.take().intValue()
+            if c == EndOfStream then
+              inputReads.put(InputRead.End)
+              loop(false)
+            else
+              val key = processKey(c, bridge, Nil)
+              inputReads.put(InputRead.Key(key))
+              loop(true)
+        loop(true)
+      catch {
+        case _: InterruptedException => ()
+      }
+    )
 
     new TerminalKeySource:
       @volatile private var closed = false
 
-      override def next(): Try[InputKey] =
-        Try(inputKeys.take())
+      override def next(): InputRead =
+        try inputReads.take()
+        catch
+          case e: InterruptedException =>
+            InputRead.Failed(e)
 
       override def close(): Try[Unit] =
         if !closed then

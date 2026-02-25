@@ -1,6 +1,7 @@
 package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
+import termflow.tui.InputRead.Key
 import termflow.tui.KeyDecoder.InputKey
 
 import java.io.StringReader
@@ -10,21 +11,21 @@ class ConsoleKeyPressSourceSpec extends AnyFunSuite:
 
   test("decodes printable character"):
     val source = ConsoleKeyPressSource(new StringReader("a"))
-    try assert(source.next().get == InputKey.CharKey('a'))
+    try assert(source.next() == Key(InputKey.CharKey('a')))
     finally
       assert(source.close().isSuccess)
       ()
 
   test("decodes standalone ESC as Escape"):
     val source = ConsoleKeyPressSource(new StringReader("\u001b"))
-    try assert(source.next().get == InputKey.Escape)
+    try assert(source.next() == Key(InputKey.Escape))
     finally
       assert(source.close().isSuccess)
       ()
 
   test("decodes ESC [ A as ArrowUp and close is idempotent"):
     val source = ConsoleKeyPressSource(new StringReader("\u001b[A"))
-    assert(source.next().get == InputKey.ArrowUp)
+    assert(source.next() == Key(InputKey.ArrowUp))
     assert(source.close().isSuccess)
     assert(source.close().isSuccess)
 
@@ -37,7 +38,7 @@ class ConsoleKeyPressSourceSpec extends AnyFunSuite:
 
     val reader = new CountingReader("a")
     val source = ConsoleKeyPressSource(reader)
-    assert(source.next().get == InputKey.CharKey('a'))
+    assert(source.next() == Key(InputKey.CharKey('a')))
     assert(source.close().isSuccess)
     assert(source.close().isSuccess)
     assert(reader.closedCount.get() == 1)

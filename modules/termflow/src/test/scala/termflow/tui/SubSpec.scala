@@ -64,16 +64,18 @@ class SubSpec extends AnyFunSuite:
     assert(!noSub.isActive)
 
   test("InputKeyFromSource publishes mapped key and mapped error"):
-    final class StubSource(results: List[Try[KeyDecoder.InputKey]]) extends TerminalKeySource:
-      private val queue  = new java.util.concurrent.ConcurrentLinkedQueue[Try[KeyDecoder.InputKey]](results.asJava)
+    final class StubSource(results: List[InputRead]) extends TerminalKeySource:
+      private val queue  = new java.util.concurrent.ConcurrentLinkedQueue[InputRead](results.asJava)
       private val closed = new AtomicInteger(0)
-      override def next(): Try[KeyDecoder.InputKey] =
-        Option(queue.poll()).getOrElse(Failure(new InterruptedException("done")))
+      override def next(): InputRead =
+        Option(queue.poll()).getOrElse(InputRead.Failed(new InterruptedException("done")))
       override def close(): Try[Unit] = Success(closed.incrementAndGet(): Unit)
       def closeCount: Int             = closed.get()
 
-    val source = new StubSource(List(Success(KeyDecoder.InputKey.CharKey('a')), Failure(new RuntimeException("boom"))))
-    val sink   = new TestSink[String]
+    val source = new StubSource(
+      List(InputRead.Key(KeyDecoder.InputKey.CharKey('a')), InputRead.Failed(new RuntimeException("boom")))
+    )
+    val sink = new TestSink[String]
     val sub = Sub.InputKeyFromSource[String](
       source,
       key => s"key:$key",
@@ -104,12 +106,12 @@ class SubSpec extends AnyFunSuite:
 
   test("InputKeyFromSource cancel does not emit interruption error"):
     final class BlockingSource(started: CountDownLatch) extends TerminalKeySource:
-      override def next(): Try[KeyDecoder.InputKey] =
-        Try {
+      override def next(): InputRead =
+        try
           started.countDown()
           Thread.sleep(10_000)
-          KeyDecoder.InputKey.CharKey('x')
-        }
+          InputRead.Key(KeyDecoder.InputKey.CharKey('x'))
+        catch case e: InterruptedException => InputRead.Failed(e)
       override def close(): Try[Unit] = Success(())
 
     val started = new CountDownLatch(1)
@@ -130,12 +132,12 @@ class SubSpec extends AnyFunSuite:
 
   test("InputKeyFromSource cancel remains safe if source.close throws"):
     final class ThrowingCloseSource(started: CountDownLatch) extends TerminalKeySource:
-      override def next(): Try[KeyDecoder.InputKey] =
-        Try {
+      override def next(): InputRead =
+        try
           started.countDown()
           Thread.sleep(10_000)
-          KeyDecoder.InputKey.CharKey('x')
-        }
+          InputRead.Key(KeyDecoder.InputKey.CharKey('x'))
+        catch case e: InterruptedException => InputRead.Failed(e)
       override def close(): Try[Unit] = Failure(new RuntimeException("close-failed"))
 
     val started = new CountDownLatch(1)
@@ -154,3 +156,26 @@ class SubSpec extends AnyFunSuite:
       case e: Throwable => fail(s"cancel should not throw, but got: ${e.getMessage}")
     }
     assert(!sub.isActive)
+
+  test("InputKeyFromSource stops quietly on End"):
+    final class EndSource extends TerminalKeySource:
+      private val queue = new java.util.concurrent.ConcurrentLinkedQueue[InputRead](
+        List(InputRead.Key(KeyDecoder.InputKey.CharKey('a')), InputRead.End).asJava
+      )
+      override def next(): InputRead  = Option(queue.poll()).getOrElse(InputRead.End)
+      override def close(): Try[Unit] = Success(())
+
+    val sink = new TestSink[String]
+    val sub = Sub.InputKeyFromSource[String](
+      new EndSource,
+      key => s"key:$key",
+      err => s"err:${err.getClass.getSimpleName}",
+      sink
+    )
+
+    assert(sink.awaitFirst(500))
+    Thread.sleep(50)
+    assert(!sub.isActive)
+    val msgs = sink.messages.collect { case Cmd.GCmd(v: String) => v }
+    assert(msgs.count(_.startsWith("key:")) == 1)
+    assert(!msgs.exists(_.startsWith("err:")))

@@ -1,10 +1,8 @@
 package termflow.run.jline
 
 import termflow.tui.ConsoleKeyPressSource
+import termflow.tui.InputRead
 import termflow.tui.KeyDecoder
-
-import scala.util.Failure
-import scala.util.Success
 
 object KeyInspectorMain:
   def main(args: Array[String]): Unit =
@@ -19,9 +17,11 @@ object KeyInspectorMain:
 
     while running do
       source.next() match
-        case Failure(e) =>
+        case InputRead.Failed(e) =>
           history = s"ERROR: ${e.getMessage}" :: history
-        case Success(key) =>
+        case InputRead.End =>
+          running = false
+        case InputRead.Key(key) =>
           val line = key.toString
           history = line :: history.take(20)
           key match

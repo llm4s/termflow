@@ -69,12 +69,15 @@ object Sub:
         override def run(): Unit =
           try
             while active do
-              source
-                .next()
-                .fold(
-                  err => if active then sink.publish(Cmd.GCmd(onError(err))),
-                  key => if active then sink.publish(Cmd.GCmd(msg(key)))
-                )
+              source.next() match
+                case InputRead.Key(key) =>
+                  if active then sink.publish(Cmd.GCmd(msg(key)))
+                case InputRead.End =>
+                  active = false
+                case InputRead.Failed(_: InterruptedException) =>
+                  active = false
+                case InputRead.Failed(err) =>
+                  if active then sink.publish(Cmd.GCmd(onError(err)))
           catch {
             case _: InterruptedException =>
               ()

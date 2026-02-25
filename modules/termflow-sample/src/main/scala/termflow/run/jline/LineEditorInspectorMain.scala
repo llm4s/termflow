@@ -1,11 +1,9 @@
 package termflow.run.jline
 
 import termflow.tui.ConsoleKeyPressSource
+import termflow.tui.InputRead
 import termflow.tui.KeyDecoder
 import termflow.tui.Prompt
-
-import scala.util.Failure
-import scala.util.Success
 
 object LineEditorInspectorMain:
   def main(args: Array[String]): Unit =
@@ -25,14 +23,17 @@ object LineEditorInspectorMain:
 
     while running do
       source.next() match
-        case Failure(e) =>
+        case InputRead.Failed(e) =>
           clearScreen()
           moveTo(1, 1)
           println("LineEditor Inspector – error reading key")
           println(s"Error: ${e.getMessage}")
           println("Press Escape to exit.")
 
-        case Success(key) =>
+        case InputRead.End =>
+          running = false
+
+        case InputRead.Key(key) =>
           key match
             case KeyDecoder.InputKey.Escape =>
               running = false

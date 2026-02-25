@@ -34,6 +34,14 @@ object ANSI:
 
 object AnsiRenderer:
   private val reset = "\u001b[0m"
+  final case class RenderCell(ch: Char, style: Style)
+  final case class RenderFrame(
+    width: Int,
+    height: Int,
+    cells: Array[Array[RenderCell]],
+    cursor: Option[Coord]
+  )
+  private val blankCell = RenderCell(' ', Style())
 
   def moveTo(x: XCoord, y: YCoord): String =
     s"\u001b[${y.value};${x.value}H"
@@ -121,35 +129,164 @@ object AnsiRenderer:
     // Place the hardware cursor at the logical editing position.
     out.append(moveTo(inp.x + cursorIndex, inp.y))
 
-final case class SimpleANSIRenderer() extends TuiRenderer:
-  // Keep track of the last rendered root to avoid unnecessary redraws.
-  private var lastRoot: Option[RootNode] = None
-  private var lastInputPos: Option[Coord] = None
+  /** Build a full terminal frame from a root node for diff-based rendering. */
+  def buildFrame(root: RootNode): RenderFrame =
+    def nodeExtents(node: VNode): (Int, Int) = node match
+      case TextNode(x, y, segments) =>
+        val textWidth = segments.foldLeft(0)((acc, seg) => acc + seg.txt.length)
+        val right     = x.value + math.max(0, textWidth - 1)
+        (right, y.value)
 
-  override def render(textNode: RootNode, err: Option[TermFlowError]): Unit =
-    val currentInputPos = textNode.input.map(inp => Coord(inp.x, inp.y))
+      case BoxNode(x, y, w, h, children, _) =>
+        val boxRight = x.value + math.max(0, w - 1)
+        val boxBot   = y.value + math.max(0, h - 1)
+        children.foldLeft((boxRight, boxBot)) { case ((mx, my), child) =>
+          val (cx, cy) = nodeExtents(child)
+          (math.max(mx, cx), math.max(my, cy))
+        }
 
-    // If input moved (or disappeared), clear the previously used input line
-    // to avoid stale duplicated prompts.
-    (lastInputPos, currentInputPos) match
-      case (Some(prev), Some(curr)) if prev != curr =>
-        print(AnsiRenderer.moveTo(prev))
-        print("\u001b[2K")
-      case (Some(prev), None) =>
-        print(AnsiRenderer.moveTo(prev))
-        print("\u001b[2K")
-      case _ =>
+      case InputNode(x, y, prompt, _, _, lineWidth) =>
+        val w     = if lineWidth > 0 then lineWidth else prompt.length
+        val right = x.value + math.max(0, w - 1)
+        (right, y.value)
+
+    val (contentMaxX, contentMaxY) =
+      root.children.foldLeft((1, 1)) { case ((mx, my), node) =>
+        val (nx, ny) = nodeExtents(node)
+        (math.max(mx, nx), math.max(my, ny))
+      }
+
+    val (inputMaxX, inputMaxY) =
+      root.input match
+        case Some(inp) => nodeExtents(inp)
+        case None      => (1, 1)
+
+    val width  = math.max(1, math.max(root.width, math.max(contentMaxX, inputMaxX)))
+    val height = math.max(1, math.max(root.height, math.max(contentMaxY, inputMaxY)))
+    val cells  = Array.fill(height, width)(blankCell)
+    var cursor: Option[Coord] = None
+
+    def putCell(x1: Int, y1: Int, cell: RenderCell): Unit =
+      val x = x1 - 1
+      val y = y1 - 1
+      if x >= 0 && x < width && y >= 0 && y < height then
+        cells(y)(x) = cell
+
+    def drawString(x: Int, y: Int, str: String, style: Style): Unit =
+      var col = x
+      str.foreach { ch =>
+        putCell(col, y, RenderCell(ch, style))
+        col += 1
+      }
+
+    def drawBorder(x: Int, y: Int, w: Int, h: Int, style: Style): Unit =
+      if w > 0 && h > 0 then
+        var dx = 0
+        while dx < w do
+          putCell(x + dx, y, RenderCell('─', style))
+          if h > 1 then putCell(x + dx, y + h - 1, RenderCell('─', style))
+          dx += 1
+
+        var dy = 0
+        while dy < h do
+          putCell(x, y + dy, RenderCell('│', style))
+          if w > 1 then putCell(x + w - 1, y + dy, RenderCell('│', style))
+          dy += 1
+
+        putCell(x, y, RenderCell('┌', style))
+        if w > 1 then putCell(x + w - 1, y, RenderCell('┐', style))
+        if h > 1 then putCell(x, y + h - 1, RenderCell('└', style))
+        if w > 1 && h > 1 then putCell(x + w - 1, y + h - 1, RenderCell('┘', style))
+
+    def drawNode(node: VNode): Unit = node match
+      case TextNode(x, y, segments) =>
+        var col = x.value
+        segments.foreach { case Text(str, style) =>
+          drawString(col, y.value, str, style)
+          col += str.length
+        }
+
+      case BoxNode(x, y, w, h, children, style) =>
+        if style.border then
+          drawBorder(x.value, y.value, w, h, Style(fg = style.fg))
+        children.foreach(drawNode)
+
+      case _: InputNode =>
         ()
 
-    lastRoot match
-      // If the static children are unchanged, only re-render the input
-      case Some(prev) if prev.copy(input = None) == textNode.copy(input = None) =>
-        AnsiRenderer.renderInputOnly(textNode)
-      case _ =>
-        AnsiRenderer.render(textNode)
+    root.children.foreach(drawNode)
 
-    lastInputPos = currentInputPos
-    lastRoot = Some(textNode)
+    root.input.foreach { inp =>
+      val prompt = inp.prompt
+      val style  = inp.style
+      drawString(inp.x.value, inp.y.value, prompt, style)
+      val targetWidth =
+        if inp.lineWidth > 0 then inp.lineWidth
+        else prompt.length
+      if targetWidth > prompt.length then
+        drawString(inp.x.value + prompt.length, inp.y.value, " " * (targetWidth - prompt.length), style)
+
+      val clamped =
+        if inp.cursor >= 0 && inp.cursor <= prompt.length then inp.cursor
+        else prompt.length
+      cursor = Some(Coord(inp.x + clamped, inp.y))
+    }
+
+    RenderFrame(width, height, cells, cursor)
+
+  /** Diff two frames and emit only changed runs plus cursor movement. */
+  def renderDiff(prev: Option[RenderFrame], current: RenderFrame): String =
+    def cellAt(frame: Option[RenderFrame], row: Int, col: Int): RenderCell =
+      frame match
+        case Some(f) if row < f.height && col < f.width => f.cells(row)(col)
+        case _                                          => blankCell
+
+    val out   = new StringBuilder
+    val maxH  = math.max(prev.map(_.height).getOrElse(0), current.height)
+    val maxW  = math.max(prev.map(_.width).getOrElse(0), current.width)
+
+    def appendChangedRun(row: Int, start: Int, end: Int): Unit =
+      out.append(moveTo(XCoord(start + 1), YCoord(row + 1)))
+      var cursor = start
+      while cursor < end do
+        val style = cellAt(Some(current), row, cursor).style
+        out.append(reset).append(styleToAnsi(style))
+        var j = cursor
+        while j < end && cellAt(Some(current), row, j).style == style do
+          out.append(cellAt(Some(current), row, j).ch)
+          j += 1
+        cursor = j
+      out.append(reset)
+
+    var row = 0
+    while row < maxH do
+      var col = 0
+      while col < maxW do
+        if cellAt(prev, row, col) == cellAt(Some(current), row, col) then
+          col += 1
+        else
+          val start = col
+          while col < maxW && cellAt(prev, row, col) != cellAt(Some(current), row, col) do
+            col += 1
+          appendChangedRun(row, start, col)
+      row += 1
+
+    // Always place the hardware cursor explicitly. Leaving it where the last
+    // changed run ended can break interaction on high-frequency updates.
+    current.cursor.foreach(c => out.append(moveTo(c)))
+
+    out.toString
+
+final case class SimpleANSIRenderer() extends TuiRenderer:
+  private var lastFrame: Option[AnsiRenderer.RenderFrame] = None
+
+  override def render(textNode: RootNode, err: Option[TermFlowError]): Unit =
+    val currentFrame = AnsiRenderer.buildFrame(textNode)
+    val ansi         = AnsiRenderer.renderDiff(lastFrame, currentFrame)
+    if ansi.nonEmpty then
+      print(ansi)
+      Console.out.flush()
+    lastFrame = Some(currentFrame)
 
 object ACSUtils:
   def EnterAlternateBuffer(): Unit = print("\u001b[?1049h")

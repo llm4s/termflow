@@ -127,3 +127,30 @@ class SubSpec extends AnyFunSuite:
     Thread.sleep(50)
     val msgs = sink.messages.collect { case Cmd.GCmd(v: String) => v }
     assert(msgs.isEmpty)
+
+  test("InputKeyFromSource cancel remains safe if source.close throws"):
+    final class ThrowingCloseSource(started: CountDownLatch) extends TerminalKeySource:
+      override def next(): Try[KeyDecoder.InputKey] =
+        Try {
+          started.countDown()
+          Thread.sleep(10_000)
+          KeyDecoder.InputKey.CharKey('x')
+        }
+      override def close(): Unit = throw new RuntimeException("close-failed")
+
+    val started = new CountDownLatch(1)
+    val source  = new ThrowingCloseSource(started)
+    val sink    = new TestSink[String]
+    val sub = Sub.InputKeyFromSource[String](
+      source,
+      key => s"key:$key",
+      err => s"err:${err.getClass.getSimpleName}",
+      sink
+    )
+
+    assert(started.await(1, TimeUnit.SECONDS))
+    try sub.cancel()
+    catch {
+      case e: Throwable => fail(s"cancel should not throw, but got: ${e.getMessage}")
+    }
+    assert(!sub.isActive)

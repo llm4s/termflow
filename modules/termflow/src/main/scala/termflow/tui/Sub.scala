@@ -86,8 +86,10 @@ object Sub:
 
       override def cancel(): Unit =
         active = false
-        source.close()
-        thread.interrupt()
+        try source.close()
+        catch {
+          case _: Throwable => ()
+        } finally thread.interrupt()
 
   /** Poll terminal dimensions and emit a message when they change. */
   def TerminalResize[Msg](

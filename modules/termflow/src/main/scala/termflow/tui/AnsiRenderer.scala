@@ -257,9 +257,9 @@ object AnsiRenderer {
         case _                                          => blankCell
       }
 
-    val out  = new StringBuilder
-    val maxH = math.max(prev.map(_.height).getOrElse(0), current.height)
-    val maxW = math.max(prev.map(_.width).getOrElse(0), current.width)
+    val out         = new StringBuilder
+    val maxH        = math.max(prev.map(_.height).getOrElse(0), current.height)
+    val maxW        = math.max(prev.map(_.width).getOrElse(0), current.width)
     var changedCells = false
 
     def appendChangedRun(row: Int, start: Int, end: Int): Unit = {

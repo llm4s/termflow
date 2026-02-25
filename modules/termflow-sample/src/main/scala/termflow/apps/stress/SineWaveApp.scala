@@ -87,14 +87,14 @@ object SineWaveApp:
           m.copy(status = s"input error: ${Option(e.getMessage).getOrElse("unknown")}").tui
 
     override def view(m: Model): RootNode =
-      val width         = math.max(40, m.terminalWidth)
-      val height        = math.max(16, m.terminalHeight)
-      val boxHeight     = math.max(10, height - 5)
-      val boxWidth      = math.max(2, width - 4)
-      val innerWidth    = math.max(1, boxWidth - 2)
-      val innerHeight   = math.max(3, boxHeight - 2)
-      val baseline      = innerHeight / 2
-      val amplitude     = math.max(1, innerHeight / 3)
+      val width          = math.max(40, m.terminalWidth)
+      val height         = math.max(16, m.terminalHeight)
+      val boxHeight      = math.max(10, height - 5)
+      val boxWidth       = math.max(2, width - 4)
+      val innerWidth     = math.max(1, boxWidth - 2)
+      val innerHeight    = math.max(3, boxHeight - 2)
+      val baseline       = innerHeight / 2
+      val amplitude      = math.max(1, innerHeight / 3)
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, "[]> ")
 
       def clamp(v: Int, lo: Int, hi: Int): Int = math.max(lo, math.min(hi, v))
@@ -122,7 +122,7 @@ object SineWaveApp:
           TextNode(2.x, (2 + idx).y, List(Text(line, style)))
         }
 
-      val statusLine = f"status=${m.status}  step=${m.step}%.2f  phase=${m.phase}%.2f"
+      val statusLine   = f"status=${m.status}  step=${m.step}%.2f  phase=${m.phase}%.2f"
       val fittedStatus = if statusLine.length <= innerWidth then statusLine else statusLine.take(innerWidth)
 
       RootNode(
@@ -132,7 +132,11 @@ object SineWaveApp:
           BoxNode(1.x, 1.y, boxWidth, boxHeight, children = Nil, style = Style(border = true, fg = Color.Magenta)),
           TextNode(2.x, 2.y, List(Text(fittedStatus, Style(fg = Color.Yellow, bold = true))))
         ) ++ waveNodes ++ List(
-          TextNode(2.x, (boxHeight + 1).y, List(Text("Commands: pause | resume | faster | slower | exit", Style(fg = Color.White))))
+          TextNode(
+            2.x,
+            (boxHeight + 1).y,
+            List(Text("Commands: pause | resume | faster | slower | exit", Style(fg = Color.White)))
+          )
         ),
         input = Some(
           InputNode(
@@ -153,4 +157,4 @@ object SineWaveApp:
         case "faster" => Right(Faster)
         case "slower" => Right(Slower)
         case "exit"   => Right(Exit)
-        case other     => Left(TermFlowError.Validation(s"Unknown command: $other"))
+        case other    => Left(TermFlowError.Validation(s"Unknown command: $other"))

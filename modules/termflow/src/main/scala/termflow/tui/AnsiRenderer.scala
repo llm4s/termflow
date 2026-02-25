@@ -161,16 +161,15 @@ object AnsiRenderer:
         case Some(inp) => nodeExtents(inp)
         case None      => (1, 1)
 
-    val width  = math.max(1, math.max(root.width, math.max(contentMaxX, inputMaxX)))
-    val height = math.max(1, math.max(root.height, math.max(contentMaxY, inputMaxY)))
-    val cells  = Array.fill(height, width)(blankCell)
+    val width                 = math.max(1, math.max(root.width, math.max(contentMaxX, inputMaxX)))
+    val height                = math.max(1, math.max(root.height, math.max(contentMaxY, inputMaxY)))
+    val cells                 = Array.fill(height, width)(blankCell)
     var cursor: Option[Coord] = None
 
     def putCell(x1: Int, y1: Int, cell: RenderCell): Unit =
       val x = x1 - 1
       val y = y1 - 1
-      if x >= 0 && x < width && y >= 0 && y < height then
-        cells(y)(x) = cell
+      if x >= 0 && x < width && y >= 0 && y < height then cells(y)(x) = cell
 
     def drawString(x: Int, y: Int, str: String, style: Style): Unit =
       var col = x
@@ -207,8 +206,7 @@ object AnsiRenderer:
         }
 
       case BoxNode(x, y, w, h, children, style) =>
-        if style.border then
-          drawBorder(x.value, y.value, w, h, Style(fg = style.fg))
+        if style.border then drawBorder(x.value, y.value, w, h, Style(fg = style.fg))
         children.foreach(drawNode)
 
       case _: InputNode =>
@@ -241,9 +239,9 @@ object AnsiRenderer:
         case Some(f) if row < f.height && col < f.width => f.cells(row)(col)
         case _                                          => blankCell
 
-    val out   = new StringBuilder
-    val maxH  = math.max(prev.map(_.height).getOrElse(0), current.height)
-    val maxW  = math.max(prev.map(_.width).getOrElse(0), current.width)
+    val out          = new StringBuilder
+    val maxH         = math.max(prev.map(_.height).getOrElse(0), current.height)
+    val maxW         = math.max(prev.map(_.width).getOrElse(0), current.width)
     var changedCells = false
 
     def appendChangedRun(row: Int, start: Int, end: Int): Unit =
@@ -264,20 +262,17 @@ object AnsiRenderer:
     while row < maxH do
       var col = 0
       while col < maxW do
-        if cellAt(prev, row, col) == cellAt(Some(current), row, col) then
-          col += 1
+        if cellAt(prev, row, col) == cellAt(Some(current), row, col) then col += 1
         else
           val start = col
-          while col < maxW && cellAt(prev, row, col) != cellAt(Some(current), row, col) do
-            col += 1
+          while col < maxW && cellAt(prev, row, col) != cellAt(Some(current), row, col) do col += 1
           appendChangedRun(row, start, col)
       row += 1
 
     val prevCursor = prev.flatMap(_.cursor)
     // Place the hardware cursor if content changed, or cursor itself moved.
     // This preserves editing position without emitting output on identical frames.
-    if changedCells || prevCursor != current.cursor then
-      current.cursor.foreach(c => out.append(moveTo(c)))
+    if changedCells || prevCursor != current.cursor then current.cursor.foreach(c => out.append(moveTo(c)))
 
     out.toString
 

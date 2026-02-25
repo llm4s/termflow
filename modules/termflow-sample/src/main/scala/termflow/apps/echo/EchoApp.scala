@@ -68,7 +68,7 @@ object EchoApp:
           m.tui // ignore for now
 
     override def view(m: Model): RootNode =
-      val panelTop       = 1
+      val panelTop = 1
       // Keep a compact, stable message panel and grow only when needed.
       val panelHeight    = math.max(6, math.min(16, m.messages.length + 2))
       val prefix         = "[]> "

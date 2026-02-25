@@ -134,7 +134,9 @@ object RenderStressApp:
 
       val header =
         fitPad(
-          s"Render Stress | fps~20 | running=${m.running} border=${m.border} narrow=${m.narrowMode} ${if m.note.nonEmpty then s"note=${m.note}" else ""}"
+          s"Render Stress | fps~20 | running=${m.running} border=${m.border} narrow=${m.narrowMode} ${
+              if m.note.nonEmpty then s"note=${m.note}" else ""
+            }"
         )
 
       val separator = "-" * contentWidth
@@ -147,7 +149,8 @@ object RenderStressApp:
       val styleB = Style(fg = Color.Green)
 
       val children: List[VNode] =
-        (if m.border then List(BoxNode(1.x, 1.y, width, boxHeight, children = Nil, style = Style(border = true, fg = Color.Blue)))
+        (if m.border then
+           List(BoxNode(1.x, 1.y, width, boxHeight, children = Nil, style = Style(border = true, fg = Color.Blue)))
          else Nil) ++
           List(TextNode(leftX.x, headerY.y, List(Text(header, Style(fg = Color.Yellow, bold = true))))) ++
           List(TextNode(leftX.x, separatorY.y, List(Text(separator, Style(fg = Color.Magenta))))) ++
@@ -179,12 +182,12 @@ object RenderStressApp:
 
     override def toMsg(input: PromptLine): Result[Msg] =
       input.value.trim match
-        case ""       => Right(ClearNote)
-        case "start"  => Right(Start)
-        case "stop"   => Right(Stop)
-        case "border" => Right(ToggleBorder)
-        case "narrow" => Right(ToggleNarrow)
-        case "clear"  => Right(ClearNote)
-        case "exit"   => Right(Exit)
+        case ""                                 => Right(ClearNote)
+        case "start"                            => Right(Start)
+        case "stop"                             => Right(Stop)
+        case "border"                           => Right(ToggleBorder)
+        case "narrow"                           => Right(ToggleNarrow)
+        case "clear"                            => Right(ClearNote)
+        case "exit"                             => Right(Exit)
         case other if other.startsWith("note ") => Right(AddNote(other.stripPrefix("note ").trim))
-        case other                                 => Right(AddNote(s"unknown command: $other"))
+        case other                              => Right(AddNote(s"unknown command: $other"))

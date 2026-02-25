@@ -116,6 +116,7 @@ object ConsoleKeyPressSource:
     val producerThread = ThreadUtils.startThread(new Runnable {
       override def run(): Unit =
         try
+          @tailrec
           def loop(): Unit =
             val c = reader.read()
             if c != -1 then

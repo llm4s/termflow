@@ -7,6 +7,10 @@ import termflow.tui._
 
 object EchoApp:
 
+  def main(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(App)
+
   // === Model ===
   final case class Model(
     terminalWidth: Int,

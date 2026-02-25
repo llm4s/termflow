@@ -10,6 +10,10 @@ import java.time.LocalTime
 
 object DigitalClock:
 
+  def main(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(App)
+
   final case class SubSource[T](sub: Sub[Msg], value: T)
 
   final case class Model(

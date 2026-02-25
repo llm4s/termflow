@@ -9,6 +9,10 @@ import scala.util.Try
 
 object SyncCounter:
 
+  def main(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(App)
+
   final case class Model(
     terminalWidth: Int,
     terminalHeight: Int,

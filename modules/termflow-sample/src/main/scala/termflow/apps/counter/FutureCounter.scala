@@ -14,6 +14,10 @@ import scala.util.Try
 object FutureCounter:
   given ExecutionContext = ExecutionContext.global
 
+  def main(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(App)
+
   final case class Model(
     terminalWidth: Int,
     terminalHeight: Int,

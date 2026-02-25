@@ -3,6 +3,7 @@ package termflow.tui
 import termflow.tui.ACSUtils._
 
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicBoolean
 import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
 import scala.util.Failure
@@ -81,11 +82,27 @@ object TuiRuntime:
   ): Unit =
 
     val bus: CmdBus[Msg] = new LocalCmdBus[Msg](terminalBackend)
+    val restored         = new AtomicBoolean(false)
+
+    def restoreTerminalState(): Unit =
+      if restored.compareAndSet(false, true) then
+        print(ANSI.showCursor)
+        EnterNormalBuffer()
+        Console.out.flush()
+        // Close backend after restoring cursor/buffer state.
+        terminalBackend.close()
+
+    val shutdownHook = new Thread(
+      () => restoreTerminalState(),
+      "termflow-shutdown-hook"
+    )
 
     // Enter alternate buffer and set up terminal
     EnterAlternateBuffer()
     ClearScreen()
     print(ANSI.showCursor)
+    Console.out.flush()
+    Runtime.getRuntime.addShutdownHook(shutdownHook)
 
     try
       // Build initial model and command using the provided runtime context
@@ -128,8 +145,9 @@ object TuiRuntime:
     finally
       // Cancel all registered subscriptions to stop background threads
       bus.cancelAllSubscriptions()
+      try Runtime.getRuntime.removeShutdownHook(shutdownHook)
+      catch {
+        case _: IllegalStateException => ()
+      }
       // Always restore terminal state, even on crash.
-      print(ANSI.showCursor)
-      EnterNormalBuffer()
-      // Close the backend last; avoid extra terminal output during shutdown.
-      terminalBackend.close()
+      restoreTerminalState()

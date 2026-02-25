@@ -5,6 +5,10 @@ import termflow.tui.TuiPrelude._
 import termflow.tui._
 
 object Task:
+  def main(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(App)
+
   opaque type TaskId = String
   object TaskId:
     def apply(value: String): TaskId = value

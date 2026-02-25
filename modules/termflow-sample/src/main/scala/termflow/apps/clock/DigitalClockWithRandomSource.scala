@@ -12,6 +12,10 @@ import scala.util.Random
 
 object DigitalClockWithRandomSource:
 
+  def main(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(App)
+
   final case class SubSource[T](sub: Sub[Msg], value: T)
 
   final case class Model(

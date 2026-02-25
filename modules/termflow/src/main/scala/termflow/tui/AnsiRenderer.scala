@@ -54,38 +54,43 @@ object AnsiRenderer {
     print(ANSI.clearScreen)
 
   def render(root: RootNode): Unit = {
-    root.children.foreach(renderNode)
-    root.input.foreach(renderInput)
+    val out = new StringBuilder
+    root.children.foreach(renderNode(_, out))
+    root.input.foreach(renderInput(_, out))
+    print(out.toString)
   }
 
   /** Re-render only the input, leaving existing children intact. */
-  def renderInputOnly(root: RootNode): Unit =
-    root.input.foreach(renderInput)
+  def renderInputOnly(root: RootNode): Unit = {
+    val out = new StringBuilder
+    root.input.foreach(renderInput(_, out))
+    print(out.toString)
+  }
 
-  private def renderNode(v: VNode): Unit = v match {
+  private def renderNode(v: VNode, out: StringBuilder): Unit = v match {
     case TextNode(x, y, l) =>
-      print(moveTo(x, y))
+      out.append(moveTo(x, y))
       l.foreach { case Text(str, style) =>
-        print(styleToAnsi(style) + str + reset)
+        out.append(styleToAnsi(style)).append(str).append(reset)
       }
 
     case BoxNode(x, y, w, h, children, style) =>
-      if (style.border) drawBorder(x, y, w, h, style.fg)
-      children.foreach(renderNode)
+      if (style.border) drawBorder(x, y, w, h, style.fg, out)
+      children.foreach(renderNode(_, out))
 
     case _: InputNode => () // handled separately
   }
 
-  private def drawBorder(x: XCoord, y: YCoord, w: Int, h: Int, color: Color): Unit = {
+  private def drawBorder(x: XCoord, y: YCoord, w: Int, h: Int, color: Color, out: StringBuilder): Unit = {
     val inner      = math.max(0, w - 2)
     val horizontal = "─" * inner
-    print(moveTo(x, y) + colorToAnsi(color, isBg = false) + s"┌$horizontal┐")
-    (1 until (h - 1)).foreach(row => print(moveTo(x, y + row) + s"│${" " * inner}│"))
-    print(moveTo(x, y + (h - 1)) + s"└$horizontal┘")
-    print(reset)
+    out.append(moveTo(x, y)).append(colorToAnsi(color, isBg = false)).append(s"┌$horizontal┐")
+    (1 until (h - 1)).foreach(row => out.append(moveTo(x, y + row)).append(s"│${" " * inner}│"))
+    out.append(moveTo(x, y + (h - 1))).append(s"└$horizontal┘")
+    out.append(reset)
   }
 
-  private def renderInput(inp: InputNode): Unit = {
+  private def renderInput(inp: InputNode, out: StringBuilder): Unit = {
     val rendered = inp.prompt
 
     // Clamp cursor index within the rendered string
@@ -94,13 +99,13 @@ object AnsiRenderer {
       else rendered.length
 
     // Move to input position and clear the whole line to avoid ghost characters
-    print(moveTo(inp.x, inp.y))
-    print("\u001b[2K")
+    out.append(moveTo(inp.x, inp.y))
+    out.append("\u001b[2K")
 
     val baseStyle = inp.style
     val baseAnsi  = styleToAnsi(baseStyle)
     // Draw full prompt text and use hardware cursor for caret.
-    print(baseAnsi + rendered + reset)
+    out.append(baseAnsi).append(rendered).append(reset)
 
     // Optionally pad the rest of the line so the background spans a fixed width.
     val targetWidth =
@@ -110,19 +115,35 @@ object AnsiRenderer {
     val printedWidth = rendered.length
     if (targetWidth > printedWidth) {
       val padding = " " * (targetWidth - printedWidth)
-      print(baseAnsi + padding + reset)
+      out.append(baseAnsi).append(padding).append(reset): Unit
     }
 
     // Place the hardware cursor at the logical editing position.
-    print(moveTo(inp.x + cursorIndex, inp.y))
+    out.append(moveTo(inp.x + cursorIndex, inp.y))
   }
 }
 
 final case class SimpleANSIRenderer() extends TuiRenderer {
   // Keep track of the last rendered root to avoid unnecessary redraws.
   private var lastRoot: Option[RootNode] = None
+  private var lastInputPos: Option[Coord] = None
 
   override def render(textNode: RootNode, err: Option[TermFlowError]): Unit = {
+    val currentInputPos = textNode.input.map(inp => Coord(inp.x, inp.y))
+
+    // If input moved (or disappeared), clear the previously used input line
+    // to avoid stale duplicated prompts.
+    (lastInputPos, currentInputPos) match {
+      case (Some(prev), Some(curr)) if prev != curr =>
+        print(AnsiRenderer.moveTo(prev))
+        print("\u001b[2K")
+      case (Some(prev), None) =>
+        print(AnsiRenderer.moveTo(prev))
+        print("\u001b[2K")
+      case _ =>
+        ()
+    }
+
     lastRoot match {
       // If the static children are unchanged, only re-render the input
       case Some(prev) if prev.copy(input = None) == textNode.copy(input = None) =>
@@ -130,6 +151,8 @@ final case class SimpleANSIRenderer() extends TuiRenderer {
       case _ =>
         AnsiRenderer.render(textNode)
     }
+
+    lastInputPos = currentInputPos
     lastRoot = Some(textNode)
   }
 }

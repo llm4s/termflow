@@ -5,11 +5,12 @@ import termflow.tui.Tui._
 import termflow.tui.TuiPrelude._
 import termflow.tui._
 
-object RenderStressApp:
+object RenderStressApp {
 
-  def main(args: Array[String]): Unit =
+  def main(args: Array[String]): Unit = {
     val _ = args
     TuiRuntime.run(App)
+  }
 
   final case class Model(
     terminalWidth: Int,
@@ -24,21 +25,23 @@ object RenderStressApp:
     prompt: Prompt.State
   )
 
-  enum Msg:
-    case Tick
-    case Start
-    case Stop
-    case ToggleBorder
-    case ToggleNarrow
-    case ClearNote
-    case AddNote(text: String)
-    case Exit
-    case ConsoleInputKey(key: KeyDecoder.InputKey)
-    case ConsoleInputError(error: Throwable)
+  sealed trait Msg
+  object Msg {
+    case object Tick                                           extends Msg
+    case object Start                                          extends Msg
+    case object Stop                                           extends Msg
+    case object ToggleBorder                                   extends Msg
+    case object ToggleNarrow                                   extends Msg
+    case object ClearNote                                      extends Msg
+    final case class AddNote(text: String)                     extends Msg
+    case object Exit                                           extends Msg
+    final case class ConsoleInputKey(key: KeyDecoder.InputKey) extends Msg
+    final case class ConsoleInputError(error: Throwable)       extends Msg
+  }
 
   import Msg._
 
-  object App extends TuiApp[Model, Msg]:
+  object App extends TuiApp[Model, Msg] {
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -51,58 +54,61 @@ object RenderStressApp:
         ticker = Sub.Every(50, () => Tick, ctx),
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         prompt = Prompt.State()
-      ).tui
+      )
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
-      msg match
+      msg match {
         case Tick =>
-          if m.running then m.copy(frame = m.frame + 1).tui
-          else m.tui
+          if (m.running) m.copy(frame = m.frame + 1)
+          else m
 
         case Start =>
-          if m.running then m.copy(note = "already running").tui
-          else
-            val ticker = if m.ticker.isActive then m.ticker else Sub.Every(50, () => Tick, ctx)
-            m.copy(running = true, ticker = ticker, note = "running").tui
+          if (m.running) m.copy(note = "already running")
+          else {
+            val ticker = if (m.ticker.isActive) m.ticker else Sub.Every(50, () => Tick, ctx)
+            m.copy(running = true, ticker = ticker, note = "running")
+          }
 
         case Stop =>
-          if m.ticker.isActive then m.ticker.cancel()
-          m.copy(running = false, ticker = Sub.NoSub, note = "stopped").tui
+          if (m.ticker.isActive) m.ticker.cancel()
+          m.copy(running = false, ticker = Sub.NoSub, note = "stopped")
 
         case ToggleBorder =>
-          m.copy(border = !m.border, note = s"border=${!m.border}").tui
+          m.copy(border = !m.border, note = s"border=${!m.border}")
 
         case ToggleNarrow =>
-          m.copy(narrowMode = !m.narrowMode, note = s"narrow=${!m.narrowMode}").tui
+          m.copy(narrowMode = !m.narrowMode, note = s"narrow=${!m.narrowMode}")
 
         case ClearNote =>
-          m.copy(note = "").tui
+          m.copy(note = "")
 
         case AddNote(text) =>
-          m.copy(note = text).tui
+          m.copy(note = text)
 
         case Exit =>
-          if m.ticker.isActive then m.ticker.cancel()
+          if (m.ticker.isActive) m.ticker.cancel()
           Tui(m, Cmd.Exit)
 
         case ConsoleInputKey(k) =>
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
-          maybeCmd match
+          maybeCmd match {
             case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt).tui
+            case None      => m.copy(prompt = nextPrompt)
+          }
 
         case ConsoleInputError(e) =>
-          m.copy(note = s"input error: ${Option(e.getMessage).getOrElse("unknown")}").tui
+          m.copy(note = s"input error: ${Option(e.getMessage).getOrElse("unknown")}")
+      }
 
-    override def view(m: Model): RootNode =
+    override def view(m: Model): RootNode = {
       val width        = math.max(24, m.terminalWidth)
       val height       = math.max(14, m.terminalHeight)
       val boxHeight    = height - 2
-      val leftX        = if m.border then 2 else 1
-      val rightX       = if m.border then width - 1 else width
+      val leftX        = if (m.border) 2 else 1
+      val rightX       = if (m.border) width - 1 else width
       val contentWidth = math.max(1, rightX - leftX + 1)
 
-      val headerY       = if m.border then 2 else 1
+      val headerY       = if (m.border) 2 else 1
       val separatorY    = headerY + 1
       val commandsStart = boxHeight - 3
       val dataStartY    = separatorY + 1
@@ -113,28 +119,32 @@ object RenderStressApp:
       val prefix         = "[]> "
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
 
-      def fitPad(raw: String): String =
-        val clipped = if raw.length <= contentWidth then raw else raw.take(contentWidth)
-        if clipped.length < contentWidth then clipped + (" " * (contentWidth - clipped.length)) else clipped
+      def fitPad(raw: String): String = {
+        val clipped = if (raw.length <= contentWidth) raw else raw.take(contentWidth)
+        if (clipped.length < contentWidth) clipped + (" " * (contentWidth - clipped.length)) else clipped
+      }
 
       val phase      = m.frame % 4
       val frames     = Array("|", "/", "-", "\\")
       val oscillate  = frames(phase)
-      val waveLength = if m.narrowMode then math.max(1, contentWidth / 4) else math.max(1, contentWidth / 2)
+      val waveLength = if (m.narrowMode) math.max(1, contentWidth / 4) else math.max(1, contentWidth / 2)
 
-      def dynamicLine(i: Int): String =
+      def dynamicLine(i: Int): String = {
         val meter = (m.frame + i * 3) % (waveLength + 1)
         val wave  = ("#" * meter) + ("." * math.max(0, waveLength - meter))
         val base  = f"row=${i + 1}%02d frame=${m.frame}%06d $oscillate"
-        if (i + m.frame) % 5 == 0 then s"$base  $wave"
-        else if (i + m.frame) % 7 == 0 then s"$base  tail=${"x" * math.min(contentWidth, 12)}"
+        if ((i + m.frame) % 5 == 0) s"$base  $wave"
+        else if ((i + m.frame) % 7 == 0) s"$base  tail=${"x" * math.min(contentWidth, 12)}"
         else base
+      }
 
       val rows = (0 until dataRows).toList.map(i => fitPad(dynamicLine(i)))
 
       val header =
         fitPad(
-          s"Render Stress | fps~20 | running=${m.running} border=${m.border} narrow=${m.narrowMode} ${if m.note.nonEmpty then s"note=${m.note}" else ""}"
+          s"Render Stress | fps~20 | running=${m.running} border=${m.border} narrow=${m.narrowMode} ${
+              if (m.note.nonEmpty) s"note=${m.note}" else ""
+            }"
         )
 
       val separator = "-" * contentWidth
@@ -147,12 +157,13 @@ object RenderStressApp:
       val styleB = Style(fg = Color.Green)
 
       val children: List[VNode] =
-        (if m.border then List(BoxNode(1.x, 1.y, width, boxHeight, children = Nil, style = Style(border = true, fg = Color.Blue)))
+        (if (m.border)
+           List(BoxNode(1.x, 1.y, width, boxHeight, children = Nil, style = Style(border = true, fg = Color.Blue)))
          else Nil) ++
           List(TextNode(leftX.x, headerY.y, List(Text(header, Style(fg = Color.Yellow, bold = true))))) ++
           List(TextNode(leftX.x, separatorY.y, List(Text(separator, Style(fg = Color.Magenta))))) ++
           rows.zipWithIndex.map { case (line, idx) =>
-            val style = if idx % 2 == 0 then styleA else styleB
+            val style = if (idx % 2 == 0) styleA else styleB
             TextNode(leftX.x, (dataStartY + idx).y, List(Text(line, style)))
           } ++
           List(
@@ -176,15 +187,19 @@ object RenderStressApp:
           )
         )
       )
+    }
 
     override def toMsg(input: PromptLine): Result[Msg] =
-      input.value.trim match
-        case ""       => Right(ClearNote)
-        case "start"  => Right(Start)
-        case "stop"   => Right(Stop)
-        case "border" => Right(ToggleBorder)
-        case "narrow" => Right(ToggleNarrow)
-        case "clear"  => Right(ClearNote)
-        case "exit"   => Right(Exit)
+      input.trim match {
+        case ""                                 => Right(ClearNote)
+        case "start"                            => Right(Start)
+        case "stop"                             => Right(Stop)
+        case "border"                           => Right(ToggleBorder)
+        case "narrow"                           => Right(ToggleNarrow)
+        case "clear"                            => Right(ClearNote)
+        case "exit"                             => Right(Exit)
         case other if other.startsWith("note ") => Right(AddNote(other.stripPrefix("note ").trim))
-        case other                                 => Right(AddNote(s"unknown command: $other"))
+        case other                              => Right(AddNote(s"unknown command: $other"))
+      }
+  }
+}

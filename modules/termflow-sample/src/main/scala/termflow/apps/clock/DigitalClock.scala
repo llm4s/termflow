@@ -30,13 +30,13 @@ object DigitalClock {
   // --- Messages ---
   sealed trait Msg
   object Msg {
-    case object Tick                                              extends Msg
-    case object StartClock                                        extends Msg
-    case object StopClock                                         extends Msg
-    final case class AddMessage(input: String)                   extends Msg
-    case object Exit                                              extends Msg
-    final case class ConsoleInputKey(key: KeyDecoder.InputKey)   extends Msg
-    final case class ConsoleInputError(error: Throwable) extends Msg
+    case object Tick                                           extends Msg
+    case object StartClock                                     extends Msg
+    case object StopClock                                      extends Msg
+    final case class AddMessage(input: String)                 extends Msg
+    case object Exit                                           extends Msg
+    final case class ConsoleInputKey(key: KeyDecoder.InputKey) extends Msg
+    final case class ConsoleInputError(error: Throwable)       extends Msg
   }
 
   import Msg._

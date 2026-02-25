@@ -59,20 +59,19 @@ final class LocalCmdBus[Msg](val terminal: TerminalBackend) extends CmdBus[Msg] 
   override def take(): Cmd[Msg]                       = queue.take()
   override def poll(timeoutMillis: Long): Option[Cmd[Msg]] =
     Option(queue.poll(timeoutMillis, TimeUnit.MILLISECONDS))
-  override def registerSub(sub: Sub[Msg]): Sub[Msg]   = { subscriptions.add(sub); sub }
-  override def cancelAllSubscriptions(): Unit = {
+  override def registerSub(sub: Sub[Msg]): Sub[Msg] = { subscriptions.add(sub); sub }
+  override def cancelAllSubscriptions(): Unit =
     subscriptions.forEach { sub =>
       try sub.cancel()
       catch {
         case _: Throwable => ()
       }
     }
-  }
 }
 
 object TuiRuntime {
 
-  implicit val ec: ExecutionContext = ExecutionContext.global
+  implicit val ec: ExecutionContext        = ExecutionContext.global
   private val TargetFps                    = 60
   private val FrameNanos                   = 1000000000L / TargetFps
   private val MaxCoalescedCommandsPerFrame = 4096
@@ -123,11 +122,11 @@ object TuiRuntime {
       val initial: Tui[Model, Msg] = app.init(bus)
       bus.publish(initial.cmd)
 
-      var model: Model                       = initial.model
-      var pendingErr: Option[TermFlowError]  = None
-      var shouldRender                       = false
-      var shouldExit                         = false
-      var lastRenderAtNanos                  = 0L
+      var model: Model                      = initial.model
+      var pendingErr: Option[TermFlowError] = None
+      var shouldRender                      = false
+      var shouldExit                        = false
+      var lastRenderAtNanos                 = 0L
 
       def processCommand(cmd: Cmd[Msg]): Unit =
         cmd match {
@@ -167,7 +166,7 @@ object TuiRuntime {
           // Drain already-queued work so multiple rapid updates collapse into one frame.
           var drained  = true
           var consumed = 0
-          while (drained && !shouldExit && consumed < MaxCoalescedCommandsPerFrame) {
+          while (drained && !shouldExit && consumed < MaxCoalescedCommandsPerFrame)
             bus.poll(0L) match {
               case Some(nextCmd) =>
                 processCommand(nextCmd)
@@ -175,7 +174,6 @@ object TuiRuntime {
               case None =>
                 drained = false
             }
-          }
 
           val elapsed = System.nanoTime() - lastRenderAtNanos
           val waitNanos =

@@ -105,7 +105,7 @@ class AnsiRendererSpec extends AnyFunSuite {
     assert(out.contains("└"))
     assert(out.contains("\u001b[1m")) // bold style for text
     assert(!out.contains(ANSI.hideCursor))
-    assert(out.contains("\u001b[2K")) // clear current line
+    assert(out.contains("\u001b[2K"))                               // clear current line
     assert(out.contains(AnsiRenderer.moveTo(XCoord(2), YCoord(4)))) // hardware cursor at logical index
   }
 
@@ -128,7 +128,7 @@ class AnsiRendererSpec extends AnyFunSuite {
 
     val out = captureOut(AnsiRenderer.renderInputOnly(root))
     assert(out.contains("\u001b[2K"))
-    assert(out.contains(" ")) // padded trailing area
+    assert(out.contains(" "))                                        // padded trailing area
     assert(out.contains(AnsiRenderer.moveTo(XCoord(13), YCoord(5)))) // x=10 + clamped cursor len(abc)=3
   }
 

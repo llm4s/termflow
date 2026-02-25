@@ -46,7 +46,7 @@ object AnsiRenderer {
 
   private def colorToAnsi(c: Color, isBg: Boolean): String = c match {
     case Color.Default => ""
-    case _             =>
+    case _ =>
       val base = if (isBg) 40 else 30
       s"\u001b[${base + (c.ordinal - 1)}m"
   }
@@ -143,10 +143,9 @@ object AnsiRenderer {
       case BoxNode(x, y, w, h, children, _) =>
         val boxRight = x.value + math.max(0, w - 1)
         val boxBot   = y.value + math.max(0, h - 1)
-        children.foldLeft((boxRight, boxBot)) {
-          case ((mx, my), child) =>
-            val (cx, cy) = nodeExtents(child)
-            (math.max(mx, cx), math.max(my, cy))
+        children.foldLeft((boxRight, boxBot)) { case ((mx, my), child) =>
+          val (cx, cy) = nodeExtents(child)
+          (math.max(mx, cx), math.max(my, cy))
         }
 
       case InputNode(x, y, prompt, _, _, lineWidth) =>
@@ -156,10 +155,9 @@ object AnsiRenderer {
     }
 
     val (contentMaxX, contentMaxY) =
-      root.children.foldLeft((1, 1)) {
-        case ((mx, my), node) =>
-          val (nx, ny) = nodeExtents(node)
-          (math.max(mx, nx), math.max(my, ny))
+      root.children.foldLeft((1, 1)) { case ((mx, my), node) =>
+        val (nx, ny) = nodeExtents(node)
+        (math.max(mx, nx), math.max(my, ny))
       }
 
     val (inputMaxX, inputMaxY) =
@@ -168,9 +166,9 @@ object AnsiRenderer {
         case None      => (1, 1)
       }
 
-    val width  = math.max(1, math.max(root.width, math.max(contentMaxX, inputMaxX)))
-    val height = math.max(1, math.max(root.height, math.max(contentMaxY, inputMaxY)))
-    val cells  = Array.fill(height, width)(blankCell)
+    val width                 = math.max(1, math.max(root.width, math.max(contentMaxX, inputMaxX)))
+    val height                = math.max(1, math.max(root.height, math.max(contentMaxY, inputMaxY)))
+    val cells                 = Array.fill(height, width)(blankCell)
     var cursor: Option[Coord] = None
 
     def putCell(x1: Int, y1: Int, cell: RenderCell): Unit = {
@@ -188,7 +186,7 @@ object AnsiRenderer {
       }
     }
 
-    def drawBorder(x: Int, y: Int, w: Int, h: Int, style: Style): Unit = {
+    def drawBorder(x: Int, y: Int, w: Int, h: Int, style: Style): Unit =
       if (w > 0 && h > 0) {
         var dx = 0
         while (dx < w) {
@@ -209,15 +207,13 @@ object AnsiRenderer {
         if (h > 1) putCell(x, y + h - 1, RenderCell('└', style))
         if (w > 1 && h > 1) putCell(x + w - 1, y + h - 1, RenderCell('┘', style))
       }
-    }
 
     def drawNode(node: VNode): Unit = node match {
       case TextNode(x, y, segments) =>
         var col = x.value
-        segments.foreach {
-          case Text(str, style) =>
-            drawString(col, y.value, str, style)
-            col += str.length
+        segments.foreach { case Text(str, style) =>
+          drawString(col, y.value, str, style)
+          col += str.length
         }
 
       case BoxNode(x, y, w, h, children, style) =>
@@ -257,9 +253,9 @@ object AnsiRenderer {
         case _                                          => blankCell
       }
 
-    val out         = new StringBuilder
-    val maxH        = math.max(prev.map(_.height).getOrElse(0), current.height)
-    val maxW        = math.max(prev.map(_.width).getOrElse(0), current.width)
+    val out          = new StringBuilder
+    val maxH         = math.max(prev.map(_.height).getOrElse(0), current.height)
+    val maxW         = math.max(prev.map(_.width).getOrElse(0), current.width)
     var changedCells = false
 
     def appendChangedRun(row: Int, start: Int, end: Int): Unit = {
@@ -282,17 +278,15 @@ object AnsiRenderer {
     var row = 0
     while (row < maxH) {
       var col = 0
-      while (col < maxW) {
+      while (col < maxW)
         if (cellAt(prev, row, col) == cellAt(Some(current), row, col)) {
           col += 1
         } else {
           val start = col
-          while (col < maxW && cellAt(prev, row, col) != cellAt(Some(current), row, col)) {
+          while (col < maxW && cellAt(prev, row, col) != cellAt(Some(current), row, col))
             col += 1
-          }
           appendChangedRun(row, start, col)
         }
-      }
       row += 1
     }
 

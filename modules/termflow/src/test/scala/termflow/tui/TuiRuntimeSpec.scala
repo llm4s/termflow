@@ -8,6 +8,7 @@ import java.io.PrintStream
 import java.io.Reader
 import java.io.StringReader
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.Future
 
 class TuiRuntimeSpec extends AnyFunSuite:
@@ -100,3 +101,47 @@ class TuiRuntimeSpec extends AnyFunSuite:
 
     assert(backend.closed.get())
     assert(!out.toString("UTF-8").contains("Goodbye from TermFlow!"))
+
+  test("TuiRuntime executes FCmd failure path and surfaces fallback unexpected message"):
+    final class StopRuntime extends RuntimeException("stop-runtime")
+
+    val seenErr = new AtomicReference[Option[TermFlowError]](None)
+
+    val renderer = new TuiRenderer:
+      override def render(textNode: RootNode, err: Option[TermFlowError]): Unit =
+        err.foreach { e =>
+          seenErr.set(Some(e))
+          throw new StopRuntime
+        }
+
+    object App extends TuiApp[Int, Unit]:
+      override def init(ctx: RuntimeCtx[Unit]): Tui[Int, Unit] =
+        Tui(
+          model = 0,
+          cmd = Cmd.FCmd(
+            task = Future.failed(new RuntimeException(null: String)),
+            toCmd = _ => Cmd.Exit,
+            onEnqueue = None
+          )
+        )
+
+      override def update(model: Int, msg: Unit, ctx: RuntimeCtx[Unit]): Tui[Int, Unit] = Tui(model)
+      override def view(model: Int): RootNode             = RootNode(80, 24, children = List.empty, input = None)
+      override def toMsg(input: PromptLine): Result[Unit] = Right(())
+
+    val out = new ByteArrayOutputStream()
+    Console.withOut(new PrintStream(out)):
+      intercept[StopRuntime]:
+        TuiRuntime.run(
+          app = App,
+          renderer = renderer,
+          terminalBackend = new TestTerminalBackend
+        )
+
+    assert(
+      seenErr.get().contains(TermFlowError.Unexpected("RuntimeException", Some(new RuntimeException(null: String))))
+        || seenErr.get().exists {
+          case TermFlowError.Unexpected(msg, Some(_: RuntimeException)) => msg == "RuntimeException"
+          case _                                                        => false
+        }
+    )

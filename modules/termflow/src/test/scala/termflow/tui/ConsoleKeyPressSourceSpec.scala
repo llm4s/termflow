@@ -10,16 +10,14 @@ class ConsoleKeyPressSourceSpec extends AnyFunSuite:
 
   test("decodes printable character"):
     val source = ConsoleKeyPressSource(new StringReader("a"))
-    try
-      assert(source.next().get == InputKey.CharKey('a'))
+    try assert(source.next().get == InputKey.CharKey('a'))
     finally
       assert(source.close().isSuccess)
       ()
 
   test("decodes standalone ESC as Escape"):
     val source = ConsoleKeyPressSource(new StringReader("\u001b"))
-    try
-      assert(source.next().get == InputKey.Escape)
+    try assert(source.next().get == InputKey.Escape)
     finally
       assert(source.close().isSuccess)
       ()

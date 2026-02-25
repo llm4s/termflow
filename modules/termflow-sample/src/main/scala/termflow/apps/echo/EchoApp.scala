@@ -38,8 +38,8 @@ object EchoApp:
         terminalWidth = ctx.terminal.width,
         terminalHeight = ctx.terminal.height,
         messages = List.empty,
-        // Leave a small margin on both sides for the echo box.
-        maxWidth = math.max(40, ctx.terminal.width - 10),
+        // Keep wrapping width bounded to the current terminal.
+        maxWidth = math.max(8, ctx.terminal.width - 10),
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         prompt = Prompt.State()
       ).tui
@@ -76,6 +76,14 @@ object EchoApp:
       val innerHeight    = math.max(1, panelHeight - 2)
       val visible        = m.messages.takeRight(innerHeight)
       val startY         = panelTop + 1 + (innerHeight - visible.length)
+      val clearRowWidth  = math.max(1, m.maxWidth)
+
+      // Explicitly clear message rows each frame so shorter content
+      // cannot leave stale characters behind.
+      val clearNodes =
+        (0 until innerHeight).toList.map { i =>
+          TextNode(2.x, (panelTop + 1 + i).y, List(Text(" " * clearRowWidth, Style())))
+        }
 
       val messageNodes =
         if visible.nonEmpty then
@@ -92,7 +100,7 @@ object EchoApp:
         height = panelHeight + 8,
         children = List(
           TextNode(2.x, panelTop.y, List(Text("Messages", Style(fg = Blue, underline = true))))
-        ) ++ messageNodes ++
+        ) ++ clearNodes ++ messageNodes ++
           List(
             TextNode(2.x, (panelTop + panelHeight).y, List("──────────────────────────────".text(fg = Cyan))),
             TextNode(2.x, (panelTop + panelHeight + 1).y, List("Commands:".text(fg = Yellow))),

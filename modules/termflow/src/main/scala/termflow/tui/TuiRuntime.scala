@@ -3,8 +3,8 @@ package termflow.tui
 import termflow.tui.ACSUtils._
 
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
-import scala.annotation.tailrec
 import scala.concurrent.ExecutionContext
 import scala.util.Failure
 import scala.util.Success
@@ -42,6 +42,7 @@ trait RuntimeCtx[Msg] extends EventSink[Msg]:
 /** Read side of the command bus used by the runtime loop. */
 trait CmdConsumer[Msg]:
   def take(): Cmd[Msg]
+  def poll(timeoutMillis: Long): Option[Cmd[Msg]]
 
 /** Bidirectional command bus: producers publish, the runtime consumes. */
 trait CmdBus[Msg] extends RuntimeCtx[Msg] with CmdConsumer[Msg]:
@@ -53,6 +54,8 @@ final class LocalCmdBus[Msg](val terminal: TerminalBackend) extends CmdBus[Msg]:
   private val subscriptions: java.util.List[Sub[Msg]] = new java.util.concurrent.CopyOnWriteArrayList[Sub[Msg]]()
   override def publish(cmd: Cmd[Msg]): Unit           = queue.put(cmd)
   override def take(): Cmd[Msg]                       = queue.take()
+  override def poll(timeoutMillis: Long): Option[Cmd[Msg]] =
+    Option(queue.poll(timeoutMillis, TimeUnit.MILLISECONDS))
   override def registerSub(sub: Sub[Msg]): Sub[Msg]   = { subscriptions.add(sub); sub }
   override def cancelAllSubscriptions(): Unit =
     subscriptions.forEach { sub =>
@@ -65,6 +68,9 @@ final class LocalCmdBus[Msg](val terminal: TerminalBackend) extends CmdBus[Msg]:
 object TuiRuntime:
 
   given ExecutionContext = ExecutionContext.global
+  private val TargetFps                    = 60
+  private val FrameNanos                   = 1_000_000_000L / TargetFps
+  private val MaxCoalescedCommandsPerFrame = 4096
 
   private[tui] def unexpectedMessage(e: Throwable): String =
     Option(e.getMessage).filter(_.trim.nonEmpty).getOrElse(e.getClass.getSimpleName)
@@ -109,26 +115,28 @@ object TuiRuntime:
       val initial: Tui[Model, Msg] = app.init(bus)
       bus.publish(initial.cmd)
 
-      @tailrec
-      def loop(model: Model): Unit =
-        val cmd = bus.take()
+      var model: Model                    = initial.model
+      var pendingErr: Option[TermFlowError] = None
+      var shouldRender                    = false
+      var shouldExit                      = false
+      var lastRenderAtNanos               = 0L
+
+      def processCommand(cmd: Cmd[Msg]): Unit =
         cmd match
           case Cmd.Exit =>
-            // Exit handled in finally block - just return
-            ()
+            shouldExit = true
 
           case Cmd.TermFlowErrorCmd(err) =>
-            renderer.render(app.view(model), Some(err))
-            loop(model)
+            pendingErr = Some(err)
+            shouldRender = true
 
           case Cmd.NoCmd =>
-            renderer.render(app.view(model), None)
-            loop(model)
+            shouldRender = true
 
           case Cmd.GCmd(g) =>
             val next: Tui[Model, Msg] = app.update(model, g, bus)
+            model = next.model
             bus.publish(next.cmd)
-            loop(next.model)
 
           case Cmd.FCmd(task, toCmd, onEnqueue) =>
             task.onComplete:
@@ -139,9 +147,41 @@ object TuiRuntime:
             onEnqueue match
               case Some(msg) => bus.publish(Cmd.GCmd(msg))
               case None      => bus.publish(Cmd.NoCmd)
-            loop(model)
 
-      loop(initial.model)
+      while !shouldExit do
+        val cmd = bus.take()
+        processCommand(cmd)
+
+        if shouldRender && !shouldExit then
+          // Drain already-queued work so multiple rapid updates collapse into one frame.
+          var drained  = true
+          var consumed = 0
+          while drained && !shouldExit && consumed < MaxCoalescedCommandsPerFrame do
+            bus.poll(0L) match
+              case Some(nextCmd) =>
+                processCommand(nextCmd)
+                consumed += 1
+              case None          => drained = false
+
+          val elapsed = System.nanoTime() - lastRenderAtNanos
+          val waitNanos =
+            if lastRenderAtNanos == 0L then 0L
+            else math.max(0L, FrameNanos - elapsed)
+
+          if waitNanos > 0L then
+            val deadline = System.nanoTime() + waitNanos
+            while !shouldExit && System.nanoTime() < deadline do
+              val remainingNanos = deadline - System.nanoTime()
+              val timeoutMillis  = math.max(1L, remainingNanos / 1_000_000L)
+              bus.poll(timeoutMillis) match
+                case Some(nextCmd) => processCommand(nextCmd)
+                case None          => ()
+
+          if !shouldExit then
+            renderer.render(app.view(model), pendingErr)
+            pendingErr = None
+            shouldRender = false
+            lastRenderAtNanos = System.nanoTime()
     finally
       // Cancel all registered subscriptions to stop background threads
       bus.cancelAllSubscriptions()

@@ -111,7 +111,7 @@ object DigitalClockWithRandomSource:
       val prefix         = "[]> "
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
       // Use terminal width with a small right margin.
-      val boxWidth = math.max(40, m.terminalWidth - 4)
+      val boxWidth = math.max(2, m.terminalWidth - 4)
       RootNode(
         m.terminalWidth,
         10,

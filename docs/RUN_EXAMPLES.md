@@ -19,6 +19,12 @@ sbt "termflowSample/runMain termflow.apps.clock.DigitalClock"
 
 # Task manager
 sbt "termflowSample/runMain termflow.apps.task.Task"
+
+# Render stress test (high-frequency updates)
+sbt "termflowSample/runMain termflow.apps.stress.RenderStressApp"
+
+# Moving sine wave
+sbt "termflowSample/runMain termflow.apps.stress.SineWaveApp"
 ```
 
 ## Convenience Shell Snippet
@@ -34,8 +40,10 @@ termflow-run() {
     future-counter) sbt "termflowSample/runMain termflow.apps.counter.FutureCounter" ;;
     clock) sbt "termflowSample/runMain termflow.apps.clock.DigitalClock" ;;
     task) sbt "termflowSample/runMain termflow.apps.task.Task" ;;
+    stress) sbt "termflowSample/runMain termflow.apps.stress.RenderStressApp" ;;
+    sine) sbt "termflowSample/runMain termflow.apps.stress.SineWaveApp" ;;
     *)
-      echo "Usage: termflow-run {echo|sync-counter|future-counter|clock|task}"
+      echo "Usage: termflow-run {echo|sync-counter|future-counter|clock|task|stress|sine}"
       return 1
       ;;
   esac

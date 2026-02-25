@@ -244,8 +244,10 @@ object AnsiRenderer:
     val out   = new StringBuilder
     val maxH  = math.max(prev.map(_.height).getOrElse(0), current.height)
     val maxW  = math.max(prev.map(_.width).getOrElse(0), current.width)
+    var changedCells = false
 
     def appendChangedRun(row: Int, start: Int, end: Int): Unit =
+      changedCells = true
       out.append(moveTo(XCoord(start + 1), YCoord(row + 1)))
       var cursor = start
       while cursor < end do
@@ -271,9 +273,11 @@ object AnsiRenderer:
           appendChangedRun(row, start, col)
       row += 1
 
-    // Always place the hardware cursor explicitly. Leaving it where the last
-    // changed run ended can break interaction on high-frequency updates.
-    current.cursor.foreach(c => out.append(moveTo(c)))
+    val prevCursor = prev.flatMap(_.cursor)
+    // Place the hardware cursor if content changed, or cursor itself moved.
+    // This preserves editing position without emitting output on identical frames.
+    if changedCells || prevCursor != current.cursor then
+      current.cursor.foreach(c => out.append(moveTo(c)))
 
     out.toString
 

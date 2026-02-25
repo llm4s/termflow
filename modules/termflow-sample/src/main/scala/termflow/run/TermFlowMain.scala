@@ -13,6 +13,8 @@ object TermFlowMain:
       case Some("clock")                         => TuiRuntime.run(termflow.apps.clock.DigitalClock.App)
       case Some("clock-random")                  => TuiRuntime.run(termflow.apps.clock.DigitalClockWithRandomSource.App)
       case Some("task")                          => TuiRuntime.run(termflow.apps.task.Task.App)
+      case Some("stress")                        => TuiRuntime.run(termflow.apps.stress.RenderStressApp.App)
+      case Some("sine") | Some("sine-wave")      => TuiRuntime.run(termflow.apps.stress.SineWaveApp.App)
       case Some(_)                               => TuiRuntime.run(termflow.apps.echo.EchoApp.App)
 
   def syncCounterMain(args: Array[String]): Unit =
@@ -38,3 +40,11 @@ object TermFlowMain:
   def echoAppMain(args: Array[String]): Unit =
     val _ = args
     TuiRuntime.run(termflow.apps.echo.EchoApp.App)
+
+  def renderStressMain(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(termflow.apps.stress.RenderStressApp.App)
+
+  def sineWaveMain(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(termflow.apps.stress.SineWaveApp.App)

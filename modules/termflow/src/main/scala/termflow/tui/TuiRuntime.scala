@@ -65,6 +65,9 @@ object TuiRuntime:
 
   given ExecutionContext = ExecutionContext.global
 
+  private[tui] def unexpectedMessage(e: Throwable): String =
+    Option(e.getMessage).filter(_.trim.nonEmpty).getOrElse(e.getClass.getSimpleName)
+
   /**
    * Run a TUI application with the given renderer and terminal backend.
    *
@@ -115,7 +118,7 @@ object TuiRuntime:
               case Success(result) =>
                 bus.publish(toCmd(result))
               case Failure(e) =>
-                bus.publish(Cmd.TermFlowErrorCmd(TermFlowError.Unexpected(e.getMessage, Some(e))))
+                bus.publish(Cmd.TermFlowErrorCmd(TermFlowError.Unexpected(unexpectedMessage(e), Some(e))))
             onEnqueue match
               case Some(msg) => bus.publish(Cmd.GCmd(msg))
               case None      => bus.publish(Cmd.NoCmd)

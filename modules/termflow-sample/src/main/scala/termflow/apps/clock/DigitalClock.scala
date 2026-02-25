@@ -1,12 +1,19 @@
 package termflow.apps.clock
 
-import termflow.tui._
+import termflow.tui.Color.Blue
+import termflow.tui.Color.Red
+import termflow.tui.Tui._
 import termflow.tui.TuiPrelude._
-import termflow.tui.Color.{ Blue, Red }
+import termflow.tui._
 
 import java.time.LocalTime
 
 object DigitalClock {
+
+  def main(args: Array[String]): Unit = {
+    val _ = args
+    TuiRuntime.run(App)
+  }
 
   final case class SubSource[T](sub: Sub[Msg], value: T)
 
@@ -55,17 +62,15 @@ object DigitalClock {
           m.copy(clock = m.clock.copy(value = LocalTime.now().toString))
 
         case StartClock =>
-          if (m.clock.sub.isActive)
-            m.copy(error = Some("⏱️ Clock already running"))
-          else
-            m.copy(clock = m.clock.copy(sub = Sub.Every(1000, () => Tick, ctx)), error = None)
+          if (m.clock.sub.isActive) m.copy(error = Some("Clock already running"))
+          else m.copy(clock = m.clock.copy(sub = Sub.Every(1000, () => Tick, ctx)), error = None)
 
         case StopClock =>
           m.clock.sub.cancel()
-          m.copy(clock = m.clock.copy(sub = Sub.NoSub), messages = "🛑 Clock stopped" :: m.messages)
+          m.copy(clock = m.clock.copy(sub = Sub.NoSub), messages = "Clock stopped" :: m.messages)
 
         case AddMessage(input) =>
-          m.copy(messages = s"💬 You said: $input" :: m.messages)
+          m.copy(messages = s"You said: $input" :: m.messages)
 
         case Exit =>
           Tui(m, Cmd.Exit)
@@ -84,7 +89,14 @@ object DigitalClock {
     override def view(m: Model): RootNode = {
       val prefix         = "[]> "
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
-      val boxWidth       = math.max(40, m.terminalWidth - 4)
+      val boxWidth       = math.max(2, m.terminalWidth - 4)
+      val innerWidth     = math.max(1, boxWidth - 2)
+
+      def fit(line: String): String =
+        if (line.length <= innerWidth) line
+        else if (innerWidth <= 3) line.take(innerWidth)
+        else line.take(innerWidth - 3) + "..."
+
       RootNode(
         m.terminalWidth,
         10,
@@ -97,14 +109,14 @@ object DigitalClock {
             children = List(),
             style = Style(border = true, fg = Blue)
           ),
-          TextNode(2.x, 2.y, List(s"🕒 Time: ${m.clock.value}".text)),
-          TextNode(2.x, 3.y, List(s"──────────────────────────────".text(fg = Red)))
-        ) ++ m.messages.zipWithIndex.map { case (msg, idx) => TextNode(2.x, (4 + idx).y, List(msg.text)) } ++ List(
-          TextNode(2.x, (4 + m.messages.length).y, List(s"──────────────────────────────".text(fg = Blue))),
-          TextNode(2.x, (5 + m.messages.length).y, List(s"Commands:".text)),
-          TextNode(2.x, (6 + m.messages.length).y, List(s"  stopclock → stop ticking".text)),
-          TextNode(2.x, (7 + m.messages.length).y, List(s"  startclock→ start ticking".text)),
-          TextNode(2.x, (8 + m.messages.length).y, List(s"  exit      → quit".text))
+          TextNode(2.x, 2.y, List(fit(s"Time: ${m.clock.value}").text)),
+          TextNode(2.x, 3.y, List(("─" * innerWidth).text(fg = Red)))
+        ) ++ m.messages.zipWithIndex.map { case (msg, idx) => TextNode(2.x, (4 + idx).y, List(fit(msg).text)) } ++ List(
+          TextNode(2.x, (4 + m.messages.length).y, List(("─" * innerWidth).text(fg = Blue))),
+          TextNode(2.x, (5 + m.messages.length).y, List(fit("Commands:").text)),
+          TextNode(2.x, (6 + m.messages.length).y, List(fit("  stopclock -> stop ticking").text)),
+          TextNode(2.x, (7 + m.messages.length).y, List(fit("  startclock-> start ticking").text)),
+          TextNode(2.x, (8 + m.messages.length).y, List(fit("  exit      -> quit").text))
         ),
         input = Some(
           InputNode(

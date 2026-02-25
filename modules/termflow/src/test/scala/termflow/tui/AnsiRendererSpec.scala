@@ -2,7 +2,16 @@ package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.io.ByteArrayOutputStream
+import java.io.PrintStream
+
 class AnsiRendererSpec extends AnyFunSuite {
+
+  private def captureOut(body: => Unit): String = {
+    val buf = new ByteArrayOutputStream()
+    Console.withOut(new PrintStream(buf))(body)
+    buf.toString("UTF-8")
+  }
 
   test("moveTo generates correct ANSI escape sequence") {
     assert(AnsiRenderer.moveTo(XCoord(1), YCoord(1)) == "\u001b[1;1H")
@@ -72,5 +81,117 @@ class AnsiRendererSpec extends AnyFunSuite {
     assert(node.width == 1)
     assert(node.height == 1)
     assert(node.style == Style())
+  }
+
+  test("render draws bordered boxes, styled text, and input cursor") {
+    val root = RootNode(
+      width = 80,
+      height = 24,
+      children = List(
+        BoxNode(
+          x = XCoord(1),
+          y = YCoord(1),
+          width = 5,
+          height = 3,
+          children = List(TextNode(XCoord(2), YCoord(2), List(Text("x", Style(bold = true))))),
+          style = Style(fg = Color.Green, border = true)
+        )
+      ),
+      input = Some(InputNode(XCoord(1), YCoord(4), prompt = "ab", style = Style(fg = Color.Red), cursor = 1))
+    )
+
+    val out = captureOut(AnsiRenderer.render(root))
+    assert(out.contains("┌"))
+    assert(out.contains("└"))
+    assert(out.contains("\u001b[1m")) // bold style for text
+    assert(!out.contains(ANSI.hideCursor))
+    assert(out.contains("\u001b[2K"))                               // clear current line
+    assert(out.contains(AnsiRenderer.moveTo(XCoord(2), YCoord(4)))) // hardware cursor at logical index
+  }
+
+  test("renderInputOnly clamps cursor to end, pads, and positions hardware cursor") {
+    val root = RootNode(
+      width = 80,
+      height = 24,
+      children = Nil,
+      input = Some(
+        InputNode(
+          XCoord(10),
+          YCoord(5),
+          prompt = "abc",
+          style = Style(fg = Color.Blue),
+          cursor = 999,
+          lineWidth = 8
+        )
+      )
+    )
+
+    val out = captureOut(AnsiRenderer.renderInputOnly(root))
+    assert(out.contains("\u001b[2K"))
+    assert(out.contains(" "))                                        // padded trailing area
+    assert(out.contains(AnsiRenderer.moveTo(XCoord(13), YCoord(5)))) // x=10 + clamped cursor len(abc)=3
+  }
+
+  test("buildFrame expands to fit rendered extents beyond declared root height") {
+    val root = RootNode(
+      width = 10,
+      height = 2,
+      children = List(TextNode(XCoord(1), YCoord(7), List(Text("tail", Style())))),
+      input = None
+    )
+
+    val frame = AnsiRenderer.buildFrame(root)
+    assert(frame.width >= 10)
+    assert(frame.height >= 7)
+  }
+
+  test("renderDiff clears removed trailing text") {
+    val prev = RootNode(
+      width = 10,
+      height = 3,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("abcdef", Style())))),
+      input = None
+    )
+    val curr = RootNode(
+      width = 10,
+      height = 3,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("ab", Style())))),
+      input = None
+    )
+
+    val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
+    assert(ansi.contains(AnsiRenderer.moveTo(XCoord(3), YCoord(1))))
+    assert(ansi.contains("    "))
+  }
+
+  test("renderDiff emits no output for identical frame") {
+    val root = RootNode(
+      width = 10,
+      height = 3,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("same", Style())))),
+      input = Some(InputNode(XCoord(1), YCoord(3), "[]> ", Style(), cursor = 4))
+    )
+
+    val frame = AnsiRenderer.buildFrame(root)
+    val ansi  = AnsiRenderer.renderDiff(Some(frame), frame)
+    assert(ansi.isEmpty)
+  }
+
+  test("renderDiff restores cursor when content changes even if cursor position is unchanged") {
+    val prev = RootNode(
+      width = 20,
+      height = 4,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("tick-1", Style())))),
+      input = Some(InputNode(XCoord(2), YCoord(4), "[]> ", Style(), cursor = 4))
+    )
+    val curr = RootNode(
+      width = 20,
+      height = 4,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("tick-2", Style())))),
+      input = Some(InputNode(XCoord(2), YCoord(4), "[]> ", Style(), cursor = 4))
+    )
+
+    val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
+    assert(ansi.contains(AnsiRenderer.moveTo(XCoord(6), YCoord(4))))
   }
 }

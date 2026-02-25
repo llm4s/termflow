@@ -4,6 +4,11 @@ import termflow.tui._
 import termflow.tui.TuiPrelude._
 
 object Task {
+  def main(args: Array[String]): Unit = {
+    val _ = args
+    TuiRuntime.run(App)
+  }
+
   type TaskId = String
 
   sealed trait TaskStatus

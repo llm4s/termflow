@@ -9,7 +9,7 @@ object RenderApp {
   def apply(m: Model): RootNode = {
     val tasks          = m.filteredList
     val taskCount      = tasks.length
-    val boxWidth       = math.max(40, m.terminalWidth - 4)
+    val boxWidth       = math.max(2, m.terminalWidth - 4)
     val helpLines      = 8
     val boxHeight      = math.max(8, 5 + taskCount + helpLines)
     val commandsStartY = 4 + taskCount

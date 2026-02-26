@@ -10,7 +10,7 @@ object RenderApp:
     val tasks          = m.filteredList
     val taskCount      = tasks.length
     val boxWidth       = math.max(2, m.terminalWidth - 4)
-    val helpLines      = 8
+    val helpLines      = 9
     val boxHeight      = math.max(8, 5 + taskCount + helpLines)
     val commandsStartY = 4 + taskCount
 
@@ -47,12 +47,13 @@ object RenderApp:
       } ++ List(
         TextNode(2.x, commandsStartY.y, List("──────────────────────────────".text(fg = Color.Cyan))),
         TextNode(2.x, (commandsStartY + 1).y, List("Commands:".text(fg = Color.Yellow))),
-        TextNode(2.x, (commandsStartY + 2).y, List("  add <id>         → add task".text)),
-        TextNode(2.x, (commandsStartY + 3).y, List("  remove <id>      → remove task".text)),
-        TextNode(2.x, (commandsStartY + 4).y, List("  inprogress <id>  → mark in progress".text)),
-        TextNode(2.x, (commandsStartY + 5).y, List("  done <id>        → mark done".text)),
-        TextNode(2.x, (commandsStartY + 6).y, List("  cancel <id>      → cancel task".text)),
-        TextNode(2.x, (commandsStartY + 7).y, List("  all|inprogress|done|canceled".text))
+        TextNode(2.x, (commandsStartY + 2).y, List("  add <id>         -> add task".text)),
+        TextNode(2.x, (commandsStartY + 3).y, List("  remove <id>      -> remove task".text)),
+        TextNode(2.x, (commandsStartY + 4).y, List("  inprogress <id>  -> mark in progress".text)),
+        TextNode(2.x, (commandsStartY + 5).y, List("  done <id>        -> mark done".text)),
+        TextNode(2.x, (commandsStartY + 6).y, List("  cancel <id>      -> cancel task".text)),
+        TextNode(2.x, (commandsStartY + 7).y, List("  all|inprogress|done|canceled -> filter".text)),
+        TextNode(2.x, (commandsStartY + 8).y, List("  Ctrl-C            -> quit".text(fg = Color.Yellow)))
       )
 
     RootNode(
@@ -67,7 +68,7 @@ object RenderApp:
             2.x,
             (boxHeight + 4).y,
             renderedPrompt.text,
-            Style(),
+            Style(fg = Color.Green),
             cursor = renderedPrompt.cursorIndex
           )
         )

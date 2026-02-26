@@ -1,7 +1,9 @@
 package termflow.apps.clock
 
 import termflow.tui.Color.Blue
+import termflow.tui.Color.Green
 import termflow.tui.Color.Red
+import termflow.tui.Color.Yellow
 import termflow.tui.Tui._
 import termflow.tui.TuiPrelude._
 import termflow.tui._
@@ -108,9 +110,9 @@ object DigitalClock:
           TextNode(2.x, 3.y, List(("─" * innerWidth).text(fg = Red)))
         ) ++ m.messages.zipWithIndex.map { case (msg, idx) => TextNode(2.x, (4 + idx).y, List(fit(msg).text)) } ++ List(
           TextNode(2.x, (4 + m.messages.length).y, List(("─" * innerWidth).text(fg = Blue))),
-          TextNode(2.x, (5 + m.messages.length).y, List(fit("Commands:").text)),
-          TextNode(2.x, (6 + m.messages.length).y, List(fit("  stopclock -> stop ticking").text)),
-          TextNode(2.x, (7 + m.messages.length).y, List(fit("  startclock-> start ticking").text)),
+          TextNode(2.x, (5 + m.messages.length).y, List(fit("Commands:").text(fg = Yellow))),
+          TextNode(2.x, (6 + m.messages.length).y, List(fit("  stopclock  -> stop ticking").text)),
+          TextNode(2.x, (7 + m.messages.length).y, List(fit("  startclock -> start ticking").text)),
           TextNode(2.x, (8 + m.messages.length).y, List(fit("  exit      -> quit").text))
         ),
         input = Some(
@@ -118,7 +120,7 @@ object DigitalClock:
             2.x,
             (9 + m.messages.length).y,
             renderedPrompt.text,
-            Style(),
+            Style(fg = Green),
             cursor = renderedPrompt.cursorIndex
           )
         )

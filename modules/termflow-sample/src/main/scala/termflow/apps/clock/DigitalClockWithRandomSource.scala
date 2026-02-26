@@ -1,7 +1,9 @@
 package termflow.apps.clock
 
 import termflow.tui.Color.Blue
+import termflow.tui.Color.Green
 import termflow.tui.Color.Red
+import termflow.tui.Color.Yellow
 import termflow.tui.RandomUtil.RandomSourceAtFixedRate
 import termflow.tui.Tui._
 import termflow.tui.TuiPrelude._
@@ -111,7 +113,14 @@ object DigitalClockWithRandomSource:
       val prefix         = "[]> "
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
       // Use terminal width with a small right margin.
-      val boxWidth = math.max(2, m.terminalWidth - 4)
+      val boxWidth   = math.max(2, m.terminalWidth - 4)
+      val innerWidth = math.max(1, boxWidth - 2)
+
+      def fit(line: String): String =
+        if line.length <= innerWidth then line
+        else if innerWidth <= 3 then line.take(innerWidth)
+        else line.take(innerWidth - 3) + "..."
+
       RootNode(
         m.terminalWidth,
         10,
@@ -124,23 +133,23 @@ object DigitalClockWithRandomSource:
             children = List(),
             style = Style(border = true, fg = Blue)
           ),
-          TextNode(2.x, 2.y, List(s"🕒 Time: ${m.clock.value}".text)),
-          TextNode(2.x, 3.y, List(s"🎲 Random: ${m.random.value}".text)),
-          TextNode(2.x, 4.y, List("──────────────────────────────".text(fg = Red)))
-        ) ++ m.messages.zipWithIndex.map { case (msg, idx) => TextNode(2.x, (5 + idx).y, List(msg.text)) } ++ List(
-          TextNode(2.x, (5 + m.messages.length).y, List("──────────────────────────────".text(fg = Blue))),
-          TextNode(2.x, (5 + m.messages.length + 1).y, List("Commands:".text)),
-          TextNode(2.x, (5 + m.messages.length + 2).y, List("  start    → start random numbers".text)),
-          TextNode(2.x, (5 + m.messages.length + 3).y, List("  stop     → stop random numbers".text)),
-          TextNode(2.x, (5 + m.messages.length + 4).y, List("  stopclock→ stop ticking".text)),
-          TextNode(2.x, (5 + m.messages.length + 5).y, List("  exit     → quit".text))
+          TextNode(2.x, 2.y, List(fit(s"🕒 Time: ${m.clock.value}").text)),
+          TextNode(2.x, 3.y, List(fit(s"🎲 Random: ${m.random.value}").text)),
+          TextNode(2.x, 4.y, List(("─" * innerWidth).text(fg = Red)))
+        ) ++ m.messages.zipWithIndex.map { case (msg, idx) => TextNode(2.x, (5 + idx).y, List(fit(msg).text)) } ++ List(
+          TextNode(2.x, (5 + m.messages.length).y, List(("─" * innerWidth).text(fg = Blue))),
+          TextNode(2.x, (5 + m.messages.length + 1).y, List("Commands:".text(fg = Yellow))),
+          TextNode(2.x, (5 + m.messages.length + 2).y, List(fit("  start      -> start random numbers").text)),
+          TextNode(2.x, (5 + m.messages.length + 3).y, List(fit("  stop       -> stop random numbers").text)),
+          TextNode(2.x, (5 + m.messages.length + 4).y, List(fit("  stopclock  -> stop ticking").text)),
+          TextNode(2.x, (5 + m.messages.length + 5).y, List(fit("  exit       -> quit").text))
         ),
         input = Some(
           InputNode(
             2.x,
             (4 + m.messages.length + 8).y,
             renderedPrompt.text,
-            Style(),
+            Style(fg = Green),
             cursor = renderedPrompt.cursorIndex
           )
         )

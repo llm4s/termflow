@@ -46,7 +46,8 @@ object SineWaveApp:
         phase = 0.0,
         step = 0.22,
         running = true,
-        ticker = Sub.Every(33, () => Tick, ctx),
+        // 20 FPS is visually smooth but reduces cursor/prompt jitter under heavy updates.
+        ticker = Sub.Every(50, () => Tick, ctx),
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         prompt = Prompt.State(),
         status = "running"
@@ -63,7 +64,7 @@ object SineWaveApp:
 
         case Resume =>
           if m.running then m.copy(status = "already running").tui
-          else m.copy(running = true, ticker = Sub.Every(33, () => Tick, ctx), status = "running").tui
+          else m.copy(running = true, ticker = Sub.Every(50, () => Tick, ctx), status = "running").tui
 
         case Faster =>
           val next = math.min(0.8, m.step + 0.05)
@@ -122,7 +123,7 @@ object SineWaveApp:
           TextNode(2.x, (2 + idx).y, List(Text(line, style)))
         }
 
-      val statusLine   = f"status=${m.status}  step=${m.step}%.2f  phase=${m.phase}%.2f"
+      val statusLine   = f"status=${m.status}  step=${m.step}%.2f"
       val fittedStatus = if statusLine.length <= innerWidth then statusLine else statusLine.take(innerWidth)
 
       RootNode(

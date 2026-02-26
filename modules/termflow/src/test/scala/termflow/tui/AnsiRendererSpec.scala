@@ -178,3 +178,97 @@ class AnsiRendererSpec extends AnyFunSuite:
 
     val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
     assert(ansi.contains(AnsiRenderer.moveTo(XCoord(6), YCoord(4))))
+
+  test("renderDiff clears removed rows when current frame shrinks"):
+    val prev = RootNode(
+      width = 12,
+      height = 6,
+      children = List(TextNode(XCoord(1), YCoord(5), List(Text("footer", Style())))),
+      input = None
+    )
+    val curr = RootNode(
+      width = 12,
+      height = 3,
+      children = Nil,
+      input = None
+    )
+
+    val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
+    assert(ansi.contains(AnsiRenderer.moveTo(XCoord(1), YCoord(5))))
+    assert(ansi.contains("      "))
+
+  test("renderDiff clears stale prompt tail when input text shrinks"):
+    val prev = RootNode(
+      width = 20,
+      height = 5,
+      children = Nil,
+      input = Some(InputNode(XCoord(1), YCoord(4), "[]> hello", Style(), cursor = 8))
+    )
+    val curr = RootNode(
+      width = 20,
+      height = 5,
+      children = Nil,
+      input = Some(InputNode(XCoord(1), YCoord(4), "[]> hi", Style(), cursor = 6))
+    )
+
+    val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
+    assert(ansi.contains(AnsiRenderer.moveTo(XCoord(7), YCoord(4))))
+    assert(ansi.contains("   "))
+
+  test("renderDiff does not write past right edge for bordered box updates"):
+    val prev = RootNode(
+      width = 10,
+      height = 4,
+      children = List(
+        BoxNode(
+          x = XCoord(1),
+          y = YCoord(1),
+          width = 10,
+          height = 4,
+          children = List(TextNode(XCoord(2), YCoord(2), List(Text("tick-1", Style())))),
+          style = Style(fg = Color.Blue, border = true)
+        )
+      ),
+      input = None
+    )
+    val curr = RootNode(
+      width = 10,
+      height = 4,
+      children = List(
+        BoxNode(
+          x = XCoord(1),
+          y = YCoord(1),
+          width = 10,
+          height = 4,
+          children = List(TextNode(XCoord(2), YCoord(2), List(Text("tick-2", Style())))),
+          style = Style(fg = Color.Blue, border = true)
+        )
+      ),
+      input = None
+    )
+
+    val frame = AnsiRenderer.buildFrame(curr)
+    assert(frame.cells(0)(9).ch == '┐')
+    assert(frame.cells(3)(9).ch == '┘')
+    assert(frame.cells(1)(9).ch == '│')
+
+    val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), frame)
+    assert(!ansi.contains(";11H"))
+
+  test("diff reports changed cell count and emitted ANSI"):
+    val prev = RootNode(
+      width = 6,
+      height = 2,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("aa", Style())))),
+      input = None
+    )
+    val curr = RootNode(
+      width = 6,
+      height = 2,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("ab", Style())))),
+      input = None
+    )
+
+    val result = AnsiRenderer.diff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
+    assert(result.changedCells == 1)
+    assert(result.ansi.nonEmpty)

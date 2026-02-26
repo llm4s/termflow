@@ -41,6 +41,7 @@ object AnsiRenderer:
     cells: Array[Array[RenderCell]],
     cursor: Option[Coord]
   )
+  final case class DiffResult(ansi: String, changedCells: Int)
   private val blankCell = RenderCell(' ', Style())
 
   def moveTo(x: XCoord, y: YCoord): String =
@@ -233,19 +234,19 @@ object AnsiRenderer:
     RenderFrame(width, height, cells, cursor)
 
   /** Diff two frames and emit only changed runs plus cursor movement. */
-  def renderDiff(prev: Option[RenderFrame], current: RenderFrame): String =
+  def diff(prev: Option[RenderFrame], current: RenderFrame): DiffResult =
     def cellAt(frame: Option[RenderFrame], row: Int, col: Int): RenderCell =
       frame match
         case Some(f) if row < f.height && col < f.width => f.cells(row)(col)
         case _                                          => blankCell
 
-    val out          = new StringBuilder
-    val maxH         = math.max(prev.map(_.height).getOrElse(0), current.height)
-    val maxW         = math.max(prev.map(_.width).getOrElse(0), current.width)
-    var changedCells = false
+    val out               = new StringBuilder
+    val maxH              = math.max(prev.map(_.height).getOrElse(0), current.height)
+    val maxW              = math.max(prev.map(_.width).getOrElse(0), current.width)
+    var changedCellsCount = 0
 
     def appendChangedRun(row: Int, start: Int, end: Int): Unit =
-      changedCells = true
+      changedCellsCount += (end - start)
       out.append(moveTo(XCoord(start + 1), YCoord(row + 1)))
       var cursor = start
       while cursor < end do
@@ -272,19 +273,26 @@ object AnsiRenderer:
     val prevCursor = prev.flatMap(_.cursor)
     // Place the hardware cursor if content changed, or cursor itself moved.
     // This preserves editing position without emitting output on identical frames.
-    if changedCells || prevCursor != current.cursor then current.cursor.foreach(c => out.append(moveTo(c)))
+    if changedCellsCount > 0 || prevCursor != current.cursor then current.cursor.foreach(c => out.append(moveTo(c)))
 
-    out.toString
+    DiffResult(out.toString, changedCellsCount)
+
+  def renderDiff(prev: Option[RenderFrame], current: RenderFrame): String =
+    diff(prev, current).ansi
 
 final case class SimpleANSIRenderer() extends TuiRenderer:
   private var lastFrame: Option[AnsiRenderer.RenderFrame] = None
 
   override def render(textNode: RootNode, err: Option[TermFlowError]): Unit =
     val currentFrame = AnsiRenderer.buildFrame(textNode)
-    val ansi         = AnsiRenderer.renderDiff(lastFrame, currentFrame)
+    val diffResult   = AnsiRenderer.diff(lastFrame, currentFrame)
+    val ansi         = diffResult.ansi
     if ansi.nonEmpty then
       print(ansi)
       Console.out.flush()
+    if RenderMetrics.isEnabled then
+      val bytes = ansi.getBytes("UTF-8").length
+      RenderMetrics.recordRender(diffResult.changedCells, bytes)
     lastFrame = Some(currentFrame)
 
 object ACSUtils:

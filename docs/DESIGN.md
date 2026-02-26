@@ -56,20 +56,13 @@ TermFlow renders a small virtual DOM consisting of nodes like:
 
 - `TextNode`, `InputNode`, `BoxNode`
 
-The runtime uses an ANSI renderer to repaint the terminal.
+The runtime uses an ANSI renderer with:
 
-### Flicker and performance (work in progress)
+- command coalescing in the runtime loop
+- framebuffer materialization
+- frame-to-frame diffing that emits minimal ANSI patches
 
-Today the renderer is intentionally simple. Some updates (e.g., frequent spinner
-ticks) can cause visible flicker, depending on terminal + OS.
-
-Planned improvement areas:
-
-- virtual-DOM diffing to minimize repaint work
-- throttling/coalescing high-frequency updates (spinners, streaming output)
-- more granular “partial repaint” support (where possible)
-
-We’ll iterate on these once the API and the sample apps stabilize.
+See [`RENDER_PIPELINE.md`](./RENDER_PIPELINE.md) for render flow, invariants, and regression focus areas.
 
 ## Testing
 
@@ -80,4 +73,3 @@ Most logic should be testable by:
 - unit-testing history/search behavior (`HistorySpec`)
 
 The runtime loop is intentionally small; most behavior should live in update/view helpers.
-

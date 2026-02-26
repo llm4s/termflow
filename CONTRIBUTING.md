@@ -12,6 +12,7 @@
 - Scalafix rewrite: `sbt scalafixAll`
 - Tests: `sbt test`
 - Library coverage report: `sbt coverageLib`
+- Pre-PR gate (format, scalafix, tests, coverage, sample smoke): `sbt prePR`
 - Publish locally (for integration testing): `sbt publishLocal`
 
 ## Scala 3 Style

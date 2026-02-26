@@ -98,3 +98,4 @@ lazy val termflowSample = (project in file("modules/termflow-sample"))
 
 addCommandAlias("ciCheck", ";scalafmtCheckAll;scalafixAll --check;test")
 addCommandAlias("coverageLib", ";project termflow;coverage;test;coverageReport")
+addCommandAlias("prePR", ";ciCheck;coverageLib;termflowSample/runMain termflow.run.SampleSmoke")

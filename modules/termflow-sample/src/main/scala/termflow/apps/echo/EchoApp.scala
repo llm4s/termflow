@@ -32,6 +32,11 @@ object EchoApp:
 
   // === App ===
   object App extends TuiApp[Model, Msg]:
+    private def syncTerminalSize(m: Model, ctx: RuntimeCtx[Msg]): Model =
+      val w = ctx.terminal.width
+      val h = ctx.terminal.height
+      if w == m.terminalWidth && h == m.terminalHeight then m
+      else m.copy(terminalWidth = w, terminalHeight = h, maxWidth = math.max(8, w - 10))
 
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
@@ -45,27 +50,28 @@ object EchoApp:
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+      val sized = syncTerminalSize(m, ctx)
       msg match
         case AddMessage(input) =>
           // Wrap long input into lines that fit in the box
-          val wrappedLines = wrapText(input, m.maxWidth - 4)
-          val newMsgs      = m.messages ++ wrappedLines
-          m.copy(messages = newMsgs.takeRight(30)).tui
+          val wrappedLines = wrapText(input, sized.maxWidth - 4)
+          val newMsgs      = sized.messages ++ wrappedLines
+          sized.copy(messages = newMsgs.takeRight(30)).tui
 
         case Clear =>
-          m.copy(messages = Nil).tui
+          sized.copy(messages = Nil).tui
 
         case Exit =>
-          Tui(m, Cmd.Exit)
+          Tui(sized, Cmd.Exit)
 
         case ConsoleInputKey(k) =>
-          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
+          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](sized.prompt, k)(toMsg)
           maybeCmd match
-            case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt).tui
+            case Some(cmd) => Tui(sized.copy(prompt = nextPrompt), cmd)
+            case None      => sized.copy(prompt = nextPrompt).tui
 
         case ConsoleInputError(_) =>
-          m.tui // ignore for now
+          sized.tui // ignore for now
 
     override def view(m: Model): RootNode =
       val panelTop = 1

@@ -41,6 +41,12 @@ object DigitalClock:
   import Msg._
 
   object App extends TuiApp[Model, Msg]:
+    private def syncTerminalSize(m: Model, ctx: RuntimeCtx[Msg]): Model =
+      val w = ctx.terminal.width
+      val h = ctx.terminal.height
+      if w == m.terminalWidth && h == m.terminalHeight then m
+      else m.copy(terminalWidth = w, terminalHeight = h)
+
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -56,32 +62,33 @@ object DigitalClock:
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+      val sized = syncTerminalSize(m, ctx)
       msg match
         case Tick =>
-          m.copy(clock = m.clock.copy(value = LocalTime.now().toString)).tui
+          sized.copy(clock = sized.clock.copy(value = LocalTime.now().toString)).tui
 
         case StartClock =>
-          if m.clock.sub.isActive then m.copy(error = Some("Clock already running")).tui
-          else m.copy(clock = m.clock.copy(sub = Sub.Every(1000, () => Tick, ctx)), error = None).tui
+          if sized.clock.sub.isActive then sized.copy(error = Some("Clock already running")).tui
+          else sized.copy(clock = sized.clock.copy(sub = Sub.Every(1000, () => Tick, ctx)), error = None).tui
 
         case StopClock =>
-          m.clock.sub.cancel()
-          m.copy(clock = m.clock.copy(sub = Sub.NoSub), messages = "Clock stopped" :: m.messages).tui
+          sized.clock.sub.cancel()
+          sized.copy(clock = sized.clock.copy(sub = Sub.NoSub), messages = "Clock stopped" :: sized.messages).tui
 
         case AddMessage(input) =>
-          m.copy(messages = s"You said: $input" :: m.messages).tui
+          sized.copy(messages = s"You said: $input" :: sized.messages).tui
 
         case Exit =>
-          Tui(m, Cmd.Exit)
+          Tui(sized, Cmd.Exit)
 
         case ConsoleInputKey(k) =>
-          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
+          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](sized.prompt, k)(toMsg)
           maybeCmd match
-            case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt).tui
+            case Some(cmd) => Tui(sized.copy(prompt = nextPrompt), cmd)
+            case None      => sized.copy(prompt = nextPrompt).tui
 
         case ConsoleInputError(e) =>
-          m.copy(messages = m.messages :+ s"Console Input Error: ${e.getMessage}").tui
+          sized.copy(messages = sized.messages :+ s"Console Input Error: ${e.getMessage}").tui
 
     override def view(m: Model): RootNode =
       val prefix         = "[]> "

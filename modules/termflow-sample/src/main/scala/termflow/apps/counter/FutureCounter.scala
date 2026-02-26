@@ -42,6 +42,12 @@ object FutureCounter:
   import Msg._
 
   object App extends TuiApp[Model, Msg]:
+    private def syncTerminalSize(m: Model, ctx: RuntimeCtx[Msg]): Model =
+      val w = ctx.terminal.width
+      val h = ctx.terminal.height
+      if w == m.terminalWidth && h == m.terminalHeight then m
+      else m.copy(terminalWidth = w, terminalHeight = h)
+
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -55,45 +61,47 @@ object FutureCounter:
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+      val sized = syncTerminalSize(m, ctx)
       msg match
         case Increment =>
           Tui(
-            m,
+            sized,
             Cmd.FCmd(
-              m.count.asyncIncrement(),
+              sized.count.asyncIncrement(),
               (c: Counter) => Cmd.GCmd(UpdateWith(c)),
               onEnqueue = Some(Busy(s"incrementing::${TimeFormatter.getCurrentTime}"))
             )
           )
         case Decrement =>
           Tui(
-            m,
+            sized,
             Cmd.FCmd(
-              m.count.asyncDecrement(),
+              sized.count.asyncDecrement(),
               (c: Counter) => Cmd.GCmd(UpdateWith(c)),
               onEnqueue = Some(Busy(s"decrementing::${TimeFormatter.getCurrentTime}"))
             )
           )
         case Exit =>
-          if m.spinner.isActive then m.spinner.cancel()
-          Tui(m, Cmd.Exit)
+          if sized.spinner.isActive then sized.spinner.cancel()
+          Tui(sized, Cmd.Exit)
         case UpdateWith(c) =>
           // stop spinner when work completes
-          if m.spinner.isActive then m.spinner.cancel()
-          m.copy(count = c, status = s"done::${TimeFormatter.getCurrentTime}", spinner = Sub.NoSub, spinnerIndex = 0)
+          if sized.spinner.isActive then sized.spinner.cancel()
+          sized
+            .copy(count = c, status = s"done::${TimeFormatter.getCurrentTime}", spinner = Sub.NoSub, spinnerIndex = 0)
             .tui
         case Busy(action) =>
           // start spinner if not already active
-          if m.spinner.isActive then m.copy(status = action).tui
-          else m.copy(status = action, spinner = Sub.Every(200, () => SpinnerTick, ctx)).tui
+          if sized.spinner.isActive then sized.copy(status = action).tui
+          else sized.copy(status = action, spinner = Sub.Every(200, () => SpinnerTick, ctx)).tui
         case SpinnerTick =>
-          m.copy(spinnerIndex = (m.spinnerIndex + 1) % 4).tui
+          sized.copy(spinnerIndex = (sized.spinnerIndex + 1) % 4).tui
         case ConsoleInputKey(k) =>
-          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
+          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](sized.prompt, k)(toMsg)
           maybeCmd match
-            case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt).tui
-        case ConsoleInputError(_) => m.tui
+            case Some(cmd) => Tui(sized.copy(prompt = nextPrompt), cmd)
+            case None      => sized.copy(prompt = nextPrompt).tui
+        case ConsoleInputError(_) => sized.tui
 
     override def view(m: Model): RootNode =
       val prefix         = "[]> "

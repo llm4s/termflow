@@ -104,8 +104,8 @@ object EchoApp:
           List(
             TextNode(2.x, (panelTop + panelHeight).y, List("──────────────────────────────".text(fg = Cyan))),
             TextNode(2.x, (panelTop + panelHeight + 1).y, List("Commands:".text(fg = Yellow))),
-            TextNode(2.x, (panelTop + panelHeight + 2).y, List("  /clear → clear chat".text)),
-            TextNode(2.x, (panelTop + panelHeight + 3).y, List("  exit   → quit".text))
+            TextNode(2.x, (panelTop + panelHeight + 2).y, List("  /clear -> clear chat".text)),
+            TextNode(2.x, (panelTop + panelHeight + 3).y, List("  exit   -> quit".text))
           ),
         input = Some(
           InputNode(

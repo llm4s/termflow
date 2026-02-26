@@ -1,6 +1,8 @@
 package termflow.apps.counter
 
 import termflow.tui.Color.Blue
+import termflow.tui.Color.Green
+import termflow.tui.Color.Yellow
 import termflow.tui.Tui._
 import termflow.tui.TuiPrelude._
 import termflow.tui._
@@ -24,6 +26,7 @@ object SyncCounter:
   enum Msg:
     case Increment
     case Decrement
+    case Exit
     case ConsoleInputKey(key: KeyDecoder.InputKey)
     case ConsoleInputError(error: Throwable)
 
@@ -45,6 +48,8 @@ object SyncCounter:
           m.copy(counter = m.counter.syncIncrement()).tui
         case Decrement =>
           m.copy(counter = m.counter.syncDecrement()).tui
+        case Exit =>
+          Tui(m, Cmd.Exit)
         case ConsoleInputKey(k) =>
           val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
           maybeCmd match
@@ -59,7 +64,7 @@ object SyncCounter:
       val boxWidth = math.max(2, m.terminalWidth - 4)
       RootNode(
         m.terminalWidth,
-        12,
+        13,
         children = List(
           BoxNode(1.x, 1.y, boxWidth, 6, children = List(), style = Style(border = true, fg = Blue)),
           TextNode(
@@ -70,12 +75,13 @@ object SyncCounter:
               Text(s"${m.counter.count}", renderCount(m.counter.count))
             )
           ),
-          TextNode(2.x, 4.y, List("Commands:".text(fg = Color.Yellow))),
-          TextNode(2.x, 5.y, List("  increment | +".text)),
-          TextNode(2.x, 6.y, List("  decrement | -".text))
+          TextNode(2.x, 4.y, List("Commands:".text(fg = Yellow))),
+          TextNode(2.x, 5.y, List("  increment | + -> increase counter".text)),
+          TextNode(2.x, 6.y, List("  decrement | - -> decrease counter".text)),
+          TextNode(2.x, 7.y, List("  exit          -> quit".text))
         ),
         input = Some(
-          InputNode(2.x, 9.y, renderedPrompt.text, Style(), cursor = renderedPrompt.cursorIndex)
+          InputNode(2.x, 10.y, renderedPrompt.text, Style(fg = Green), cursor = renderedPrompt.cursorIndex)
         )
       )
 
@@ -91,4 +97,6 @@ object SyncCounter:
             Increment
           case "decrement" | "-" =>
             Decrement
+          case "exit" =>
+            Exit
       }.toEither.left.map(e => TermFlowError.Unexpected(e.getMessage))

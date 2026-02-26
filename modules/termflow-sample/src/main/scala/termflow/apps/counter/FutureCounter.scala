@@ -32,6 +32,7 @@ object FutureCounter:
   enum Msg:
     case Increment
     case Decrement
+    case Exit
     case UpdateWith(counter: Counter)
     case Busy(action: String)
     case SpinnerTick
@@ -73,6 +74,9 @@ object FutureCounter:
               onEnqueue = Some(Busy(s"decrementing::${TimeFormatter.getCurrentTime}"))
             )
           )
+        case Exit =>
+          if m.spinner.isActive then m.spinner.cancel()
+          Tui(m, Cmd.Exit)
         case UpdateWith(c) =>
           // stop spinner when work completes
           if m.spinner.isActive then m.spinner.cancel()
@@ -97,7 +101,7 @@ object FutureCounter:
       val boxWidth       = math.max(2, m.terminalWidth - 4)
       RootNode(
         m.terminalWidth,
-        14,
+        15,
         children = List(
           BoxNode(1.x, 1.y, boxWidth, 7, children = List(), style = Style(border = true, fg = Blue)),
           TextNode(
@@ -116,11 +120,12 @@ object FutureCounter:
             )
           ),
           TextNode(2.x, 5.y, List("Commands:".text(fg = Yellow))),
-          TextNode(2.x, 6.y, List("  increment | +".text)),
-          TextNode(2.x, 7.y, List("  decrement | -".text))
+          TextNode(2.x, 6.y, List("  increment | + -> increase counter".text)),
+          TextNode(2.x, 7.y, List("  decrement | - -> decrease counter".text)),
+          TextNode(2.x, 8.y, List("  exit          -> quit".text))
         ),
         input = Some(
-          InputNode(2.x, 11.y, renderedPrompt.text, Style(), cursor = renderedPrompt.cursorIndex)
+          InputNode(2.x, 12.y, renderedPrompt.text, Style(fg = Green), cursor = renderedPrompt.cursorIndex)
         )
       )
 
@@ -136,6 +141,8 @@ object FutureCounter:
             Increment
           case "decrement" | "-" =>
             Decrement
+          case "exit" =>
+            Exit
       }.toEither.left.map(e => TermFlowError.Unexpected(e.getMessage))
 
     private def statusWithSpinner(m: Model): String =

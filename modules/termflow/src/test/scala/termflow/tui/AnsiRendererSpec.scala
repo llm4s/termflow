@@ -272,3 +272,25 @@ class AnsiRendererSpec extends AnyFunSuite:
     val result = AnsiRenderer.diff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
     assert(result.changedCells == 1)
     assert(result.ansi.nonEmpty)
+
+  test("SimpleANSIRenderer clears and repaints after frame resize"):
+    val renderer = SimpleANSIRenderer()
+    val first = RootNode(
+      width = 8,
+      height = 3,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("first", Style())))),
+      input = None
+    )
+    val second = RootNode(
+      width = 18,
+      height = 6,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("second", Style())))),
+      input = None
+    )
+
+    val out = captureOut {
+      renderer.render(first, None)
+      renderer.render(second, None)
+    }
+    assert(out.contains(ANSI.clearScreen))
+    assert(out.contains(ANSI.homeCursor))

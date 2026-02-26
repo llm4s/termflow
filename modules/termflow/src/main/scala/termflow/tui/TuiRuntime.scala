@@ -169,13 +169,18 @@ object TuiRuntime:
             else math.max(0L, FrameNanos - elapsed)
 
           if waitNanos > 0L then
-            val deadline = System.nanoTime() + waitNanos
+            val deadline     = System.nanoTime() + waitNanos
+            var waitConsumed = 0
             while !shouldExit && System.nanoTime() < deadline do
               val remainingNanos = deadline - System.nanoTime()
               val timeoutMillis  = math.max(1L, remainingNanos / 1_000_000L)
               bus.poll(timeoutMillis) match
-                case Some(nextCmd) => processCommand(nextCmd)
-                case None          => ()
+                case Some(nextCmd) =>
+                  processCommand(nextCmd)
+                  waitConsumed += 1
+                case None => ()
+            RenderMetrics.recordCoalescing(consumed + waitConsumed)
+          else RenderMetrics.recordCoalescing(consumed)
 
           if !shouldExit then
             renderer.render(app.view(model), pendingErr)
@@ -189,5 +194,6 @@ object TuiRuntime:
       catch {
         case _: IllegalStateException => ()
       }
+      RenderMetrics.printSummary()
       // Always restore terminal state, even on crash.
       restoreTerminalState()

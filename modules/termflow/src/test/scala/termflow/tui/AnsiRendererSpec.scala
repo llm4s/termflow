@@ -254,3 +254,21 @@ class AnsiRendererSpec extends AnyFunSuite:
 
     val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), frame)
     assert(!ansi.contains(";11H"))
+
+  test("diff reports changed cell count and emitted ANSI"):
+    val prev = RootNode(
+      width = 6,
+      height = 2,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("aa", Style())))),
+      input = None
+    )
+    val curr = RootNode(
+      width = 6,
+      height = 2,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("ab", Style())))),
+      input = None
+    )
+
+    val result = AnsiRenderer.diff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
+    assert(result.changedCells == 1)
+    assert(result.ansi.nonEmpty)

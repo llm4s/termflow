@@ -7,12 +7,10 @@ import termflow.tui._
 object RenderApp:
 
   def apply(m: Model): RootNode =
-    val tasks          = m.filteredList
-    val taskCount      = tasks.length
-    val boxWidth       = math.max(2, m.terminalWidth - 4)
-    val helpLines      = 9
-    val boxHeight      = math.max(8, 5 + taskCount + helpLines)
-    val commandsStartY = 4 + taskCount
+    val tasks     = m.filteredList
+    val taskCount = tasks.length
+    val boxWidth  = math.max(2, m.terminalWidth - 4)
+    val helpLines = 9
 
     val title = m.renderList match
       case RenderMode.All        => "📋 All Tasks"
@@ -33,6 +31,11 @@ object RenderApp:
         |  add <task id>
         |
         |Let's get things done! 🚀""".stripMargin
+    val welcomeLines   = welcomeText.split(System.lineSeparator()).toList
+    val bodyRows       = if m.tasks.isEmpty then welcomeLines.length else taskCount
+    val commandsStartY = 3 + bodyRows + 1
+    val lastHelpLineY  = commandsStartY + helpLines - 1
+    val boxHeight      = math.max(8, lastHelpLineY + 1)
 
     val mainChildren: List[VNode] =
       List(
@@ -40,7 +43,7 @@ object RenderApp:
         TextNode(2.x, 2.y, List(Text(title, Style(fg = Color.Magenta, bold = true, underline = true))))
       ) ++ {
         if m.tasks.isEmpty then
-          welcomeText.split(System.lineSeparator()).toList.zipWithIndex.map { case (s, i) =>
+          welcomeLines.zipWithIndex.map { case (s, i) =>
             TextNode(2.x, (3 + i).y, List(Text(s, Style(fg = Color.Cyan, bold = true))))
           }
         else renderTasks(tasks)

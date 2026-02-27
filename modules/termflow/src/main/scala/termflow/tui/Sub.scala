@@ -29,12 +29,19 @@ trait Sub[+Msg]:
   def cancel(): Unit
 
 object Sub:
+  private def autoRegisterIfRuntimeCtx[Msg](sub: Sub[Msg], sink: EventSink[Msg]): Sub[Msg] =
+    sink match
+      case ctx: RuntimeCtx[?] =>
+        ctx.asInstanceOf[RuntimeCtx[Msg]].registerSub(sub)
+      case _ =>
+        sub
+
   case object NoSub extends Sub[Nothing]:
     override def isActive: Boolean = false
     override def cancel(): Unit    = ()
 
   def Every[Msg](millis: Long, msg: () => Msg, sink: EventSink[Msg]): Sub[Msg] =
-    new Sub[Msg]:
+    val sub = new Sub[Msg]:
       @volatile private var active = true
       private val scheduler        = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
       private val handle =
@@ -54,6 +61,7 @@ object Sub:
         active = false
         handle.cancel(true)
         scheduler.shutdownNow(): Unit
+    autoRegisterIfRuntimeCtx(sub, sink)
 
   /** Create an InputKey subscription from a TerminalKeySource. */
   def InputKeyFromSource[Msg](
@@ -62,7 +70,7 @@ object Sub:
     onError: Throwable => Msg,
     sink: EventSink[Msg]
   ): Sub[Msg] =
-    new Sub[Msg]:
+    val sub = new Sub[Msg]:
       @volatile private var active = true
 
       private val thread = ThreadUtils.startThread(new Runnable {
@@ -99,6 +107,7 @@ object Sub:
           case _: InterruptedException =>
             Thread.currentThread().interrupt()
         }
+    autoRegisterIfRuntimeCtx(sub, sink)
 
   /** Poll terminal dimensions and emit a message when they change. */
   def TerminalResize[Msg](
@@ -106,7 +115,7 @@ object Sub:
     mkMsg: (Int, Int) => Msg,
     ctx: RuntimeCtx[Msg]
   ): Sub[Msg] =
-    new Sub[Msg]:
+    val sub = new Sub[Msg]:
       @volatile private var active = true
       private val scheduler        = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
       @volatile private var w0     = ctx.terminal.width
@@ -137,6 +146,7 @@ object Sub:
         active = false
         handle.cancel(true)
         scheduler.shutdownNow(): Unit
+    ctx.registerSub(sub)
 
   /** Create an InputKey subscription with a console reader (JLine-based by default). */
   def InputKeyWithReader[Msg](

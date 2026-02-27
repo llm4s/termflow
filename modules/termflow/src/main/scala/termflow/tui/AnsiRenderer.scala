@@ -285,8 +285,13 @@ final case class SimpleANSIRenderer() extends TuiRenderer:
 
   override def render(textNode: RootNode, err: Option[TermFlowError]): Unit =
     val currentFrame = AnsiRenderer.buildFrame(textNode)
-    val diffResult   = AnsiRenderer.diff(lastFrame, currentFrame)
-    val ansi         = diffResult.ansi
+    val resized      = lastFrame.exists(prev => prev.width != currentFrame.width || prev.height != currentFrame.height)
+    val diffResult =
+      if resized then AnsiRenderer.diff(None, currentFrame)
+      else AnsiRenderer.diff(lastFrame, currentFrame)
+    val ansi =
+      if resized then ANSI.clearScreen + ANSI.homeCursor + diffResult.ansi
+      else diffResult.ansi
     if ansi.nonEmpty then
       print(ansi)
       Console.out.flush()

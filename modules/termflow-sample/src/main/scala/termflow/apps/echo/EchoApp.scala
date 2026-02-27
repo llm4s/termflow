@@ -16,7 +16,6 @@ object EchoApp:
     terminalWidth: Int,
     terminalHeight: Int,
     messages: List[String],
-    maxWidth: Int,
     input: Sub[Msg],
     prompt: Prompt.State
   )
@@ -32,40 +31,47 @@ object EchoApp:
 
   // === App ===
   object App extends TuiApp[Model, Msg]:
+    private def syncTerminalSize(m: Model, ctx: RuntimeCtx[Msg]): Model =
+      val w = ctx.terminal.width
+      val h = ctx.terminal.height
+      if w == m.terminalWidth && h == m.terminalHeight then m
+      else m.copy(terminalWidth = w, terminalHeight = h)
+
+    private def contentWidth(terminalWidth: Int): Int =
+      math.max(8, terminalWidth - 10)
 
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
         terminalHeight = ctx.terminal.height,
         messages = List.empty,
-        // Keep wrapping width bounded to the current terminal.
-        maxWidth = math.max(8, ctx.terminal.width - 10),
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         prompt = Prompt.State()
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+      val sized = syncTerminalSize(m, ctx)
       msg match
         case AddMessage(input) =>
           // Wrap long input into lines that fit in the box
-          val wrappedLines = wrapText(input, m.maxWidth - 4)
-          val newMsgs      = m.messages ++ wrappedLines
-          m.copy(messages = newMsgs.takeRight(30)).tui
+          val wrappedLines = wrapText(input, contentWidth(sized.terminalWidth) - 4)
+          val newMsgs      = sized.messages ++ wrappedLines
+          sized.copy(messages = newMsgs.takeRight(30)).tui
 
         case Clear =>
-          m.copy(messages = Nil).tui
+          sized.copy(messages = Nil).tui
 
         case Exit =>
-          Tui(m, Cmd.Exit)
+          Tui(sized, Cmd.Exit)
 
         case ConsoleInputKey(k) =>
-          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
+          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](sized.prompt, k)(toMsg)
           maybeCmd match
-            case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt).tui
+            case Some(cmd) => Tui(sized.copy(prompt = nextPrompt), cmd)
+            case None      => sized.copy(prompt = nextPrompt).tui
 
         case ConsoleInputError(_) =>
-          m.tui // ignore for now
+          sized.tui // ignore for now
 
     override def view(m: Model): RootNode =
       val panelTop = 1
@@ -76,7 +82,7 @@ object EchoApp:
       val innerHeight    = math.max(1, panelHeight - 2)
       val visible        = m.messages.takeRight(innerHeight)
       val startY         = panelTop + 1 + (innerHeight - visible.length)
-      val clearRowWidth  = math.max(1, m.maxWidth)
+      val clearRowWidth  = math.max(1, contentWidth(m.terminalWidth))
 
       // Explicitly clear message rows each frame so shorter content
       // cannot leave stale characters behind.
@@ -104,8 +110,8 @@ object EchoApp:
           List(
             TextNode(2.x, (panelTop + panelHeight).y, List("──────────────────────────────".text(fg = Cyan))),
             TextNode(2.x, (panelTop + panelHeight + 1).y, List("Commands:".text(fg = Yellow))),
-            TextNode(2.x, (panelTop + panelHeight + 2).y, List("  /clear -> clear chat".text)),
-            TextNode(2.x, (panelTop + panelHeight + 3).y, List("  exit   -> quit".text))
+            TextNode(2.x, (panelTop + panelHeight + 2).y, List("  clear | /clear -> clear chat".text)),
+            TextNode(2.x, (panelTop + panelHeight + 3).y, List("  exit           -> quit".text))
           ),
         input = Some(
           InputNode(
@@ -119,8 +125,9 @@ object EchoApp:
       )
 
     override def toMsg(input: PromptLine): Result[Msg] =
-      input.value.trim match
+      input.value.trim.toLowerCase match
         case ""       => Left(termflow.tui.TermFlowError.Validation("Empty input"))
+        case "clear"  => Right(Clear)
         case "/clear" => Right(Clear)
         case "exit"   => Right(Exit)
         case other    => Right(AddMessage(other))

@@ -39,6 +39,12 @@ object SineWaveApp:
   import Msg._
 
   object App extends TuiApp[Model, Msg]:
+    private def syncTerminalSize(m: Model, ctx: RuntimeCtx[Msg]): Model =
+      val w = ctx.terminal.width
+      val h = ctx.terminal.height
+      if w == m.terminalWidth && h == m.terminalHeight then m
+      else m.copy(terminalWidth = w, terminalHeight = h)
+
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -46,45 +52,47 @@ object SineWaveApp:
         phase = 0.0,
         step = 0.22,
         running = true,
-        ticker = Sub.Every(33, () => Tick, ctx),
+        // 20 FPS is visually smooth but reduces cursor/prompt jitter under heavy updates.
+        ticker = Sub.Every(50, () => Tick, ctx),
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         prompt = Prompt.State(),
         status = "running"
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+      val sized = syncTerminalSize(m, ctx)
       msg match
         case Tick =>
-          if m.running then m.copy(phase = m.phase + m.step).tui else m.tui
+          if sized.running then sized.copy(phase = sized.phase + sized.step).tui else sized.tui
 
         case Pause =>
-          if m.ticker.isActive then m.ticker.cancel()
-          m.copy(running = false, ticker = Sub.NoSub, status = "paused").tui
+          if sized.ticker.isActive then sized.ticker.cancel()
+          sized.copy(running = false, ticker = Sub.NoSub, status = "paused").tui
 
         case Resume =>
-          if m.running then m.copy(status = "already running").tui
-          else m.copy(running = true, ticker = Sub.Every(33, () => Tick, ctx), status = "running").tui
+          if sized.running then sized.copy(status = "already running").tui
+          else sized.copy(running = true, ticker = Sub.Every(50, () => Tick, ctx), status = "running").tui
 
         case Faster =>
-          val next = math.min(0.8, m.step + 0.05)
-          m.copy(step = next, status = f"speed=${next}%.2f").tui
+          val next = math.min(0.8, sized.step + 0.05)
+          sized.copy(step = next, status = f"speed=${next}%.2f").tui
 
         case Slower =>
-          val next = math.max(0.05, m.step - 0.05)
-          m.copy(step = next, status = f"speed=${next}%.2f").tui
+          val next = math.max(0.05, sized.step - 0.05)
+          sized.copy(step = next, status = f"speed=${next}%.2f").tui
 
         case Exit =>
-          if m.ticker.isActive then m.ticker.cancel()
-          Tui(m, Cmd.Exit)
+          if sized.ticker.isActive then sized.ticker.cancel()
+          Tui(sized, Cmd.Exit)
 
         case ConsoleInputKey(k) =>
-          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
+          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](sized.prompt, k)(toMsg)
           maybeCmd match
-            case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt).tui
+            case Some(cmd) => Tui(sized.copy(prompt = nextPrompt), cmd)
+            case None      => sized.copy(prompt = nextPrompt).tui
 
         case ConsoleInputError(e) =>
-          m.copy(status = s"input error: ${Option(e.getMessage).getOrElse("unknown")}").tui
+          sized.copy(status = s"input error: ${Option(e.getMessage).getOrElse("unknown")}").tui
 
     override def view(m: Model): RootNode =
       val width          = math.max(40, m.terminalWidth)
@@ -122,7 +130,7 @@ object SineWaveApp:
           TextNode(2.x, (2 + idx).y, List(Text(line, style)))
         }
 
-      val statusLine   = f"status=${m.status}  step=${m.step}%.2f  phase=${m.phase}%.2f"
+      val statusLine   = f"status=${m.status}  step=${m.step}%.2f"
       val fittedStatus = if statusLine.length <= innerWidth then statusLine else statusLine.take(innerWidth)
 
       RootNode(
@@ -135,13 +143,23 @@ object SineWaveApp:
           TextNode(
             2.x,
             (boxHeight + 1).y,
-            List(Text("Commands: pause | resume | faster | slower | exit", Style(fg = Color.White)))
+            List(Text("Commands: pause  -> pause animation", Style(fg = Color.White)))
+          ),
+          TextNode(
+            2.x,
+            (boxHeight + 2).y,
+            List(Text("          resume -> resume animation", Style(fg = Color.White)))
+          ),
+          TextNode(
+            2.x,
+            (boxHeight + 3).y,
+            List(Text("          faster | slower | exit", Style(fg = Color.White)))
           )
         ),
         input = Some(
           InputNode(
             2.x,
-            (boxHeight + 3).y,
+            (boxHeight + 4).y,
             renderedPrompt.text,
             Style(fg = Color.Green),
             cursor = renderedPrompt.cursorIndex,

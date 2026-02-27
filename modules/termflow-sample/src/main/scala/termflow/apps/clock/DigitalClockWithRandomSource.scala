@@ -47,6 +47,12 @@ object DigitalClockWithRandomSource:
 
   // --- Application Definition ---
   object App extends TuiApp[Model, Msg]:
+    private def syncTerminalSize(m: Model, ctx: RuntimeCtx[Msg]): Model =
+      val w = ctx.terminal.width
+      val h = ctx.terminal.height
+      if w == m.terminalWidth && h == m.terminalHeight then m
+      else m.copy(terminalWidth = w, terminalHeight = h)
+
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -67,47 +73,55 @@ object DigitalClockWithRandomSource:
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+      val sized = syncTerminalSize(m, ctx)
       msg match
         case Tick =>
-          m.copy(clock = m.clock.copy(value = LocalTime.now().toString)).tui
+          sized.copy(clock = sized.clock.copy(value = LocalTime.now().toString)).tui
 
         case RandomValue(v) =>
-          m.copy(random = m.random.copy(value = v)).tui
+          sized.copy(random = sized.random.copy(value = v)).tui
 
         case StartRandom =>
-          if m.random.sub.isActive then
-            m.copy(error = Some("You  have attempted to start random generator while it is already running")).tui
+          if sized.random.sub.isActive then
+            sized.copy(error = Some("You  have attempted to start random generator while it is already running")).tui
           else
-            m.copy(
-              random = m.random.copy(
-                sub =
-                  new RandomSourceAtFixedRate[Int, Msg](1700, () => Random.nextInt(5000), (v: Int) => RandomValue(v))
-                    .asEventSource(ctx)
+            sized
+              .copy(
+                random = sized.random.copy(
+                  sub =
+                    new RandomSourceAtFixedRate[Int, Msg](1700, () => Random.nextInt(5000), (v: Int) => RandomValue(v))
+                      .asEventSource(ctx)
+                )
               )
-            ).tui
+              .tui
 
         case StopRandom =>
-          m.random.sub.cancel()
-          m.copy(random = m.random.copy(sub = Sub.NoSub), messages = "🛑 Random Generator Stopped" :: m.messages).tui
+          sized.random.sub.cancel()
+          sized
+            .copy(
+              random = sized.random.copy(sub = Sub.NoSub),
+              messages = "Random generator stopped" :: sized.messages
+            )
+            .tui
 
         case StopClock =>
-          m.clock.sub.cancel()
-          m.copy(clock = m.clock.copy(sub = Sub.NoSub), messages = "🛑 Clock stopped" :: m.messages).tui
+          sized.clock.sub.cancel()
+          sized.copy(clock = sized.clock.copy(sub = Sub.NoSub), messages = "Clock stopped" :: sized.messages).tui
 
         case AddMessage(input) =>
-          val updatedMsgs = s"💬 You said: $input" :: m.messages
-          m.copy(messages = updatedMsgs).tui
+          val updatedMsgs = s"You said: $input" :: sized.messages
+          sized.copy(messages = updatedMsgs).tui
 
         case Exit =>
-          Tui(m, Cmd.Exit)
+          Tui(sized, Cmd.Exit)
 
         case ConsoleInputKey(k) =>
-          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
+          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](sized.prompt, k)(toMsg)
           maybeCmd match
-            case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt).tui
+            case Some(cmd) => Tui(sized.copy(prompt = nextPrompt), cmd)
+            case None      => sized.copy(prompt = nextPrompt).tui
         case ConsoleInputError(e) =>
-          m.copy(messages = m.messages :+ s"Console Input Error: ${e.getMessage}").tui
+          sized.copy(messages = sized.messages :+ s"Console Input Error: ${e.getMessage}").tui
 
     override def view(m: Model): RootNode =
       val prefix         = "[]> "
@@ -133,16 +147,16 @@ object DigitalClockWithRandomSource:
             children = List(),
             style = Style(border = true, fg = Blue)
           ),
-          TextNode(2.x, 2.y, List(fit(s"🕒 Time: ${m.clock.value}").text)),
-          TextNode(2.x, 3.y, List(fit(s"🎲 Random: ${m.random.value}").text)),
+          TextNode(2.x, 2.y, List(fit(s"Time: ${m.clock.value}").text)),
+          TextNode(2.x, 3.y, List(fit(s"Random: ${m.random.value}").text)),
           TextNode(2.x, 4.y, List(("─" * innerWidth).text(fg = Red)))
         ) ++ m.messages.zipWithIndex.map { case (msg, idx) => TextNode(2.x, (5 + idx).y, List(fit(msg).text)) } ++ List(
           TextNode(2.x, (5 + m.messages.length).y, List(("─" * innerWidth).text(fg = Blue))),
           TextNode(2.x, (5 + m.messages.length + 1).y, List("Commands:".text(fg = Yellow))),
-          TextNode(2.x, (5 + m.messages.length + 2).y, List(fit("  start      -> start random numbers").text)),
-          TextNode(2.x, (5 + m.messages.length + 3).y, List(fit("  stop       -> stop random numbers").text)),
-          TextNode(2.x, (5 + m.messages.length + 4).y, List(fit("  stopclock  -> stop ticking").text)),
-          TextNode(2.x, (5 + m.messages.length + 5).y, List(fit("  exit       -> quit").text))
+          TextNode(2.x, (5 + m.messages.length + 2).y, List(fit("  start               -> start random numbers").text)),
+          TextNode(2.x, (5 + m.messages.length + 3).y, List(fit("  stop                -> stop random numbers").text)),
+          TextNode(2.x, (5 + m.messages.length + 4).y, List(fit("  clockstop | stopclock -> stop ticking").text)),
+          TextNode(2.x, (5 + m.messages.length + 5).y, List(fit("  exit                -> quit").text))
         ),
         input = Some(
           InputNode(
@@ -157,8 +171,8 @@ object DigitalClockWithRandomSource:
 
     override def toMsg(input: PromptLine): Result[Msg] =
       input.value.trim.toLowerCase match
-        case "start"     => Right(StartRandom)
-        case "stop"      => Right(StopRandom)
-        case "stopclock" => Right(StopClock)
-        case "exit"      => Right(Exit)
-        case other       => Right(AddMessage(other))
+        case "start"                   => Right(StartRandom)
+        case "stop"                    => Right(StopRandom)
+        case "stopclock" | "clockstop" => Right(StopClock)
+        case "exit"                    => Right(Exit)
+        case other                     => Right(AddMessage(other))

@@ -7,6 +7,7 @@ import termflow.apps.task.Task.RenderMode
 import termflow.apps.task.Task.RenderMode._
 import termflow.apps.task.Task.TaskId
 import termflow.apps.task.Task.TaskStatus
+import termflow.tui.Cmd
 import termflow.tui.Tui
 import termflow.tui.Tui._
 
@@ -50,6 +51,8 @@ object UpdateApp:
         m.copy(filteredList = recomputeFiltered(m.tasks, Done), renderList = Done).tui
       case ListCancelled =>
         m.copy(filteredList = recomputeFiltered(m.tasks, Cancelled), renderList = Cancelled).tui
+      case Exit =>
+        Tui(m, Cmd.Exit)
       case InvalidCmd(msg) =>
         m.copy(renderList = AppErrorMsg(msg)).tui
 

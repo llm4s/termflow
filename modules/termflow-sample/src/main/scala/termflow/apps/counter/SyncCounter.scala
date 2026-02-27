@@ -33,6 +33,12 @@ object SyncCounter:
   import Msg._
 
   object App extends TuiApp[Model, Msg]:
+    private def syncTerminalSize(m: Model, ctx: RuntimeCtx[Msg]): Model =
+      val w = ctx.terminal.width
+      val h = ctx.terminal.height
+      if w == m.terminalWidth && h == m.terminalHeight then m
+      else m.copy(terminalWidth = w, terminalHeight = h)
+
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -43,19 +49,20 @@ object SyncCounter:
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+      val sized = syncTerminalSize(m, ctx)
       msg match
         case Increment =>
-          m.copy(counter = m.counter.syncIncrement()).tui
+          sized.copy(counter = sized.counter.syncIncrement()).tui
         case Decrement =>
-          m.copy(counter = m.counter.syncDecrement()).tui
+          sized.copy(counter = sized.counter.syncDecrement()).tui
         case Exit =>
-          Tui(m, Cmd.Exit)
+          Tui(sized, Cmd.Exit)
         case ConsoleInputKey(k) =>
-          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
+          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](sized.prompt, k)(toMsg)
           maybeCmd match
-            case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt).tui
-        case ConsoleInputError(_) => m.tui
+            case Some(cmd) => Tui(sized.copy(prompt = nextPrompt), cmd)
+            case None      => sized.copy(prompt = nextPrompt).tui
+        case ConsoleInputError(_) => sized.tui
 
     override def view(m: Model): RootNode =
       val prefix         = "[]> "

@@ -44,6 +44,7 @@ object Task:
     case ListInProgress
     case ListDone
     case ListCancelled
+    case Exit
     case InvalidCmd(msg: String)
     case ConsoleInputKey(key: KeyDecoder.InputKey)
     case ConsoleInputError(error: Throwable)
@@ -51,6 +52,12 @@ object Task:
   import Msg._
 
   object App extends TuiApp[Model, Msg]:
+    private def syncTerminalSize(m: Model, ctx: RuntimeCtx[Msg]): Model =
+      val w = ctx.terminal.width
+      val h = ctx.terminal.height
+      if w == m.terminalWidth && h == m.terminalHeight then m
+      else m.copy(terminalWidth = w, terminalHeight = h)
+
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
@@ -63,17 +70,18 @@ object Task:
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+      val sized = syncTerminalSize(m, ctx)
       msg match
         case ConsoleInputKey(k) =>
-          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsg)
+          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](sized.prompt, k)(toMsg)
           maybeCmd match
-            case Some(cmd) => Tui(m.copy(prompt = nextPrompt), cmd)
-            case None      => m.copy(prompt = nextPrompt).tui
+            case Some(cmd) => Tui(sized.copy(prompt = nextPrompt), cmd)
+            case None      => sized.copy(prompt = nextPrompt).tui
         case ConsoleInputError(e) =>
           // Surface the decoding error as InvalidCmd
-          m.copy(renderList = RenderMode.AppErrorMsg(s"Console Input Error: ${e.getMessage}")).tui
+          sized.copy(renderList = RenderMode.AppErrorMsg(s"Console Input Error: ${e.getMessage}")).tui
         case other =>
-          UpdateApp(m, other)
+          UpdateApp(sized, other)
 
     override def view(m: Model): RootNode =
       RenderApp(m)

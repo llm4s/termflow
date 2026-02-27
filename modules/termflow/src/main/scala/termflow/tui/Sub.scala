@@ -94,6 +94,11 @@ object Sub:
           case Failure(_) => ()
           case _          => ()
         thread.interrupt()
+        try thread.join(200L)
+        catch {
+          case _: InterruptedException =>
+            Thread.currentThread().interrupt()
+        }
 
   /** Poll terminal dimensions and emit a message when they change. */
   def TerminalResize[Msg](

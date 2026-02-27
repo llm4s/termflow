@@ -5,6 +5,9 @@ This guide collects working `sbt` commands for launching the sample apps in `mod
 ## One-off Runs
 
 ```bash
+# Sample hub dashboard (launches other demos)
+sbt "termflowSample/runMain termflow.run.SampleHubMain"
+
 # Echo app
 sbt "termflowSample/runMain termflow.apps.echo.EchoApp"
 
@@ -25,6 +28,9 @@ sbt "termflowSample/runMain termflow.apps.stress.RenderStressApp"
 
 # Moving sine wave
 sbt "termflowSample/runMain termflow.apps.stress.SineWaveApp"
+
+# Tabs demo (switch tabs with independent state)
+sbt "termflowSample/runMain termflow.apps.tabs.TabsDemoApp"
 ```
 
 ## Convenience Shell Snippet
@@ -35,6 +41,7 @@ Put this in your shell profile (`~/.zshrc` / `~/.bashrc`) for shorter commands:
 termflow-run() {
   local app="$1"
   case "$app" in
+    hub) sbt "termflowSample/runMain termflow.run.SampleHubMain" ;;
     echo) sbt "termflowSample/runMain termflow.apps.echo.EchoApp" ;;
     sync-counter) sbt "termflowSample/runMain termflow.apps.counter.SyncCounter" ;;
     future-counter) sbt "termflowSample/runMain termflow.apps.counter.FutureCounter" ;;
@@ -42,8 +49,9 @@ termflow-run() {
     task) sbt "termflowSample/runMain termflow.apps.task.Task" ;;
     stress) sbt "termflowSample/runMain termflow.apps.stress.RenderStressApp" ;;
     sine) sbt "termflowSample/runMain termflow.apps.stress.SineWaveApp" ;;
+    tabs) sbt "termflowSample/runMain termflow.apps.tabs.TabsDemoApp" ;;
     *)
-      echo "Usage: termflow-run {echo|sync-counter|future-counter|clock|task|stress|sine}"
+      echo "Usage: termflow-run {hub|echo|sync-counter|future-counter|clock|task|stress|sine|tabs}"
       return 1
       ;;
   esac
@@ -60,3 +68,4 @@ termflow-run future-counter
 
 - These apps run in an interactive TUI; use a normal terminal.
 - If terminal state looks odd after interruption, run `reset`.
+- `termflow.run.TermFlowMain` now defaults to the sample hub when run without args.

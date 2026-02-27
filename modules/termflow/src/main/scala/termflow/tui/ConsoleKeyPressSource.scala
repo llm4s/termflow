@@ -161,6 +161,13 @@ object ConsoleKeyPressSource:
     new TerminalKeySource:
       @volatile private var closed = false
 
+      private def joinQuietly(t: Thread): Unit =
+        try t.join(200L)
+        catch {
+          case _: InterruptedException =>
+            Thread.currentThread().interrupt()
+        }
+
       override def next(): InputRead =
         try inputReads.take()
         catch
@@ -172,5 +179,8 @@ object ConsoleKeyPressSource:
           closed = true
           producerThread.interrupt()
           decoderThread.interrupt()
-          Try(reader.close())
+          val closedReader = Try(reader.close())
+          joinQuietly(producerThread)
+          joinQuietly(decoderThread)
+          closedReader
         else Success(())

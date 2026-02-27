@@ -126,42 +126,55 @@ object DigitalClockWithRandomSource:
     override def view(m: Model): RootNode =
       val prefix         = "[]> "
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
-      // Use terminal width with a small right margin.
-      val boxWidth   = math.max(2, m.terminalWidth - 4)
-      val innerWidth = math.max(1, boxWidth - 2)
+      val boxWidth       = math.max(2, m.terminalWidth - 4)
+      val innerWidth     = math.max(1, boxWidth - 2)
+      val messageRows    = math.max(1, m.messages.length)
 
       def fit(line: String): String =
         if line.length <= innerWidth then line
         else if innerWidth <= 3 then line.take(innerWidth)
         else line.take(innerWidth - 3) + "..."
 
+      val messageNodes =
+        if m.messages.isEmpty then
+          List(TextNode(2.x, 5.y, List(fit("Type a message and press Enter").text(fg = Green))))
+        else
+          m.messages.zipWithIndex.map { case (msg, idx) =>
+            TextNode(2.x, (5 + idx).y, List(fit(msg).text))
+          }
+
+      val separatorY     = 5 + messageRows
+      val commandsStartY = separatorY + 1
+      val boxHeight      = 10 + messageRows
+      val inputY         = boxHeight + 1
+
       RootNode(
         m.terminalWidth,
-        10,
+        inputY + 1,
         children = List(
           BoxNode(
             1.x,
             1.y,
             boxWidth,
-            5 + m.messages.length + 6,
+            boxHeight,
             children = List(),
             style = Style(border = true, fg = Blue)
           ),
           TextNode(2.x, 2.y, List(fit(s"Time: ${m.clock.value}").text)),
           TextNode(2.x, 3.y, List(fit(s"Random: ${m.random.value}").text)),
           TextNode(2.x, 4.y, List(("─" * innerWidth).text(fg = Red)))
-        ) ++ m.messages.zipWithIndex.map { case (msg, idx) => TextNode(2.x, (5 + idx).y, List(fit(msg).text)) } ++ List(
-          TextNode(2.x, (5 + m.messages.length).y, List(("─" * innerWidth).text(fg = Blue))),
-          TextNode(2.x, (5 + m.messages.length + 1).y, List("Commands:".text(fg = Yellow))),
-          TextNode(2.x, (5 + m.messages.length + 2).y, List(fit("  start               -> start random numbers").text)),
-          TextNode(2.x, (5 + m.messages.length + 3).y, List(fit("  stop                -> stop random numbers").text)),
-          TextNode(2.x, (5 + m.messages.length + 4).y, List(fit("  clockstop | stopclock -> stop ticking").text)),
-          TextNode(2.x, (5 + m.messages.length + 5).y, List(fit("  exit                -> quit").text))
+        ) ++ messageNodes ++ List(
+          TextNode(2.x, separatorY.y, List(("─" * innerWidth).text(fg = Blue))),
+          TextNode(2.x, commandsStartY.y, List("Commands:".text(fg = Yellow))),
+          TextNode(2.x, (commandsStartY + 1).y, List(fit("  start               -> start random numbers").text)),
+          TextNode(2.x, (commandsStartY + 2).y, List(fit("  stop                -> stop random numbers").text)),
+          TextNode(2.x, (commandsStartY + 3).y, List(fit("  clockstop | stopclock -> stop ticking").text)),
+          TextNode(2.x, (commandsStartY + 4).y, List(fit("  exit                -> quit").text))
         ),
         input = Some(
           InputNode(
             2.x,
-            (4 + m.messages.length + 8).y,
+            inputY.y,
             renderedPrompt.text,
             Style(fg = Green),
             cursor = renderedPrompt.cursorIndex

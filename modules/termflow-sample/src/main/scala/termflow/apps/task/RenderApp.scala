@@ -13,24 +13,24 @@ object RenderApp:
     val helpLines = 9
 
     val title = m.renderList match
-      case RenderMode.All        => "📋 All Tasks"
-      case RenderMode.InProgress => "🔄 Tasks In Progress"
-      case RenderMode.Done       => "✅ Completed Tasks"
-      case RenderMode.Cancelled  => "❌ Cancelled Tasks"
-      case RenderMode.Count      => "📊 Task Summary"
-      case RenderMode.Add        => "➕ New Task Added"
-      case RenderMode.Init       => "🎯 Your Tasks"
-      case _                     => "📋 Tasks"
+      case RenderMode.All        => "All Tasks"
+      case RenderMode.InProgress => "Tasks In Progress"
+      case RenderMode.Done       => "Completed Tasks"
+      case RenderMode.Cancelled  => "Cancelled Tasks"
+      case RenderMode.Count      => "Task Summary"
+      case RenderMode.Add        => "New Task Added"
+      case RenderMode.Init       => "Your Tasks"
+      case _                     => "Tasks"
 
     val welcomeText =
-      """✨ Welcome to Task Manager! ✨
+      """Welcome to Task Manager!
         |
         |It looks like you don't have any tasks yet.
         |Start by adding your first task using:
         |
         |  add <task id>
         |
-        |Let's get things done! 🚀""".stripMargin
+        |Let's get things done!""".stripMargin
     val welcomeLines   = welcomeText.split(System.lineSeparator()).toList
     val bodyRows       = if m.tasks.isEmpty then welcomeLines.length else taskCount
     val commandsStartY = 3 + bodyRows + 1
@@ -95,10 +95,10 @@ object RenderApp:
     else
       tasks.zipWithIndex.flatMap { case (task, index) =>
         val (statusIcon, statusColor) = task.status match
-          case TaskStatus.Pending    => ("⏳", Color.Yellow)
-          case TaskStatus.InProgress => ("🔄", Color.Blue)
-          case TaskStatus.Done       => ("✅", Color.Green)
-          case TaskStatus.Cancelled  => ("❌", Color.Red)
+          case TaskStatus.Pending    => ("[ ]", Color.Yellow)
+          case TaskStatus.InProgress => ("[~]", Color.Blue)
+          case TaskStatus.Done       => ("[x]", Color.Green)
+          case TaskStatus.Cancelled  => ("[-]", Color.Red)
 
         val rowY   = (3 + index).y
         val number = TextNode(2.x, rowY, List(Text(s"${index + 1}.", Style(fg = Color.Black, bold = true))))

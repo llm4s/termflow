@@ -31,4 +31,5 @@ object SampleSmoke:
     smokeApp("future-counter", termflow.apps.counter.FutureCounter.App)
     smokeApp("clock", termflow.apps.clock.DigitalClock.App)
     smokeApp("stress", termflow.apps.stress.RenderStressApp.App)
+    smokeApp("tabs", termflow.apps.tabs.TabsDemoApp.App)
     Console.out.println("Sample smoke checks passed.")

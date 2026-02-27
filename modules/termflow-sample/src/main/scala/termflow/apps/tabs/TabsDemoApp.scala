@@ -12,6 +12,10 @@ import termflow.tui._
 
 object TabsDemoApp:
 
+  def main(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(App)
+
   final case class TabState(
     name: String,
     counter: Int,

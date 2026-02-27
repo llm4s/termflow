@@ -16,7 +16,6 @@ object EchoApp:
     terminalWidth: Int,
     terminalHeight: Int,
     messages: List[String],
-    maxWidth: Int,
     input: Sub[Msg],
     prompt: Prompt.State
   )
@@ -36,15 +35,16 @@ object EchoApp:
       val w = ctx.terminal.width
       val h = ctx.terminal.height
       if w == m.terminalWidth && h == m.terminalHeight then m
-      else m.copy(terminalWidth = w, terminalHeight = h, maxWidth = math.max(8, w - 10))
+      else m.copy(terminalWidth = w, terminalHeight = h)
+
+    private def contentWidth(terminalWidth: Int): Int =
+      math.max(8, terminalWidth - 10)
 
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
         terminalWidth = ctx.terminal.width,
         terminalHeight = ctx.terminal.height,
         messages = List.empty,
-        // Keep wrapping width bounded to the current terminal.
-        maxWidth = math.max(8, ctx.terminal.width - 10),
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
         prompt = Prompt.State()
       ).tui
@@ -54,7 +54,7 @@ object EchoApp:
       msg match
         case AddMessage(input) =>
           // Wrap long input into lines that fit in the box
-          val wrappedLines = wrapText(input, sized.maxWidth - 4)
+          val wrappedLines = wrapText(input, contentWidth(sized.terminalWidth) - 4)
           val newMsgs      = sized.messages ++ wrappedLines
           sized.copy(messages = newMsgs.takeRight(30)).tui
 
@@ -82,7 +82,7 @@ object EchoApp:
       val innerHeight    = math.max(1, panelHeight - 2)
       val visible        = m.messages.takeRight(innerHeight)
       val startY         = panelTop + 1 + (innerHeight - visible.length)
-      val clearRowWidth  = math.max(1, m.maxWidth)
+      val clearRowWidth  = math.max(1, contentWidth(m.terminalWidth))
 
       // Explicitly clear message rows each frame so shorter content
       // cannot leave stale characters behind.

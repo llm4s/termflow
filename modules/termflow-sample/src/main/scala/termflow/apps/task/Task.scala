@@ -44,6 +44,7 @@ object Task:
     case ListInProgress
     case ListDone
     case ListCancelled
+    case Exit
     case InvalidCmd(msg: String)
     case ConsoleInputKey(key: KeyDecoder.InputKey)
     case ConsoleInputError(error: Throwable)

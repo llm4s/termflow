@@ -148,9 +148,9 @@ object RenderStressApp:
 
       val separator = "-" * contentWidth
 
-      val command1 = fitPad("Commands: start | stop | border | narrow")
-      val command2 = fitPad("          clear | note <text> | exit")
-      val command3 = fitPad("Goal: stress diff/clear/cursor behavior")
+      val command1 = fitPad("Commands: start -> start updates")
+      val command2 = fitPad("          stop  -> stop updates")
+      val command3 = fitPad("          border | narrow | clear | note <text> | exit")
 
       val styleA = Style(fg = Color.Cyan)
       val styleB = Style(fg = Color.Green)
@@ -168,7 +168,7 @@ object RenderStressApp:
           List(
             TextNode(leftX.x, commandsStart.y, List(Text(command1, Style(fg = Color.White)))),
             TextNode(leftX.x, (commandsStart + 1).y, List(Text(command2, Style(fg = Color.White)))),
-            TextNode(leftX.x, (commandsStart + 2).y, List(Text(command3, Style(fg = Color.Yellow))))
+            TextNode(leftX.x, (commandsStart + 2).y, List(Text(command3, Style(fg = Color.White))))
           )
 
       RootNode(

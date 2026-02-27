@@ -10,7 +10,7 @@ object RenderApp:
     val tasks     = m.filteredList
     val taskCount = tasks.length
     val boxWidth  = math.max(2, m.terminalWidth - 4)
-    val helpLines = 9
+    val helpLines = 10
 
     val title = m.renderList match
       case RenderMode.All        => "All Tasks"
@@ -55,8 +55,9 @@ object RenderApp:
         TextNode(2.x, (commandsStartY + 4).y, List("  inprogress <id>  -> mark in progress".text)),
         TextNode(2.x, (commandsStartY + 5).y, List("  done <id>        -> mark done".text)),
         TextNode(2.x, (commandsStartY + 6).y, List("  cancel <id>      -> cancel task".text)),
-        TextNode(2.x, (commandsStartY + 7).y, List("  all|inprogress|done|canceled -> filter".text)),
-        TextNode(2.x, (commandsStartY + 8).y, List("  Ctrl-C            -> quit".text(fg = Color.Yellow)))
+        TextNode(2.x, (commandsStartY + 7).y, List("  all | inprogress | done | canceled -> filter".text)),
+        TextNode(2.x, (commandsStartY + 8).y, List("  exit              -> quit".text(fg = Color.Yellow))),
+        TextNode(2.x, (commandsStartY + 9).y, List("  Ctrl-C            -> force quit".text(fg = Color.Yellow)))
       )
 
     RootNode(

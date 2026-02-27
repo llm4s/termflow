@@ -100,16 +100,16 @@ object DigitalClockWithRandomSource:
           sized
             .copy(
               random = sized.random.copy(sub = Sub.NoSub),
-              messages = "🛑 Random Generator Stopped" :: sized.messages
+              messages = "Random generator stopped" :: sized.messages
             )
             .tui
 
         case StopClock =>
           sized.clock.sub.cancel()
-          sized.copy(clock = sized.clock.copy(sub = Sub.NoSub), messages = "🛑 Clock stopped" :: sized.messages).tui
+          sized.copy(clock = sized.clock.copy(sub = Sub.NoSub), messages = "Clock stopped" :: sized.messages).tui
 
         case AddMessage(input) =>
-          val updatedMsgs = s"💬 You said: $input" :: sized.messages
+          val updatedMsgs = s"You said: $input" :: sized.messages
           sized.copy(messages = updatedMsgs).tui
 
         case Exit =>
@@ -147,16 +147,16 @@ object DigitalClockWithRandomSource:
             children = List(),
             style = Style(border = true, fg = Blue)
           ),
-          TextNode(2.x, 2.y, List(fit(s"🕒 Time: ${m.clock.value}").text)),
-          TextNode(2.x, 3.y, List(fit(s"🎲 Random: ${m.random.value}").text)),
+          TextNode(2.x, 2.y, List(fit(s"Time: ${m.clock.value}").text)),
+          TextNode(2.x, 3.y, List(fit(s"Random: ${m.random.value}").text)),
           TextNode(2.x, 4.y, List(("─" * innerWidth).text(fg = Red)))
         ) ++ m.messages.zipWithIndex.map { case (msg, idx) => TextNode(2.x, (5 + idx).y, List(fit(msg).text)) } ++ List(
           TextNode(2.x, (5 + m.messages.length).y, List(("─" * innerWidth).text(fg = Blue))),
           TextNode(2.x, (5 + m.messages.length + 1).y, List("Commands:".text(fg = Yellow))),
-          TextNode(2.x, (5 + m.messages.length + 2).y, List(fit("  start      -> start random numbers").text)),
-          TextNode(2.x, (5 + m.messages.length + 3).y, List(fit("  stop       -> stop random numbers").text)),
-          TextNode(2.x, (5 + m.messages.length + 4).y, List(fit("  stopclock  -> stop ticking").text)),
-          TextNode(2.x, (5 + m.messages.length + 5).y, List(fit("  exit       -> quit").text))
+          TextNode(2.x, (5 + m.messages.length + 2).y, List(fit("  start               -> start random numbers").text)),
+          TextNode(2.x, (5 + m.messages.length + 3).y, List(fit("  stop                -> stop random numbers").text)),
+          TextNode(2.x, (5 + m.messages.length + 4).y, List(fit("  clockstop | stopclock -> stop ticking").text)),
+          TextNode(2.x, (5 + m.messages.length + 5).y, List(fit("  exit                -> quit").text))
         ),
         input = Some(
           InputNode(
@@ -171,8 +171,8 @@ object DigitalClockWithRandomSource:
 
     override def toMsg(input: PromptLine): Result[Msg] =
       input.value.trim.toLowerCase match
-        case "start"     => Right(StartRandom)
-        case "stop"      => Right(StopRandom)
-        case "stopclock" => Right(StopClock)
-        case "exit"      => Right(Exit)
-        case other       => Right(AddMessage(other))
+        case "start"                   => Right(StartRandom)
+        case "stop"                    => Right(StopRandom)
+        case "stopclock" | "clockstop" => Right(StopClock)
+        case "exit"                    => Right(Exit)
+        case other                     => Right(AddMessage(other))

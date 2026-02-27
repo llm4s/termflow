@@ -143,13 +143,23 @@ object SineWaveApp:
           TextNode(
             2.x,
             (boxHeight + 1).y,
-            List(Text("Commands: pause | resume | faster | slower | exit", Style(fg = Color.White)))
+            List(Text("Commands: pause  -> pause animation", Style(fg = Color.White)))
+          ),
+          TextNode(
+            2.x,
+            (boxHeight + 2).y,
+            List(Text("          resume -> resume animation", Style(fg = Color.White)))
+          ),
+          TextNode(
+            2.x,
+            (boxHeight + 3).y,
+            List(Text("          faster | slower | exit", Style(fg = Color.White)))
           )
         ),
         input = Some(
           InputNode(
             2.x,
-            (boxHeight + 3).y,
+            (boxHeight + 4).y,
             renderedPrompt.text,
             Style(fg = Color.Green),
             cursor = renderedPrompt.cursorIndex,

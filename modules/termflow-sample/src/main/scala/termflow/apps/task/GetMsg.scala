@@ -47,5 +47,6 @@ object GetMsg:
         case "inprogress"                              => Msg.ListInProgress
         case "done"                                    => Msg.ListDone
         case "canceled"                                => Msg.ListCancelled
+        case "exit"                                    => Msg.Exit
         case _                                         => Msg.InvalidCmd(input)
     }.toEither.left.map(e => TermFlowError.Unexpected(e.getMessage))

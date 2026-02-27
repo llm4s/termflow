@@ -118,9 +118,9 @@ object DigitalClock:
         ) ++ m.messages.zipWithIndex.map { case (msg, idx) => TextNode(2.x, (4 + idx).y, List(fit(msg).text)) } ++ List(
           TextNode(2.x, (4 + m.messages.length).y, List(("─" * innerWidth).text(fg = Blue))),
           TextNode(2.x, (5 + m.messages.length).y, List(fit("Commands:").text(fg = Yellow))),
-          TextNode(2.x, (6 + m.messages.length).y, List(fit("  stopclock  -> stop ticking").text)),
-          TextNode(2.x, (7 + m.messages.length).y, List(fit("  startclock -> start ticking").text)),
-          TextNode(2.x, (8 + m.messages.length).y, List(fit("  exit      -> quit").text))
+          TextNode(2.x, (6 + m.messages.length).y, List(fit("  start | startclock -> start ticking").text)),
+          TextNode(2.x, (7 + m.messages.length).y, List(fit("  stop  | stopclock  -> stop ticking").text)),
+          TextNode(2.x, (8 + m.messages.length).y, List(fit("  exit               -> quit").text))
         ),
         input = Some(
           InputNode(
@@ -135,7 +135,7 @@ object DigitalClock:
 
     override def toMsg(input: PromptLine): Result[Msg] =
       input.value.trim.toLowerCase match
-        case "startclock" => Right(StartClock)
-        case "stopclock"  => Right(StopClock)
-        case "exit"       => Right(Exit)
-        case other        => Right(AddMessage(other))
+        case "start" | "startclock" => Right(StartClock)
+        case "stop" | "stopclock"   => Right(StopClock)
+        case "exit"                 => Right(Exit)
+        case other                  => Right(AddMessage(other))

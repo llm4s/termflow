@@ -110,8 +110,8 @@ object EchoApp:
           List(
             TextNode(2.x, (panelTop + panelHeight).y, List("──────────────────────────────".text(fg = Cyan))),
             TextNode(2.x, (panelTop + panelHeight + 1).y, List("Commands:".text(fg = Yellow))),
-            TextNode(2.x, (panelTop + panelHeight + 2).y, List("  /clear -> clear chat".text)),
-            TextNode(2.x, (panelTop + panelHeight + 3).y, List("  exit   -> quit".text))
+            TextNode(2.x, (panelTop + panelHeight + 2).y, List("  clear | /clear -> clear chat".text)),
+            TextNode(2.x, (panelTop + panelHeight + 3).y, List("  exit           -> quit".text))
           ),
         input = Some(
           InputNode(
@@ -125,8 +125,9 @@ object EchoApp:
       )
 
     override def toMsg(input: PromptLine): Result[Msg] =
-      input.value.trim match
+      input.value.trim.toLowerCase match
         case ""       => Left(termflow.tui.TermFlowError.Validation("Empty input"))
+        case "clear"  => Right(Clear)
         case "/clear" => Right(Clear)
         case "exit"   => Right(Exit)
         case other    => Right(AddMessage(other))

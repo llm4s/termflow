@@ -79,6 +79,12 @@ object AnsiRenderer:
     root.input.foreach(renderInput(_, out))
     print(out.toString)
 
+  /** Build ANSI patch for input-only repaint. */
+  def inputPatch(root: RootNode): String =
+    val out = new StringBuilder
+    root.input.foreach(renderInput(_, out))
+    out.toString
+
   private def renderNode(v: VNode, out: StringBuilder): Unit = v match
     case TextNode(x, y, l) =>
       out.append(moveTo(x, y))
@@ -108,9 +114,11 @@ object AnsiRenderer:
       if inp.cursor >= 0 && inp.cursor <= rendered.length then inp.cursor
       else rendered.length
 
-    // Move to input position and clear the whole line to avoid ghost characters
-    out.append(moveTo(inp.x, inp.y))
+    // Clear full terminal row from column 1, then position to input x.
+    // Some terminal emulators behave inconsistently when 2K is emitted away from column 1.
+    out.append(moveTo(XCoord(1), inp.y))
     out.append("\u001b[2K")
+    out.append(moveTo(inp.x, inp.y))
 
     val baseStyle = inp.style
     val baseAnsi  = styleToAnsi(baseStyle)
@@ -259,6 +267,19 @@ object AnsiRenderer:
         cursor = j
       out.append(reset)
 
+    def appendFullRow(row: Int): Unit =
+      out.append(moveTo(XCoord(1), YCoord(row + 1)))
+      var cursor = 0
+      while cursor < current.width do
+        val style = cellAt(Some(current), row, cursor).style
+        out.append(reset).append(styleToAnsi(style))
+        var j = cursor
+        while j < current.width && cellAt(Some(current), row, j).style == style do
+          out.append(cellAt(Some(current), row, j).ch)
+          j += 1
+        cursor = j
+      out.append(reset)
+
     var row = 0
     while row < maxH do
       var col = 0
@@ -271,6 +292,7 @@ object AnsiRenderer:
       row += 1
 
     val prevCursor = prev.flatMap(_.cursor)
+    if prevCursor != current.cursor then current.cursor.foreach(c => appendFullRow(c.y.value - 1))
     // Place the hardware cursor if content changed, or cursor itself moved.
     // This preserves editing position without emitting output on identical frames.
     if changedCellsCount > 0 || prevCursor != current.cursor then current.cursor.foreach(c => out.append(moveTo(c)))
@@ -286,17 +308,23 @@ final case class SimpleANSIRenderer() extends TuiRenderer:
   override def render(textNode: RootNode, err: Option[TermFlowError]): Unit =
     val currentFrame = AnsiRenderer.buildFrame(textNode)
     val resized      = lastFrame.exists(prev => prev.width != currentFrame.width || prev.height != currentFrame.height)
+    val cursorMoved = lastFrame.flatMap(_.cursor) match
+      case Some(prevCursor) => currentFrame.cursor.exists(_ != prevCursor)
+      case None             => currentFrame.cursor.nonEmpty
+    val forceFullRepaint = textNode.input.nonEmpty && cursorMoved
     val diffResult =
-      if resized then AnsiRenderer.diff(None, currentFrame)
+      if resized || forceFullRepaint then AnsiRenderer.diff(None, currentFrame)
       else AnsiRenderer.diff(lastFrame, currentFrame)
     val ansi =
-      if resized then ANSI.clearScreen + ANSI.homeCursor + diffResult.ansi
+      if resized || forceFullRepaint then ANSI.clearScreen + ANSI.homeCursor + diffResult.ansi
       else diffResult.ansi
-    if ansi.nonEmpty then
-      print(ansi)
+    val inputAnsi = AnsiRenderer.inputPatch(textNode)
+    val fullAnsi  = ansi + inputAnsi
+    if fullAnsi.nonEmpty then
+      print(fullAnsi)
       Console.out.flush()
     if RenderMetrics.isEnabled then
-      val bytes = ansi.getBytes("UTF-8").length
+      val bytes = fullAnsi.getBytes("UTF-8").length
       RenderMetrics.recordRender(diffResult.changedCells, bytes)
     lastFrame = Some(currentFrame)
 

@@ -116,6 +116,7 @@ class AnsiRendererSpec extends AnyFunSuite:
     )
 
     val out = captureOut(AnsiRenderer.renderInputOnly(root))
+    assert(out.contains(AnsiRenderer.moveTo(XCoord(1), YCoord(5)))) // clear starts at col 1
     assert(out.contains("\u001b[2K"))
     assert(out.contains(" "))                                        // padded trailing area
     assert(out.contains(AnsiRenderer.moveTo(XCoord(13), YCoord(5)))) // x=10 + clamped cursor len(abc)=3
@@ -178,6 +179,25 @@ class AnsiRendererSpec extends AnyFunSuite:
 
     val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
     assert(ansi.contains(AnsiRenderer.moveTo(XCoord(6), YCoord(4))))
+
+  test("renderDiff repaints full cursor row when cursor moves"):
+    val prev = RootNode(
+      width = 20,
+      height = 5,
+      children = Nil,
+      input = Some(InputNode(XCoord(2), YCoord(4), "[]> new abcdefg", Style(), cursor = 12))
+    )
+    val curr = RootNode(
+      width = 20,
+      height = 5,
+      children = Nil,
+      input = Some(InputNode(XCoord(2), YCoord(4), "[]> new abcdefg", Style(), cursor = 8))
+    )
+
+    val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
+    assert(ansi.contains(AnsiRenderer.moveTo(XCoord(1), YCoord(4))))
+    assert(ansi.contains("[]> new abcdefg"))
+    assert(ansi.contains(AnsiRenderer.moveTo(XCoord(10), YCoord(4))))
 
   test("renderDiff clears removed rows when current frame shrinks"):
     val prev = RootNode(

@@ -1,11 +1,11 @@
 package termflow.apps.hub
 
+import termflow.tui.*
 import termflow.tui.Color.Blue
 import termflow.tui.Color.Green
 import termflow.tui.Color.Yellow
-import termflow.tui.Tui._
-import termflow.tui.TuiPrelude._
-import termflow.tui._
+import termflow.tui.Tui.*
+import termflow.tui.TuiPrelude.*
 
 object SampleHubApp:
 
@@ -109,7 +109,8 @@ object SampleHubApp:
               (boxHeight + 2).y,
               renderedPrompt.text,
               Style(fg = Green),
-              cursor = renderedPrompt.cursorIndex
+              cursor = renderedPrompt.cursorIndex,
+              prefixLength = renderedPrompt.prefixLength
             )
           )
         )

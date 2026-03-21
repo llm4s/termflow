@@ -1,11 +1,11 @@
 package termflow.apps.counter
 
+import termflow.tui.*
 import termflow.tui.Color.Blue
 import termflow.tui.Color.Green
 import termflow.tui.Color.Yellow
-import termflow.tui.Tui._
-import termflow.tui.TuiPrelude._
-import termflow.tui._
+import termflow.tui.Tui.*
+import termflow.tui.TuiPrelude.*
 
 import scala.util.Try
 
@@ -88,7 +88,14 @@ object SyncCounter:
           TextNode(2.x, 7.y, List("  exit          -> quit".text))
         ),
         input = Some(
-          InputNode(2.x, 10.y, renderedPrompt.text, Style(fg = Green), cursor = renderedPrompt.cursorIndex)
+          InputNode(
+            2.x,
+            10.y,
+            renderedPrompt.text,
+            Style(fg = Green),
+            cursor = renderedPrompt.cursorIndex,
+            prefixLength = renderedPrompt.prefixLength
+          )
         )
       )
 

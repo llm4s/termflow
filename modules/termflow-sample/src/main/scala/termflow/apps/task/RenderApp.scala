@@ -1,8 +1,8 @@
 package termflow.apps.task
 
-import termflow.apps.task.Task._
-import termflow.tui.TuiPrelude._
-import termflow.tui._
+import termflow.apps.task.Task.*
+import termflow.tui.*
+import termflow.tui.TuiPrelude.*
 
 object RenderApp:
 
@@ -73,7 +73,8 @@ object RenderApp:
             (boxHeight + 4).y,
             renderedPrompt.text,
             Style(fg = Color.Green),
-            cursor = renderedPrompt.cursorIndex
+            cursor = renderedPrompt.cursorIndex,
+            prefixLength = renderedPrompt.prefixLength
           )
         )
       }

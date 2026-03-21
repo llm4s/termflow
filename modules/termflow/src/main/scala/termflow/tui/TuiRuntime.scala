@@ -1,6 +1,6 @@
 package termflow.tui
 
-import termflow.tui.ACSUtils._
+import termflow.tui.ACSUtils.*
 
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit

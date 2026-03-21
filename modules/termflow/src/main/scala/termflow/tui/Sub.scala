@@ -61,6 +61,11 @@ object Sub:
         active = false
         handle.cancel(true)
         scheduler.shutdownNow(): Unit
+        try scheduler.awaitTermination(200L, TimeUnit.MILLISECONDS): Unit
+        catch {
+          case _: InterruptedException =>
+            Thread.currentThread().interrupt()
+        }
     autoRegisterIfRuntimeCtx(sub, sink)
 
   /** Create an InputKey subscription from a TerminalKeySource. */
@@ -146,6 +151,11 @@ object Sub:
         active = false
         handle.cancel(true)
         scheduler.shutdownNow(): Unit
+        try scheduler.awaitTermination(200L, TimeUnit.MILLISECONDS): Unit
+        catch {
+          case _: InterruptedException =>
+            Thread.currentThread().interrupt()
+        }
     ctx.registerSub(sub)
 
   /** Create an InputKey subscription with a console reader (JLine-based by default). */
@@ -198,4 +208,9 @@ object RandomUtil:
         def isActive: Boolean        = active
         def cancel(): Unit =
           scheduler.shutdownNow(): Unit
+          try scheduler.awaitTermination(200L, TimeUnit.MILLISECONDS): Unit
+          catch {
+            case _: InterruptedException =>
+              Thread.currentThread().interrupt()
+          }
           active = false

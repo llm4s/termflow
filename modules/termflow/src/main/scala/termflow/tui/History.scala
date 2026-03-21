@@ -1,13 +1,13 @@
 package termflow.tui
 
 import termflow.tui.KeyDecoder.InputKey
-import termflow.tui.TuiPrelude._
+import termflow.tui.TuiPrelude.*
 
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
-import scala.jdk.CollectionConverters._
+import scala.jdk.CollectionConverters.*
 
 /** Abstraction for loading and persisting command history. */
 trait HistoryStore:

@@ -1,9 +1,9 @@
 package termflow.apps.stress
 
+import termflow.tui.*
 import termflow.tui.Color
-import termflow.tui.Tui._
-import termflow.tui.TuiPrelude._
-import termflow.tui._
+import termflow.tui.Tui.*
+import termflow.tui.TuiPrelude.*
 
 import scala.math.Pi
 import scala.math.sin
@@ -163,7 +163,8 @@ object SineWaveApp:
             renderedPrompt.text,
             Style(fg = Color.Green),
             cursor = renderedPrompt.cursorIndex,
-            lineWidth = innerWidth
+            lineWidth = innerWidth,
+            prefixLength = renderedPrompt.prefixLength
           )
         )
       )

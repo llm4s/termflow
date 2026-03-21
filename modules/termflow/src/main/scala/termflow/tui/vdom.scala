@@ -33,35 +33,36 @@ enum VNode:
     override val y: YCoord,
     prompt: String,
     override val style: Style,
-    cursor: Int = -1,  // -1 means at end
-    lineWidth: Int = 0 // 0 means use prompt length
+    cursor: Int = -1,   // -1 means at end
+    lineWidth: Int = 0, // 0 means use prompt length
+    prefixLength: Int = 0
   )
 
   def x: XCoord = this match
-    case TextNode(x, _, _)           => x
-    case BoxNode(x, _, _, _, _, _)   => x
-    case InputNode(x, _, _, _, _, _) => x
+    case TextNode(x, _, _)              => x
+    case BoxNode(x, _, _, _, _, _)      => x
+    case InputNode(x, _, _, _, _, _, _) => x
 
   def y: YCoord = this match
-    case TextNode(_, y, _)           => y
-    case BoxNode(_, y, _, _, _, _)   => y
-    case InputNode(_, y, _, _, _, _) => y
+    case TextNode(_, y, _)              => y
+    case BoxNode(_, y, _, _, _, _)      => y
+    case InputNode(_, y, _, _, _, _, _) => y
 
   def width: Int = this match
     case TextNode(_, _, _)             => 1
     case BoxNode(_, _, width, _, _, _) => width
-    case InputNode(_, _, prompt, _, _, lineWidth) =>
+    case InputNode(_, _, prompt, _, _, lineWidth, _) =>
       if lineWidth > 0 then lineWidth else prompt.length + 1
 
   def height: Int = this match
     case TextNode(_, _, _)              => 1
     case BoxNode(_, _, _, height, _, _) => height
-    case InputNode(_, _, _, _, _, _)    => 1
+    case InputNode(_, _, _, _, _, _, _) => 1
 
   def style: Style = this match
-    case TextNode(_, _, _)               => Style()
-    case BoxNode(_, _, _, _, _, style)   => style
-    case InputNode(_, _, _, style, _, _) => style
+    case TextNode(_, _, _)                  => Style()
+    case BoxNode(_, _, _, _, _, style)      => style
+    case InputNode(_, _, _, style, _, _, _) => style
 
 // Compatibility aliases so call sites can keep using TextNode/BoxNode/InputNode directly.
 type TextNode = VNode.TextNode

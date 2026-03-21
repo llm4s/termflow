@@ -56,7 +56,7 @@ class VDomSpec extends AnyFunSuite:
     assert(nodeByPrompt.width == 4)
     assert(nodeByPrompt.style == Style(fg = Color.Green))
     nodeByPrompt match
-      case VNode.InputNode(_, _, prompt, _, cursor, _) =>
+      case VNode.InputNode(_, _, prompt, _, cursor, _, _) =>
         assert(prompt == "abc")
         assert(cursor == 1)
       case _ => fail("expected InputNode")

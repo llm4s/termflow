@@ -1,9 +1,9 @@
 package termflow.apps.stress
 
+import termflow.tui.*
 import termflow.tui.Color
-import termflow.tui.Tui._
-import termflow.tui.TuiPrelude._
-import termflow.tui._
+import termflow.tui.Tui.*
+import termflow.tui.TuiPrelude.*
 
 object RenderStressApp:
 
@@ -21,7 +21,8 @@ object RenderStressApp:
     note: String,
     ticker: Sub[Msg],
     input: Sub[Msg],
-    prompt: Prompt.State
+    prompt: Prompt.State,
+    inputHoldUntilNanos: Long
   )
 
   enum Msg:
@@ -39,11 +40,20 @@ object RenderStressApp:
   import Msg._
 
   object App extends TuiApp[Model, Msg]:
+    private val InputHoldNanos = 200L * 1000L * 1000L
+
     private def syncTerminalSize(m: Model, ctx: RuntimeCtx[Msg]): Model =
       val w = ctx.terminal.width
       val h = ctx.terminal.height
       if w == m.terminalWidth && h == m.terminalHeight then m
       else m.copy(terminalWidth = w, terminalHeight = h)
+
+    private def extendInputHold(m: Model, key: KeyDecoder.InputKey): Model =
+      key match
+        case KeyDecoder.InputKey.Enter | KeyDecoder.InputKey.Ctrl('M') =>
+          m
+        case _ =>
+          m.copy(inputHoldUntilNanos = System.nanoTime() + InputHoldNanos)
 
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
@@ -56,14 +66,16 @@ object RenderStressApp:
         note = "",
         ticker = Sub.Every(50, () => Tick, ctx),
         input = Sub.InputKey(key => ConsoleInputKey(key), throwable => ConsoleInputError(throwable), ctx),
-        prompt = Prompt.State()
+        prompt = Prompt.State(),
+        inputHoldUntilNanos = 0L
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       val sized = syncTerminalSize(m, ctx)
       msg match
         case Tick =>
-          if sized.running then sized.copy(frame = sized.frame + 1).tui
+          if sized.running && System.nanoTime() >= sized.inputHoldUntilNanos then
+            sized.copy(frame = sized.frame + 1).tui
           else sized.tui
 
         case Start =>
@@ -93,10 +105,11 @@ object RenderStressApp:
           Tui(sized, Cmd.Exit)
 
         case ConsoleInputKey(k) =>
-          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](sized.prompt, k)(toMsg)
+          val heldSized              = extendInputHold(sized, k)
+          val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](heldSized.prompt, k)(toMsg)
           maybeCmd match
-            case Some(cmd) => Tui(sized.copy(prompt = nextPrompt), cmd)
-            case None      => sized.copy(prompt = nextPrompt).tui
+            case Some(cmd) => Tui(heldSized.copy(prompt = nextPrompt), cmd)
+            case None      => heldSized.copy(prompt = nextPrompt).tui
 
         case ConsoleInputError(e) =>
           sized.copy(note = s"input error: ${Option(e.getMessage).getOrElse("unknown")}").tui
@@ -182,7 +195,8 @@ object RenderStressApp:
             renderedPrompt.text,
             Style(),
             cursor = renderedPrompt.cursorIndex,
-            lineWidth = contentWidth
+            lineWidth = contentWidth,
+            prefixLength = renderedPrompt.prefixLength
           )
         )
       )

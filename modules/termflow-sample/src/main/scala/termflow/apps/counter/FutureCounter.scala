@@ -1,12 +1,12 @@
 package termflow.apps.counter
 
 import termflow.TimeFormatter
+import termflow.tui.*
 import termflow.tui.Color.Blue
 import termflow.tui.Color.Green
 import termflow.tui.Color.Yellow
-import termflow.tui.Tui._
-import termflow.tui.TuiPrelude._
-import termflow.tui._
+import termflow.tui.Tui.*
+import termflow.tui.TuiPrelude.*
 
 import scala.concurrent.ExecutionContext
 import scala.util.Try
@@ -133,7 +133,14 @@ object FutureCounter:
           TextNode(2.x, 8.y, List("  exit          -> quit".text))
         ),
         input = Some(
-          InputNode(2.x, 12.y, renderedPrompt.text, Style(fg = Green), cursor = renderedPrompt.cursorIndex)
+          InputNode(
+            2.x,
+            12.y,
+            renderedPrompt.text,
+            Style(fg = Green),
+            cursor = renderedPrompt.cursorIndex,
+            prefixLength = renderedPrompt.prefixLength
+          )
         )
       )
 

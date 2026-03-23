@@ -2,7 +2,7 @@ package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
 import termflow.tui.KeyDecoder.InputKey
-import termflow.tui.TuiPrelude._
+import termflow.tui.TuiPrelude.*
 
 class PromptSpec extends AnyFunSuite:
 
@@ -91,3 +91,4 @@ class PromptSpec extends AnyFunSuite:
     val line = Prompt.renderWithPrefix(Prompt.State(buffer = Vector('a', 'b'), cursor = 1), ">> ")
     assert(line.text == ">> ab")
     assert(line.cursorIndex == 4)
+    assert(line.prefixLength == 3)

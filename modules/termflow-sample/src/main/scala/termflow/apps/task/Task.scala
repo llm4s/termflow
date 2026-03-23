@@ -1,8 +1,8 @@
 package termflow.apps.task
 
-import termflow.tui.Tui._
-import termflow.tui.TuiPrelude._
-import termflow.tui._
+import termflow.tui.*
+import termflow.tui.Tui.*
+import termflow.tui.TuiPrelude.*
 
 object Task:
   def main(args: Array[String]): Unit =

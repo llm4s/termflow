@@ -1,6 +1,6 @@
 package termflow.run
 
-import termflow.tui._
+import termflow.tui.*
 
 import java.io.Reader
 import java.io.StringReader

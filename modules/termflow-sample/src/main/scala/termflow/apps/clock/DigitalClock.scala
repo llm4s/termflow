@@ -1,12 +1,12 @@
 package termflow.apps.clock
 
+import termflow.tui.*
 import termflow.tui.Color.Blue
 import termflow.tui.Color.Green
 import termflow.tui.Color.Red
 import termflow.tui.Color.Yellow
-import termflow.tui.Tui._
-import termflow.tui.TuiPrelude._
-import termflow.tui._
+import termflow.tui.Tui.*
+import termflow.tui.TuiPrelude.*
 
 import java.time.LocalTime
 
@@ -142,7 +142,8 @@ object DigitalClock:
             inputY.y,
             renderedPrompt.text,
             Style(fg = Green),
-            cursor = renderedPrompt.cursorIndex
+            cursor = renderedPrompt.cursorIndex,
+            prefixLength = renderedPrompt.prefixLength
           )
         )
       )

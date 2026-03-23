@@ -1,14 +1,14 @@
 package termflow.apps.tabs
 
+import termflow.tui.*
 import termflow.tui.Color.Blue
 import termflow.tui.Color.Cyan
 import termflow.tui.Color.Green
 import termflow.tui.Color.Magenta
 import termflow.tui.Color.White
 import termflow.tui.Color.Yellow
-import termflow.tui.Tui._
-import termflow.tui.TuiPrelude._
-import termflow.tui._
+import termflow.tui.Tui.*
+import termflow.tui.TuiPrelude.*
 
 object TabsDemoApp:
 
@@ -173,7 +173,8 @@ object TabsDemoApp:
             (boxHeight + 1).y,
             renderedPrompt.text,
             Style(fg = Green),
-            cursor = renderedPrompt.cursorIndex
+            cursor = renderedPrompt.cursorIndex,
+            prefixLength = renderedPrompt.prefixLength
           )
         )
       )

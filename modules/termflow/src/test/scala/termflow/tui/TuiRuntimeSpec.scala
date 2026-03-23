@@ -1,7 +1,7 @@
 package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
-import termflow.tui.TuiPrelude._
+import termflow.tui.TuiPrelude.*
 
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream

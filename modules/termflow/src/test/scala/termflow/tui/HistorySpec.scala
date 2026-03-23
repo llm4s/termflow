@@ -2,7 +2,7 @@ package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
 import termflow.tui.KeyDecoder.InputKey
-import termflow.tui.TuiPrelude._
+import termflow.tui.TuiPrelude.*
 
 class HistorySpec extends AnyFunSuite:
 
@@ -133,3 +133,4 @@ class HistorySpec extends AnyFunSuite:
     val rendered = PromptHistory.renderWithPrefix(state, "> ")
     assert(rendered.text == "> ab")
     assert(rendered.cursorIndex == 3)
+    assert(rendered.prefixLength == 2)

@@ -1,7 +1,7 @@
 package termflow.tui
 
 import termflow.tui.KeyDecoder.InputKey
-import termflow.tui.TuiPrelude._
+import termflow.tui.TuiPrelude.*
 
 object Prompt:
 
@@ -10,14 +10,15 @@ object Prompt:
   def render(state: State): String =
     state.buffer.mkString
 
-  final case class RenderedLine(text: String, cursorIndex: Int)
+  final case class RenderedLine(text: String, cursorIndex: Int, prefixLength: Int = 0)
 
   /** Render the prompt buffer with a fixed prefix, returning full text and cursor index. */
   def renderWithPrefix(state: State, prefix: String): RenderedLine =
     val content = render(state)
     RenderedLine(
       text = prefix + content,
-      cursorIndex = prefix.length + state.cursor
+      cursorIndex = prefix.length + state.cursor,
+      prefixLength = prefix.length
     )
 
   private def normalized(state: State): State =

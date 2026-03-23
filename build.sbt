@@ -2,6 +2,7 @@ import sbt._
 import Keys._
 
 val scala3   = Versions.scala3
+val fixedLocalVersion = "0.1.1-SNAPSHOT"
 
 inThisBuild(
   List(
@@ -99,3 +100,7 @@ lazy val termflowSample = (project in file("modules/termflow-sample"))
 addCommandAlias("ciCheck", ";scalafmtCheckAll;scalafixAll --check;test")
 addCommandAlias("coverageLib", ";project termflow;coverage;test;coverageReport")
 addCommandAlias("prePR", ";ciCheck;coverageLib;termflowSample/runMain termflow.run.SampleSmoke")
+addCommandAlias(
+  "publishLocalFixed",
+  s"""set ThisBuild / version := "$fixedLocalVersion"; publishLocal"""
+)

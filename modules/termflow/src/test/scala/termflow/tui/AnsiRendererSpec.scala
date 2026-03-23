@@ -121,6 +121,49 @@ class AnsiRendererSpec extends AnyFunSuite:
     assert(out.contains(" "))                                        // padded trailing area
     assert(out.contains(AnsiRenderer.moveTo(XCoord(13), YCoord(5)))) // x=10 + clamped cursor len(abc)=3
 
+  test("renderInputOnly keeps a fixed prompt prefix visible while horizontally scrolling"):
+    val root = RootNode(
+      width = 20,
+      height = 6,
+      children = Nil,
+      input = Some(
+        InputNode(
+          XCoord(2),
+          YCoord(5),
+          prompt = ">> abcdef",
+          style = Style(fg = Color.Green),
+          cursor = 9,
+          lineWidth = 6,
+          prefixLength = 3
+        )
+      )
+    )
+
+    val out = captureOut(AnsiRenderer.renderInputOnly(root))
+    assert(out.contains(">> def"))
+    assert(out.contains(AnsiRenderer.moveTo(XCoord(8), YCoord(5))))
+
+  test("renderInputOnly clips the input viewport to the remaining terminal width"):
+    val root = RootNode(
+      width = 12,
+      height = 6,
+      children = Nil,
+      input = Some(
+        InputNode(
+          XCoord(10),
+          YCoord(5),
+          prompt = "abcdef",
+          style = Style(fg = Color.Blue),
+          cursor = 6,
+          lineWidth = 8
+        )
+      )
+    )
+
+    val out = captureOut(AnsiRenderer.renderInputOnly(root))
+    assert(out.contains("def"))
+    assert(out.contains(AnsiRenderer.moveTo(XCoord(12), YCoord(5))))
+
   test("buildFrame expands to fit rendered extents beyond declared root height"):
     val root = RootNode(
       width = 10,
@@ -132,6 +175,33 @@ class AnsiRendererSpec extends AnyFunSuite:
     val frame = AnsiRenderer.buildFrame(root)
     assert(frame.width >= 10)
     assert(frame.height >= 7)
+
+  test("buildFrame uses the same bounded prompt viewport as renderInputOnly"):
+    val root = RootNode(
+      width = 12,
+      height = 4,
+      children = Nil,
+      input = Some(
+        InputNode(
+          XCoord(2),
+          YCoord(3),
+          prompt = ">> abcdef",
+          style = Style(fg = Color.Green),
+          cursor = 9,
+          lineWidth = 6,
+          prefixLength = 3
+        )
+      )
+    )
+
+    val frame = AnsiRenderer.buildFrame(root)
+    assert(frame.cells(2)(1).ch == '>')
+    assert(frame.cells(2)(2).ch == '>')
+    assert(frame.cells(2)(3).ch == ' ')
+    assert(frame.cells(2)(4).ch == 'd')
+    assert(frame.cells(2)(5).ch == 'e')
+    assert(frame.cells(2)(6).ch == 'f')
+    assert(frame.cursor.contains(Coord(XCoord(8), YCoord(3))))
 
   test("renderDiff clears removed trailing text"):
     val prev = RootNode(
@@ -148,8 +218,9 @@ class AnsiRendererSpec extends AnyFunSuite:
     )
 
     val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
-    assert(ansi.contains(AnsiRenderer.moveTo(XCoord(3), YCoord(1))))
-    assert(ansi.contains("    "))
+    assert(ansi.contains(AnsiRenderer.moveTo(XCoord(1), YCoord(1))))
+    assert(ansi.contains("\u001b[2K"))
+    assert(ansi.contains("ab"))
 
   test("renderDiff emits no output for identical frame"):
     val root = RootNode(
@@ -180,7 +251,7 @@ class AnsiRendererSpec extends AnyFunSuite:
     val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
     assert(ansi.contains(AnsiRenderer.moveTo(XCoord(6), YCoord(4))))
 
-  test("renderDiff repaints full cursor row when cursor moves"):
+  test("renderDiff moves the hardware cursor when cursor moves without repainting the row"):
     val prev = RootNode(
       width = 20,
       height = 5,
@@ -195,9 +266,8 @@ class AnsiRendererSpec extends AnyFunSuite:
     )
 
     val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
-    assert(ansi.contains(AnsiRenderer.moveTo(XCoord(1), YCoord(4))))
-    assert(ansi.contains("[]> new abcdefg"))
     assert(ansi.contains(AnsiRenderer.moveTo(XCoord(10), YCoord(4))))
+    assert(!ansi.contains("\u001b[2K"))
 
   test("renderDiff clears removed rows when current frame shrinks"):
     val prev = RootNode(
@@ -215,7 +285,7 @@ class AnsiRendererSpec extends AnyFunSuite:
 
     val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
     assert(ansi.contains(AnsiRenderer.moveTo(XCoord(1), YCoord(5))))
-    assert(ansi.contains("      "))
+    assert(ansi.contains("\u001b[2K"))
 
   test("renderDiff clears stale prompt tail when input text shrinks"):
     val prev = RootNode(
@@ -232,8 +302,10 @@ class AnsiRendererSpec extends AnyFunSuite:
     )
 
     val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
-    assert(ansi.contains(AnsiRenderer.moveTo(XCoord(7), YCoord(4))))
-    assert(ansi.contains("   "))
+    assert(ansi.contains(AnsiRenderer.moveTo(XCoord(1), YCoord(4))))
+    assert(ansi.contains("\u001b[2K"))
+    assert(ansi.contains("[]>"))
+    assert(ansi.contains("hi"))
 
   test("renderDiff does not write past right edge for bordered box updates"):
     val prev = RootNode(
@@ -291,6 +363,7 @@ class AnsiRendererSpec extends AnyFunSuite:
 
     val result = AnsiRenderer.diff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
     assert(result.changedCells == 1)
+    assert(result.changedRows == 1)
     assert(result.ansi.nonEmpty)
 
   test("SimpleANSIRenderer clears and repaints after frame resize"):
@@ -314,3 +387,52 @@ class AnsiRendererSpec extends AnyFunSuite:
     }
     assert(out.contains(ANSI.clearScreen))
     assert(out.contains(ANSI.homeCursor))
+
+  test("SimpleANSIRenderer does not emit a full-screen clear when only the prompt cursor moves"):
+    val renderer = SimpleANSIRenderer()
+    val first = RootNode(
+      width = 20,
+      height = 5,
+      children = Nil,
+      input = Some(InputNode(XCoord(2), YCoord(4), ">> hello", Style(), cursor = 8, lineWidth = 10, prefixLength = 3))
+    )
+    val second = RootNode(
+      width = 20,
+      height = 5,
+      children = Nil,
+      input = Some(InputNode(XCoord(2), YCoord(4), ">> hello", Style(), cursor = 5, lineWidth = 10, prefixLength = 3))
+    )
+
+    captureOut {
+      renderer.render(first, None)
+    }
+    val secondOut = captureOut {
+      renderer.render(second, None)
+    }
+    assert(secondOut.nonEmpty)
+    assert(!secondOut.contains(ANSI.clearScreen))
+    assert(!secondOut.contains(ANSI.homeCursor))
+
+  test("SimpleANSIRenderer falls back to a full repaint when many rows change"):
+    val renderer = SimpleANSIRenderer()
+    val first = RootNode(
+      width = 20,
+      height = 8,
+      children = List.tabulate(2)(row => TextNode(XCoord(1), YCoord(row + 1), List(Text(s"row-$row", Style())))),
+      input = None
+    )
+    val second = RootNode(
+      width = 20,
+      height = 8,
+      children = List.tabulate(7)(row => TextNode(XCoord(1), YCoord(row + 1), List(Text(s"changed-$row", Style())))),
+      input = None
+    )
+
+    captureOut {
+      renderer.render(first, None)
+    }
+    val secondOut = captureOut {
+      renderer.render(second, None)
+    }
+    assert(secondOut.contains(ANSI.clearScreen))
+    assert(secondOut.contains(ANSI.homeCursor))

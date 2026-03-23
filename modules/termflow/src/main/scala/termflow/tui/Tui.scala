@@ -1,6 +1,6 @@
 package termflow.tui
 
-import termflow.tui.TuiPrelude._
+import termflow.tui.TuiPrelude.*
 
 import scala.concurrent.Future
 

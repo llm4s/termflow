@@ -1,9 +1,9 @@
 package termflow.apps.echo
 
-import termflow.tui.Color._
-import termflow.tui.Tui._
-import termflow.tui.TuiPrelude._
-import termflow.tui._
+import termflow.tui.*
+import termflow.tui.Color.*
+import termflow.tui.Tui.*
+import termflow.tui.TuiPrelude.*
 
 object EchoApp:
 
@@ -119,7 +119,8 @@ object EchoApp:
             (panelTop + panelHeight + 5).y,
             prompt = renderedPrompt.text,
             style = Style(fg = Green),
-            cursor = renderedPrompt.cursorIndex
+            cursor = renderedPrompt.cursorIndex,
+            prefixLength = renderedPrompt.prefixLength
           )
         )
       )

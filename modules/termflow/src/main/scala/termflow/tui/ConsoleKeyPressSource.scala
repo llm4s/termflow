@@ -2,7 +2,7 @@ package termflow.tui
 
 import org.jline.terminal.Terminal
 import org.jline.terminal.TerminalBuilder
-import termflow.tui.AsciiControl._
+import termflow.tui.AsciiControl.*
 import termflow.tui.KeyDecoder.InputKey
 
 import java.io.InputStreamReader

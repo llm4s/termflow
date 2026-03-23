@@ -41,7 +41,8 @@ object AnsiRenderer:
     cells: Array[Array[RenderCell]],
     cursor: Option[Coord]
   )
-  final case class DiffResult(ansi: String, changedCells: Int)
+  final case class DiffResult(ansi: String, changedCells: Int, changedRows: Int)
+  final private case class VisibleInput(text: String, cursorIndex: Int, width: Int)
   private val blankCell = RenderCell(' ', Style())
 
   def moveTo(x: XCoord, y: YCoord): String =
@@ -70,19 +71,19 @@ object AnsiRenderer:
   def render(root: RootNode): Unit =
     val out = new StringBuilder
     root.children.foreach(renderNode(_, out))
-    root.input.foreach(renderInput(_, out))
+    root.input.foreach(renderInput(_, root.width, out))
     print(out.toString)
 
   /** Re-render only the input, leaving existing children intact. */
   def renderInputOnly(root: RootNode): Unit =
     val out = new StringBuilder
-    root.input.foreach(renderInput(_, out))
+    root.input.foreach(renderInput(_, root.width, out))
     print(out.toString)
 
   /** Build ANSI patch for input-only repaint. */
   def inputPatch(root: RootNode): String =
     val out = new StringBuilder
-    root.input.foreach(renderInput(_, out))
+    root.input.foreach(renderInput(_, root.width, out))
     out.toString
 
   private def renderNode(v: VNode, out: StringBuilder): Unit = v match
@@ -106,13 +107,47 @@ object AnsiRenderer:
     out.append(moveTo(x, y + (h - 1))).append(s"└$horizontal┘")
     out.append(reset)
 
-  private def renderInput(inp: InputNode, out: StringBuilder): Unit =
-    val rendered = inp.prompt
+  private def visibleInput(inp: InputNode, rootWidth: Int): VisibleInput =
+    val clampedCursor =
+      if inp.cursor >= 0 && inp.cursor <= inp.prompt.length then inp.cursor
+      else inp.prompt.length
 
-    // Clamp cursor index within the rendered string
-    val cursorIndex =
-      if inp.cursor >= 0 && inp.cursor <= rendered.length then inp.cursor
-      else rendered.length
+    val requestedWidth =
+      if inp.lineWidth > 0 then inp.lineWidth
+      else math.max(1, inp.prompt.length + 1)
+
+    val remainingWidth = math.max(1, rootWidth - inp.x.value + 1)
+    val width          = math.max(1, math.min(requestedWidth, remainingWidth))
+    val prefixLength   = math.max(0, math.min(inp.prefixLength, inp.prompt.length))
+    val fixedPrefix    = inp.prompt.take(prefixLength).take(width)
+    val suffix         = inp.prompt.drop(prefixLength)
+    val availableWidth = math.max(0, width - fixedPrefix.length)
+    val suffixCursor   = math.max(0, clampedCursor - prefixLength)
+    val suffixStart =
+      if availableWidth == 0 then 0
+      else
+        val maxStart     = math.max(0, suffix.length - availableWidth)
+        val desiredStart = suffixCursor - availableWidth + 1
+        math.max(0, math.min(maxStart, desiredStart))
+    val visibleSuffix =
+      if availableWidth == 0 then ""
+      else suffix.slice(suffixStart, suffixStart + availableWidth)
+    val visibleText =
+      val text = fixedPrefix + visibleSuffix
+      if text.length >= width then text.take(width)
+      else text + (" " * (width - text.length))
+    val unclampedCursorIndex =
+      if clampedCursor <= prefixLength then clampedCursor
+      else fixedPrefix.length + (suffixCursor - suffixStart)
+    val cursorLimit =
+      if inp.x.value + width <= rootWidth then width
+      else width - 1
+    val cursorIndex = math.max(0, math.min(cursorLimit, unclampedCursorIndex))
+
+    VisibleInput(visibleText, cursorIndex, width)
+
+  private def renderInput(inp: InputNode, rootWidth: Int, out: StringBuilder): Unit =
+    val visible = visibleInput(inp, rootWidth)
 
     // Clear full terminal row from column 1, then position to input x.
     // Some terminal emulators behave inconsistently when 2K is emitted away from column 1.
@@ -122,21 +157,11 @@ object AnsiRenderer:
 
     val baseStyle = inp.style
     val baseAnsi  = styleToAnsi(baseStyle)
-    // Draw full prompt text and use hardware cursor for caret.
-    out.append(baseAnsi).append(rendered).append(reset)
-
-    // Optionally pad the rest of the line so the background spans a fixed width.
-    val targetWidth =
-      if inp.lineWidth > 0 then inp.lineWidth
-      else rendered.length
-
-    val printedWidth = rendered.length
-    if targetWidth > printedWidth then
-      val padding = " " * (targetWidth - printedWidth)
-      out.append(baseAnsi).append(padding).append(reset): Unit
+    // Draw the bounded single-line viewport only; never rely on terminal soft-wrap.
+    out.append(baseAnsi).append(visible.text).append(reset)
 
     // Place the hardware cursor at the logical editing position.
-    out.append(moveTo(inp.x + cursorIndex, inp.y))
+    out.append(moveTo(inp.x + visible.cursorIndex, inp.y))
 
   /** Build a full terminal frame from a root node for diff-based rendering. */
   def buildFrame(root: RootNode): RenderFrame =
@@ -154,7 +179,7 @@ object AnsiRenderer:
           (math.max(mx, cx), math.max(my, cy))
         }
 
-      case InputNode(x, y, prompt, _, _, lineWidth) =>
+      case InputNode(x, y, prompt, _, _, lineWidth, _) =>
         val w     = if lineWidth > 0 then lineWidth else prompt.length
         val right = x.value + math.max(0, w - 1)
         (right, y.value)
@@ -165,10 +190,14 @@ object AnsiRenderer:
         (math.max(mx, nx), math.max(my, ny))
       }
 
+    val visibleInputOpt = root.input.map(inp => visibleInput(inp, root.width))
+
     val (inputMaxX, inputMaxY) =
       root.input match
-        case Some(inp) => nodeExtents(inp)
-        case None      => (1, 1)
+        case Some(inp) =>
+          val visible = visibleInputOpt.get
+          (inp.x.value + math.max(0, visible.width - 1), inp.y.value)
+        case None => (1, 1)
 
     val width                 = math.max(1, math.max(root.width, math.max(contentMaxX, inputMaxX)))
     val height                = math.max(1, math.max(root.height, math.max(contentMaxY, inputMaxY)))
@@ -224,19 +253,9 @@ object AnsiRenderer:
     root.children.foreach(drawNode)
 
     root.input.foreach { inp =>
-      val prompt = inp.prompt
-      val style  = inp.style
-      drawString(inp.x.value, inp.y.value, prompt, style)
-      val targetWidth =
-        if inp.lineWidth > 0 then inp.lineWidth
-        else prompt.length
-      if targetWidth > prompt.length then
-        drawString(inp.x.value + prompt.length, inp.y.value, " " * (targetWidth - prompt.length), style)
-
-      val clamped =
-        if inp.cursor >= 0 && inp.cursor <= prompt.length then inp.cursor
-        else prompt.length
-      cursor = Some(Coord(inp.x + clamped, inp.y))
+      val visible = visibleInput(inp, root.width)
+      drawString(inp.x.value, inp.y.value, visible.text, inp.style)
+      cursor = Some(Coord(inp.x + visible.cursorIndex, inp.y))
     }
 
     RenderFrame(width, height, cells, cursor)
@@ -252,79 +271,79 @@ object AnsiRenderer:
     val maxH              = math.max(prev.map(_.height).getOrElse(0), current.height)
     val maxW              = math.max(prev.map(_.width).getOrElse(0), current.width)
     var changedCellsCount = 0
+    var changedRowsCount  = 0
 
-    def appendChangedRun(row: Int, start: Int, end: Int): Unit =
-      changedCellsCount += (end - start)
-      out.append(moveTo(XCoord(start + 1), YCoord(row + 1)))
-      var cursor = start
-      while cursor < end do
-        val style = cellAt(Some(current), row, cursor).style
-        out.append(reset).append(styleToAnsi(style))
-        var j = cursor
-        while j < end && cellAt(Some(current), row, j).style == style do
-          out.append(cellAt(Some(current), row, j).ch)
-          j += 1
-        cursor = j
-      out.append(reset)
-
-    def appendFullRow(row: Int): Unit =
+    def appendRepaintedRow(row: Int): Unit =
       out.append(moveTo(XCoord(1), YCoord(row + 1)))
-      var cursor = 0
-      while cursor < current.width do
-        val style = cellAt(Some(current), row, cursor).style
-        out.append(reset).append(styleToAnsi(style))
-        var j = cursor
-        while j < current.width && cellAt(Some(current), row, j).style == style do
-          out.append(cellAt(Some(current), row, j).ch)
-          j += 1
-        cursor = j
+      out.append("\u001b[2K")
+      var col = 0
+      while col < current.width do
+        val cell = cellAt(Some(current), row, col)
+        if cell == blankCell then col += 1
+        else
+          out.append(moveTo(XCoord(col + 1), YCoord(row + 1)))
+          var cursor = col
+          while cursor < current.width && cellAt(Some(current), row, cursor) != blankCell do
+            val style = cellAt(Some(current), row, cursor).style
+            out.append(reset).append(styleToAnsi(style))
+            var j = cursor
+            while j < current.width &&
+              cellAt(Some(current), row, j) != blankCell &&
+              cellAt(Some(current), row, j).style == style
+            do
+              out.append(cellAt(Some(current), row, j).ch)
+              j += 1
+            cursor = j
+          col = cursor
       out.append(reset)
 
     var row = 0
     while row < maxH do
-      var col = 0
+      var rowChanged = false
+      var col        = 0
       while col < maxW do
-        if cellAt(prev, row, col) == cellAt(Some(current), row, col) then col += 1
-        else
-          val start = col
-          while col < maxW && cellAt(prev, row, col) != cellAt(Some(current), row, col) do col += 1
-          appendChangedRun(row, start, col)
+        if cellAt(prev, row, col) != cellAt(Some(current), row, col) then
+          rowChanged = true
+          changedCellsCount += 1
+        col += 1
+      if rowChanged then
+        changedRowsCount += 1
+        appendRepaintedRow(row)
       row += 1
 
     val prevCursor = prev.flatMap(_.cursor)
-    if prevCursor != current.cursor then current.cursor.foreach(c => appendFullRow(c.y.value - 1))
     // Place the hardware cursor if content changed, or cursor itself moved.
     // This preserves editing position without emitting output on identical frames.
     if changedCellsCount > 0 || prevCursor != current.cursor then current.cursor.foreach(c => out.append(moveTo(c)))
 
-    DiffResult(out.toString, changedCellsCount)
+    DiffResult(out.toString, changedCellsCount, changedRowsCount)
 
   def renderDiff(prev: Option[RenderFrame], current: RenderFrame): String =
     diff(prev, current).ansi
 
 final case class SimpleANSIRenderer() extends TuiRenderer:
   private var lastFrame: Option[AnsiRenderer.RenderFrame] = None
+  private val FullRepaintRowThreshold                     = 6
 
   override def render(textNode: RootNode, err: Option[TermFlowError]): Unit =
     val currentFrame = AnsiRenderer.buildFrame(textNode)
     val resized      = lastFrame.exists(prev => prev.width != currentFrame.width || prev.height != currentFrame.height)
-    val cursorMoved = lastFrame.flatMap(_.cursor) match
-      case Some(prevCursor) => currentFrame.cursor.exists(_ != prevCursor)
-      case None             => currentFrame.cursor.nonEmpty
-    val forceFullRepaint = textNode.input.nonEmpty && cursorMoved
-    val diffResult =
-      if resized || forceFullRepaint then AnsiRenderer.diff(None, currentFrame)
+    val initialDiff =
+      if resized then AnsiRenderer.diff(None, currentFrame)
       else AnsiRenderer.diff(lastFrame, currentFrame)
+    val shouldFullRepaint =
+      resized || initialDiff.changedRows >= math.min(currentFrame.height, FullRepaintRowThreshold)
+    val diffResult =
+      if shouldFullRepaint then AnsiRenderer.diff(None, currentFrame)
+      else initialDiff
     val ansi =
-      if resized || forceFullRepaint then ANSI.clearScreen + ANSI.homeCursor + diffResult.ansi
+      if shouldFullRepaint then ANSI.clearScreen + ANSI.homeCursor + diffResult.ansi
       else diffResult.ansi
-    val inputAnsi = AnsiRenderer.inputPatch(textNode)
-    val fullAnsi  = ansi + inputAnsi
-    if fullAnsi.nonEmpty then
-      print(fullAnsi)
+    if ansi.nonEmpty then
+      print(ansi)
       Console.out.flush()
     if RenderMetrics.isEnabled then
-      val bytes = fullAnsi.getBytes("UTF-8").length
+      val bytes = ansi.getBytes("UTF-8").length
       RenderMetrics.recordRender(diffResult.changedCells, bytes)
     lastFrame = Some(currentFrame)
 

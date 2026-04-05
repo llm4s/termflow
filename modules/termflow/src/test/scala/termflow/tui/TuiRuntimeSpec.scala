@@ -7,27 +7,43 @@ import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 import java.io.Reader
 import java.io.StringReader
+import java.io.StringWriter
+import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import scala.concurrent.Future
 
 class TuiRuntimeSpec extends AnyFunSuite:
+  private val TestConfig =
+    TermFlowConfig(
+      logging = LoggingConfig(LogPath(Path.of("target", "termflow-test.log"))),
+      metrics = MetricsConfig(enabled = false)
+    )
 
   final private class TestTerminalBackend extends TerminalBackend:
+    val out                     = new StringWriter()
     override def reader: Reader = new StringReader("")
+    override def writer         = out
     override def width: Int     = 80
     override def height: Int    = 24
     override def close(): Unit  = ()
 
   final private class TrackingTerminalBackend extends TerminalBackend:
     val closed                  = new AtomicBoolean(false)
+    val out                     = new StringWriter()
     override def reader: Reader = new StringReader("")
+    override def writer         = out
     override def width: Int     = 80
     override def height: Int    = 24
     override def close(): Unit  = closed.set(true)
 
   final private class NoopRenderer extends TuiRenderer:
-    override def render(textNode: RootNode, err: Option[TermFlowError]): Unit = ()
+    override def render(
+      textNode: RootNode,
+      err: Option[TermFlowError],
+      terminal: TerminalBackend,
+      renderMetrics: RenderMetrics
+    ): Unit = ()
 
   test("TuiRuntime handles FCmd completion and exits"):
     object App extends TuiApp[Int, Unit]:
@@ -51,13 +67,14 @@ class TuiRuntimeSpec extends AnyFunSuite:
       TuiRuntime.run(
         app = App,
         renderer = new NoopRenderer,
-        terminalBackend = new TestTerminalBackend
+        terminalBackend = new TestTerminalBackend,
+        config = TestConfig
       )
 
     succeed
 
   test("LocalCmdBus.cancelAllSubscriptions continues when one cancel throws"):
-    val bus = new LocalCmdBus[Unit](new TestTerminalBackend)
+    val bus = new LocalCmdBus[Unit](new TestTerminalBackend, TestConfig)
 
     val called = new AtomicBoolean(false)
     bus.registerSub(new Sub[Unit]:
@@ -91,16 +108,15 @@ class TuiRuntimeSpec extends AnyFunSuite:
       override def view(model: Int): RootNode             = RootNode(80, 24, children = List.empty, input = None)
       override def toMsg(input: PromptLine): Result[Unit] = Right(())
 
-    val out = new ByteArrayOutputStream()
-    Console.withOut(new PrintStream(out)):
-      TuiRuntime.run(
-        app = App,
-        renderer = new NoopRenderer,
-        terminalBackend = backend
-      )
+    TuiRuntime.run(
+      app = App,
+      renderer = new NoopRenderer,
+      terminalBackend = backend,
+      config = TestConfig
+    )
 
     assert(backend.closed.get())
-    assert(!out.toString("UTF-8").contains("Goodbye from TermFlow!"))
+    assert(!backend.out.toString.contains("Goodbye from TermFlow!"))
 
   test("TuiRuntime executes FCmd failure path and surfaces fallback unexpected message"):
     final class StopRuntime extends RuntimeException("stop-runtime")
@@ -108,7 +124,12 @@ class TuiRuntimeSpec extends AnyFunSuite:
     val seenErr = new AtomicReference[Option[TermFlowError]](None)
 
     val renderer = new TuiRenderer:
-      override def render(textNode: RootNode, err: Option[TermFlowError]): Unit =
+      override def render(
+        textNode: RootNode,
+        err: Option[TermFlowError],
+        terminal: TerminalBackend,
+        renderMetrics: RenderMetrics
+      ): Unit =
         err.foreach { e =>
           seenErr.set(Some(e))
           throw new StopRuntime
@@ -129,14 +150,14 @@ class TuiRuntimeSpec extends AnyFunSuite:
       override def view(model: Int): RootNode             = RootNode(80, 24, children = List.empty, input = None)
       override def toMsg(input: PromptLine): Result[Unit] = Right(())
 
-    val out = new ByteArrayOutputStream()
-    Console.withOut(new PrintStream(out)):
-      intercept[StopRuntime]:
-        TuiRuntime.run(
-          app = App,
-          renderer = renderer,
-          terminalBackend = new TestTerminalBackend
-        )
+    val backend = new TestTerminalBackend
+    intercept[StopRuntime]:
+      TuiRuntime.run(
+        app = App,
+        renderer = renderer,
+        terminalBackend = backend,
+        config = TestConfig
+      )
 
     assert(
       seenErr.get().contains(TermFlowError.Unexpected("RuntimeException", Some(new RuntimeException(null: String))))
@@ -150,7 +171,13 @@ class TuiRuntimeSpec extends AnyFunSuite:
     final class StopRuntime extends RuntimeException("stop-runtime")
 
     val renderer = new TuiRenderer:
-      override def render(textNode: RootNode, err: Option[TermFlowError]): Unit = throw new StopRuntime
+      override def render(
+        textNode: RootNode,
+        err: Option[TermFlowError],
+        terminal: TerminalBackend,
+        renderMetrics: RenderMetrics
+      ): Unit =
+        throw new StopRuntime
 
     object App extends TuiApp[Int, Unit]:
       override def init(ctx: RuntimeCtx[Unit]): Tui[Int, Unit] = Tui(model = 0, cmd = Cmd.NoCmd)
@@ -158,15 +185,15 @@ class TuiRuntimeSpec extends AnyFunSuite:
       override def view(model: Int): RootNode             = RootNode(80, 24, children = List.empty, input = None)
       override def toMsg(input: PromptLine): Result[Unit] = Right(())
 
-    val out = new ByteArrayOutputStream()
-    Console.withOut(new PrintStream(out)):
-      intercept[StopRuntime]:
-        TuiRuntime.run(
-          app = App,
-          renderer = renderer,
-          terminalBackend = new TestTerminalBackend
-        )
+    val backend = new TestTerminalBackend
+    intercept[StopRuntime]:
+      TuiRuntime.run(
+        app = App,
+        renderer = renderer,
+        terminalBackend = backend,
+        config = TestConfig
+      )
 
-    val printed = out.toString("UTF-8")
+    val printed = backend.out.toString
     assert(printed.contains(ANSI.showCursor))
     assert(printed.contains(ANSI.exitAltBuffer))

@@ -1,11 +1,8 @@
 package termflow.tui
 
-import org.jline.terminal.Terminal
-import org.jline.terminal.TerminalBuilder
 import termflow.tui.AsciiControl.*
 import termflow.tui.KeyDecoder.InputKey
 
-import java.io.InputStreamReader
 import java.io.Reader
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.LinkedBlockingQueue
@@ -24,18 +21,6 @@ trait TerminalKeySource:
 
 object ConsoleKeyPressSource:
   private val EndOfStream = Int.MinValue
-
-  /** Default JLine-based reader, mainly used in tests and tools. */
-  def JLineReader(): Reader =
-    val terminal: Terminal =
-      TerminalBuilder
-        .builder()
-        .system(true)
-        .jna(true)
-        .build()
-    terminal.enterRawMode()
-    val input = terminal.input()
-    new InputStreamReader(input)
 
   @tailrec
   private def processKey(c: Int, queueBridge: BlockingQueue[Integer], buffer: List[Int]): InputKey =
@@ -119,7 +104,7 @@ object ConsoleKeyPressSource:
         InputKey.Unknown(c.toString)
 
   /** Create a `TerminalKeySource` from a reader. */
-  def apply(reader: Reader = JLineReader()): TerminalKeySource =
+  def apply(reader: Reader): TerminalKeySource =
     val bridge = new LinkedBlockingQueue[Integer]()
 
     // Producer: read raw ints from the reader

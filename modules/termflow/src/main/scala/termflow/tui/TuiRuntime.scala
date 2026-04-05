@@ -1,7 +1,5 @@
 package termflow.tui
 
-import termflow.tui.ACSUtils.*
-
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -15,7 +13,12 @@ import scala.util.Success
 trait TuiRenderer:
 
   /** Render the root node and optionally display an error. */
-  def render(textNode: RootNode, err: Option[TermFlowError]): Unit
+  def render(
+    textNode: RootNode,
+    err: Option[TermFlowError],
+    terminal: TerminalBackend,
+    renderMetrics: RenderMetrics
+  ): Unit
 
 /**
  * Runtime context providing access to terminal and command publishing.
@@ -33,6 +36,9 @@ trait RuntimeCtx[Msg] extends EventSink[Msg]:
   /** Access the terminal backend for dimensions and reader. */
   def terminal: TerminalBackend
 
+  /** Access the resolved runtime configuration. */
+  def config: TermFlowConfig
+
   /**
    * Register a subscription for automatic cleanup on exit.
    * Returns the subscription for chaining.
@@ -49,7 +55,7 @@ trait CmdBus[Msg] extends RuntimeCtx[Msg] with CmdConsumer[Msg]:
   def cancelAllSubscriptions(): Unit
 
 /** Default in-memory command bus backed by a LinkedBlockingQueue. */
-final class LocalCmdBus[Msg](val terminal: TerminalBackend) extends CmdBus[Msg]:
+final class LocalCmdBus[Msg](val terminal: TerminalBackend, val config: TermFlowConfig) extends CmdBus[Msg]:
   private val queue                                   = new LinkedBlockingQueue[Cmd[Msg]]()
   private val subscriptions: java.util.List[Sub[Msg]] = new java.util.concurrent.CopyOnWriteArrayList[Sub[Msg]]()
   override def publish(cmd: Cmd[Msg]): Unit           = queue.put(cmd)
@@ -86,15 +92,35 @@ object TuiRuntime:
     renderer: TuiRenderer = SimpleANSIRenderer(),
     terminalBackend: TerminalBackend = new JLineTerminalBackend()
   ): Unit =
+    TermFlowConfig.load() match
+      case Success(config) =>
+        run(
+          app = app,
+          renderer = renderer,
+          terminalBackend = terminalBackend,
+          config = config
+        )
+      case Failure(err) =>
+        terminalBackend.write(s"TermFlow startup failed: ${unexpectedMessage(err)}${System.lineSeparator()}")
+        terminalBackend.flush()
+        terminalBackend.close()
 
-    val bus: CmdBus[Msg] = new LocalCmdBus[Msg](terminalBackend)
+  def run[Model, Msg](
+    app: TuiApp[Model, Msg],
+    renderer: TuiRenderer,
+    terminalBackend: TerminalBackend,
+    config: TermFlowConfig
+  ): Unit =
+    val bus: CmdBus[Msg] = new LocalCmdBus[Msg](terminalBackend, config)
     val restored         = new AtomicBoolean(false)
+    val frameworkLog     = FrameworkLog(config.logging)
+    val renderMetrics    = new RenderMetrics(config.metrics, frameworkLog)
 
     def restoreTerminalState(): Unit =
       if restored.compareAndSet(false, true) then
-        print(ANSI.showCursor)
-        EnterNormalBuffer()
-        Console.out.flush()
+        terminalBackend.write(ANSI.showCursor)
+        terminalBackend.write(ANSI.exitAltBuffer)
+        terminalBackend.flush()
         // Close backend after restoring cursor/buffer state.
         terminalBackend.close()
 
@@ -104,10 +130,10 @@ object TuiRuntime:
     )
 
     // Enter alternate buffer and set up terminal
-    EnterAlternateBuffer()
-    ClearScreen()
-    print(ANSI.showCursor)
-    Console.out.flush()
+    terminalBackend.write(ANSI.enterAltBuffer)
+    terminalBackend.write(ANSI.clearScreen)
+    terminalBackend.write(ANSI.showCursor)
+    terminalBackend.flush()
     Runtime.getRuntime.addShutdownHook(shutdownHook)
 
     try
@@ -179,11 +205,11 @@ object TuiRuntime:
                   processCommand(nextCmd)
                   waitConsumed += 1
                 case None => ()
-            RenderMetrics.recordCoalescing(consumed + waitConsumed)
-          else RenderMetrics.recordCoalescing(consumed)
+            renderMetrics.recordCoalescing(consumed + waitConsumed)
+          else renderMetrics.recordCoalescing(consumed)
 
           if !shouldExit then
-            renderer.render(app.view(model), pendingErr)
+            renderer.render(app.view(model), pendingErr, terminalBackend, renderMetrics)
             pendingErr = None
             shouldRender = false
             lastRenderAtNanos = System.nanoTime()
@@ -194,6 +220,6 @@ object TuiRuntime:
       catch {
         case _: IllegalStateException => ()
       }
-      RenderMetrics.printSummary()
+      renderMetrics.printSummary()
       // Always restore terminal state, even on crash.
       restoreTerminalState()

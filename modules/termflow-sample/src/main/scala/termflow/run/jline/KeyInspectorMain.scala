@@ -2,11 +2,13 @@ package termflow.run.jline
 
 import termflow.tui.ConsoleKeyPressSource
 import termflow.tui.InputRead
+import termflow.tui.JLineTerminalBackend
 import termflow.tui.KeyDecoder
 
 object KeyInspectorMain:
   def main(args: Array[String]): Unit =
-    val source  = ConsoleKeyPressSource()
+    val backend = new JLineTerminalBackend()
+    val source  = ConsoleKeyPressSource(backend.reader)
     var running = true
     var history = List.empty[String]
 
@@ -40,4 +42,5 @@ object KeyInspectorMain:
       println("Recent keys:")
       history.foreach(k => println(s"  $k"))
 
+    backend.close()
     println("Exiting KeyInspector.")

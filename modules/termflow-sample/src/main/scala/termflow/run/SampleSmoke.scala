@@ -4,18 +4,27 @@ import termflow.tui.*
 
 import java.io.Reader
 import java.io.StringReader
+import java.io.StringWriter
+import java.nio.file.Path
 
 /** Non-interactive smoke checks for sample app wiring. */
 object SampleSmoke:
+  private val DummyConfig =
+    TermFlowConfig(
+      logging = LoggingConfig(LogPath(Path.of("target", "termflow-smoke.log"))),
+      metrics = MetricsConfig(enabled = false)
+    )
 
   private object DummyTerminal extends TerminalBackend:
     override def reader: Reader = new StringReader("")
+    override def writer         = new StringWriter()
     override def width: Int     = 80
     override def height: Int    = 24
     override def close(): Unit  = ()
 
   private def dummyCtx[Msg]: RuntimeCtx[Msg] = new RuntimeCtx[Msg]:
     override def terminal: TerminalBackend            = DummyTerminal
+    override def config: TermFlowConfig               = DummyConfig
     override def publish(cmd: Cmd[Msg]): Unit         = ()
     override def registerSub(sub: Sub[Msg]): Sub[Msg] = sub
 
@@ -32,4 +41,5 @@ object SampleSmoke:
     smokeApp("clock", termflow.apps.clock.DigitalClock.App)
     smokeApp("stress", termflow.apps.stress.RenderStressApp.App)
     smokeApp("tabs", termflow.apps.tabs.TabsDemoApp.App)
+    smokeApp("input-line", termflow.apps.input.InputLineReproApp.App)
     Console.out.println("Sample smoke checks passed.")

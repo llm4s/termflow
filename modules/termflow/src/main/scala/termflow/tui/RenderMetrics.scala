@@ -2,10 +2,8 @@ package termflow.tui
 
 import java.util.concurrent.atomic.AtomicLong
 
-private[tui] object RenderMetrics:
-  private val enabled: Boolean =
-    sys.env.get("TERMFLOW_RENDER_METRICS").exists(v => v.nonEmpty && v != "0" && !v.equalsIgnoreCase("false"))
-
+final class RenderMetrics private[tui] (config: MetricsConfig, logger: FrameworkLog):
+  private val enabled         = config.enabled
   private val framesRendered  = new AtomicLong(0L)
   private val changedCells    = new AtomicLong(0L)
   private val bytesEmitted    = new AtomicLong(0L)
@@ -27,7 +25,7 @@ private[tui] object RenderMetrics:
 
   def printSummary(): Unit =
     if enabled then
-      Console.err.println(
+      val _ = logger.info(
         s"[termflow-metrics] frames=${framesRendered.get()} changedCells=${changedCells.get()} " +
           s"bytes=${bytesEmitted.get()} coalescedFrames=${coalescedFrames.get()} coalescedCommands=${coalescedCmds.get()}"
       )

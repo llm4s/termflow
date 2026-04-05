@@ -1,5 +1,7 @@
 package termflow.run
 
+import termflow.tui.JLineTerminalBackend
+import termflow.tui.SimpleANSIRenderer
 import termflow.tui.TuiRuntime
 
 /** Entry points for the sample apps. */
@@ -17,7 +19,15 @@ object TermFlowMain:
       case Some("stress")                   => TuiRuntime.run(termflow.apps.stress.RenderStressApp.App)
       case Some("sine") | Some("sine-wave") => TuiRuntime.run(termflow.apps.stress.SineWaveApp.App)
       case Some("tabs") | Some("tabs-demo") => TuiRuntime.run(termflow.apps.tabs.TabsDemoApp.App)
-      case Some(_)                          => SampleHubMain.main(Array.empty)
+      case Some("metrics-demo") | Some("diag") =>
+        TuiRuntime.run(
+          termflow.apps.diagnostics.LoggingMetricsDemoApp.App,
+          SimpleANSIRenderer(),
+          new JLineTerminalBackend(),
+          termflow.apps.diagnostics.LoggingMetricsDemoApp.Config
+        )
+      case Some("input-line") | Some("input") => TuiRuntime.run(termflow.apps.input.InputLineReproApp.App)
+      case Some(_)                            => SampleHubMain.main(Array.empty)
 
   def syncCounterMain(args: Array[String]): Unit =
     val _ = args
@@ -54,6 +64,19 @@ object TermFlowMain:
   def tabsDemoMain(args: Array[String]): Unit =
     val _ = args
     TuiRuntime.run(termflow.apps.tabs.TabsDemoApp.App)
+
+  def loggingMetricsDemoMain(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(
+      termflow.apps.diagnostics.LoggingMetricsDemoApp.App,
+      SimpleANSIRenderer(),
+      new JLineTerminalBackend(),
+      termflow.apps.diagnostics.LoggingMetricsDemoApp.Config
+    )
+
+  def inputLineReproMain(args: Array[String]): Unit =
+    val _ = args
+    TuiRuntime.run(termflow.apps.input.InputLineReproApp.App)
 
   def sampleHubMain(args: Array[String]): Unit =
     val _ = args

@@ -65,20 +65,24 @@ object AnsiRenderer:
     b.append(colorToAnsi(s.bg, isBg = true))
     b.toString
 
-  def clear(): Unit =
-    print(ANSI.clearScreen)
+  def clearPatch: String =
+    ANSI.clearScreen
 
-  def render(root: RootNode): Unit =
+  def clear()(using terminal: TerminalBackend): Unit =
+    terminal.write(clearPatch)
+
+  def renderPatch(root: RootNode): String =
     val out = new StringBuilder
     root.children.foreach(renderNode(_, out))
     root.input.foreach(renderInput(_, root.width, out))
-    print(out.toString)
+    out.toString
+
+  def render(root: RootNode)(using terminal: TerminalBackend): Unit =
+    terminal.write(renderPatch(root))
 
   /** Re-render only the input, leaving existing children intact. */
-  def renderInputOnly(root: RootNode): Unit =
-    val out = new StringBuilder
-    root.input.foreach(renderInput(_, root.width, out))
-    print(out.toString)
+  def renderInputOnly(root: RootNode)(using terminal: TerminalBackend): Unit =
+    terminal.write(inputPatch(root))
 
   /** Build ANSI patch for input-only repaint. */
   def inputPatch(root: RootNode): String =
@@ -126,8 +130,9 @@ object AnsiRenderer:
     val suffixStart =
       if availableWidth == 0 then 0
       else
-        val maxStart     = math.max(0, suffix.length - availableWidth)
-        val desiredStart = suffixCursor - availableWidth + 1
+        val maxStart              = math.max(0, suffix.length - availableWidth)
+        val preferredRightContext = math.min(2, math.max(0, availableWidth - 1))
+        val desiredStart          = suffixCursor - availableWidth + preferredRightContext + 1
         math.max(0, math.min(maxStart, desiredStart))
     val visibleSuffix =
       if availableWidth == 0 then ""
@@ -143,7 +148,6 @@ object AnsiRenderer:
       if inp.x.value + width <= rootWidth then width
       else width - 1
     val cursorIndex = math.max(0, math.min(cursorLimit, unclampedCursorIndex))
-
     VisibleInput(visibleText, cursorIndex, width)
 
   private def renderInput(inp: InputNode, rootWidth: Int, out: StringBuilder): Unit =
@@ -325,7 +329,12 @@ final case class SimpleANSIRenderer() extends TuiRenderer:
   private var lastFrame: Option[AnsiRenderer.RenderFrame] = None
   private val FullRepaintRowThreshold                     = 6
 
-  override def render(textNode: RootNode, err: Option[TermFlowError]): Unit =
+  override def render(
+    textNode: RootNode,
+    err: Option[TermFlowError],
+    terminal: TerminalBackend,
+    renderMetrics: RenderMetrics
+  ): Unit =
     val currentFrame = AnsiRenderer.buildFrame(textNode)
     val resized      = lastFrame.exists(prev => prev.width != currentFrame.width || prev.height != currentFrame.height)
     val initialDiff =
@@ -340,20 +349,9 @@ final case class SimpleANSIRenderer() extends TuiRenderer:
       if shouldFullRepaint then ANSI.clearScreen + ANSI.homeCursor + diffResult.ansi
       else diffResult.ansi
     if ansi.nonEmpty then
-      print(ansi)
-      Console.out.flush()
-    if RenderMetrics.isEnabled then
+      terminal.write(ansi)
+      terminal.flush()
+    if renderMetrics.isEnabled then
       val bytes = ansi.getBytes("UTF-8").length
-      RenderMetrics.recordRender(diffResult.changedCells, bytes)
+      renderMetrics.recordRender(diffResult.changedCells, bytes)
     lastFrame = Some(currentFrame)
-
-object ACSUtils:
-  def EnterAlternateBuffer(): Unit = print("\u001b[?1049h")
-  @deprecated("Use EnterAlternateBuffer", "0.1.0")
-  def EnterAlternatBuffer(): Unit = EnterAlternateBuffer()
-  def EnterNormalBuffer(): Unit   = print("\u001b[?1049l")
-  def SaveCursor(): Unit          = print("\u001b7")
-  def RestoreCursor(): Unit       = print("\u001b8")
-  def ClearCurToEL(): Unit        = print("\u001b0K")
-  def ClearCurrentLine(): Unit    = print("\u001b[2K")
-  def ClearScreen(): Unit         = print("\u001b[2J")

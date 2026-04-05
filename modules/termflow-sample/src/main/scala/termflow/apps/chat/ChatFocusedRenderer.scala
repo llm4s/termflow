@@ -11,8 +11,13 @@ import termflow.tui.*
 final case class ChatFocusedRenderer() extends TuiRenderer:
   private var lastFrame: Option[AnsiRenderer.RenderFrame] = None
 
-  override def render(textNode: RootNode, err: Option[TermFlowError]): Unit =
-    val _            = err
+  override def render(
+    textNode: RootNode,
+    err: Option[TermFlowError],
+    terminal: TerminalBackend,
+    renderMetrics: RenderMetrics
+  ): Unit =
+    val _            = (err, renderMetrics)
     val currentFrame = AnsiRenderer.buildFrame(textNode)
     val resized      = lastFrame.exists(prev => prev.width != currentFrame.width || prev.height != currentFrame.height)
     val inputOnly =
@@ -30,8 +35,8 @@ final case class ChatFocusedRenderer() extends TuiRenderer:
         ansi
 
     if fullAnsi.nonEmpty then
-      print(fullAnsi)
-      Console.out.flush()
+      terminal.write(fullAnsi)
+      terminal.flush()
 
     lastFrame = Some(currentFrame)
 

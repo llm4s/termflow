@@ -109,6 +109,20 @@ class HistorySpec extends AnyFunSuite:
     Files.deleteIfExists(parent)
     Files.deleteIfExists(tmp)
 
+  test("InMemoryHistoryStore respects maxEntries and trims blank input"):
+    val store = InMemoryHistoryStore(initialEntries = Vector("one", "two"), maxEntries = 2)
+
+    assert(store.load() == Vector("one", "two"))
+
+    store.append("   ")
+    assert(store.load() == Vector("one", "two"))
+
+    store.append("three")
+    assert(store.load() == Vector("two", "three"))
+
+    store.append("  four  ")
+    assert(store.load() == Vector("three", "four"))
+
   test("Ctrl+C exits without appending history"):
     val store = new StubStore(Vector("one"))
     val start = PromptHistory.initial(store)

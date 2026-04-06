@@ -1,8 +1,6 @@
-package termflow.apps.chat
+package termflow.tui
 
-import termflow.tui.HistoryStore
-
-final private case class InMemoryHistoryStore(
+final case class InMemoryHistoryStore(
   initialEntries: Vector[String] = Vector.empty,
   maxEntries: Int = 200
 ) extends HistoryStore:

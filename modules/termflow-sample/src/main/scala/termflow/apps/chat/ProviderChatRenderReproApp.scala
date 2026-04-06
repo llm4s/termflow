@@ -39,7 +39,7 @@ object ProviderChatRenderReproApp:
       Model(
         terminalWidth = ctx.terminal.width,
         terminalHeight = ctx.terminal.height,
-        prompt = PromptHistory.initial(InMemoryHistoryStore(maxEntries = 100)),
+        prompt = PromptHistory.initial(termflow.tui.InMemoryHistoryStore(maxEntries = 100)),
         entries = seedEntries,
         seedRound = 0,
         status = "Type text to append a fake turn. Commands: seed, clear, help, quit."

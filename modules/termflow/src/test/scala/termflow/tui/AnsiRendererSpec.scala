@@ -2,15 +2,79 @@ package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
 
-import java.io.ByteArrayOutputStream
-import java.io.PrintStream
+import java.io.StringReader
+import java.io.StringWriter
+import java.nio.file.Path
 
 class AnsiRendererSpec extends AnyFunSuite:
+  private def testRenderMetrics(): RenderMetrics =
+    new RenderMetrics(
+      config = MetricsConfig(enabled = false),
+      logger = FrameworkLog(LoggingConfig(LogPath(Path.of("target", "termflow-renderer-test.log"))))
+    )
 
-  private def captureOut(body: => Unit): String =
-    val buf = new ByteArrayOutputStream()
-    Console.withOut(new PrintStream(buf))(body)
-    buf.toString("UTF-8")
+  private def captureRendererOut(renderer: TuiRenderer, root: RootNode, err: Option[TermFlowError] = None): String =
+    val out = new StringWriter()
+    val backend = new TerminalBackend:
+      override def reader        = new StringReader("")
+      override def writer        = out
+      override def width: Int    = root.width
+      override def height: Int   = root.height
+      override def close(): Unit = ()
+    renderer.render(root, err, backend, testRenderMetrics())
+    out.toString
+
+  private def captureAnsiRendererOut(root: RootNode, inputOnly: Boolean = false): String =
+    val out = new StringWriter()
+    val backend = new TerminalBackend:
+      override def reader        = new StringReader("")
+      override def writer        = out
+      override def width: Int    = root.width
+      override def height: Int   = root.height
+      override def close(): Unit = ()
+    given TerminalBackend = backend
+    if inputOnly then AnsiRenderer.renderInputOnly(root)
+    else AnsiRenderer.render(root)
+    out.toString
+
+  final private class VirtualScreen(width: Int, height: Int):
+    private val rows   = Array.fill(height, width)(' ')
+    private var cursor = Coord(XCoord(1), YCoord(1))
+
+    def rowText(row: Int): String =
+      rows(row - 1).mkString
+
+    def applyAnsi(ansi: String): Unit =
+      var i = 0
+      while i < ansi.length do
+        if ansi.charAt(i) == '\u001b' && i + 1 < ansi.length && ansi.charAt(i + 1) == '[' then
+          val commandStart = i + 2
+          var j            = commandStart
+          while j < ansi.length && !ansi.charAt(j).isLetter do j += 1
+          if j < ansi.length then
+            val params  = ansi.substring(commandStart, j)
+            val command = ansi.charAt(j)
+            command match
+              case 'H' =>
+                val parts = params.split(";", -1)
+                val row   = parts.headOption.filter(_.nonEmpty).map(_.toInt).getOrElse(1)
+                val col   = parts.lift(1).filter(_.nonEmpty).map(_.toInt).getOrElse(1)
+                cursor = Coord(XCoord(col), YCoord(row))
+              case 'K' if params == "2" =>
+                java.util.Arrays.fill(rows(cursor.y.value - 1), ' ')
+                cursor = Coord(XCoord(1), cursor.y)
+              case 'm' =>
+                ()
+              case _ =>
+                ()
+            i = j + 1
+          else i += 1
+        else
+          val x = cursor.x.value - 1
+          val y = cursor.y.value - 1
+          if y >= 0 && y < height && x >= 0 && x < width then rows(y)(x) = ansi.charAt(i)
+          cursor = Coord(cursor.x + 1, cursor.y)
+          i += 1
 
   test("moveTo generates correct ANSI escape sequence"):
     assert(AnsiRenderer.moveTo(XCoord(1), YCoord(1)) == "\u001b[1;1H")
@@ -90,7 +154,7 @@ class AnsiRendererSpec extends AnyFunSuite:
       input = Some(InputNode(XCoord(1), YCoord(4), prompt = "ab", style = Style(fg = Color.Red), cursor = 1))
     )
 
-    val out = captureOut(AnsiRenderer.render(root))
+    val out = captureAnsiRendererOut(root)
     assert(out.contains("┌"))
     assert(out.contains("└"))
     assert(out.contains("\u001b[1m")) // bold style for text
@@ -115,7 +179,7 @@ class AnsiRendererSpec extends AnyFunSuite:
       )
     )
 
-    val out = captureOut(AnsiRenderer.renderInputOnly(root))
+    val out = captureAnsiRendererOut(root, inputOnly = true)
     assert(out.contains(AnsiRenderer.moveTo(XCoord(1), YCoord(5)))) // clear starts at col 1
     assert(out.contains("\u001b[2K"))
     assert(out.contains(" "))                                        // padded trailing area
@@ -139,7 +203,7 @@ class AnsiRendererSpec extends AnyFunSuite:
       )
     )
 
-    val out = captureOut(AnsiRenderer.renderInputOnly(root))
+    val out = captureAnsiRendererOut(root, inputOnly = true)
     assert(out.contains(">> def"))
     assert(out.contains(AnsiRenderer.moveTo(XCoord(8), YCoord(5))))
 
@@ -160,7 +224,7 @@ class AnsiRendererSpec extends AnyFunSuite:
       )
     )
 
-    val out = captureOut(AnsiRenderer.renderInputOnly(root))
+    val out = captureAnsiRendererOut(root, inputOnly = true)
     assert(out.contains("def"))
     assert(out.contains(AnsiRenderer.moveTo(XCoord(12), YCoord(5))))
 
@@ -268,6 +332,28 @@ class AnsiRendererSpec extends AnyFunSuite:
     val ansi = AnsiRenderer.renderDiff(Some(AnsiRenderer.buildFrame(prev)), AnsiRenderer.buildFrame(curr))
     assert(ansi.contains(AnsiRenderer.moveTo(XCoord(10), YCoord(4))))
     assert(!ansi.contains("\u001b[2K"))
+
+  test("moving left inside a scrolled input keeps the trailing suffix visible"):
+    val renderer = SimpleANSIRenderer()
+    val first = RootNode(
+      width = 6,
+      height = 3,
+      children = Nil,
+      input = Some(InputNode(XCoord(1), YCoord(2), "abcdefghi", Style(), cursor = 9, lineWidth = 6))
+    )
+    val second = RootNode(
+      width = 6,
+      height = 3,
+      children = Nil,
+      input = Some(InputNode(XCoord(1), YCoord(2), "abcdefghi", Style(), cursor = 6, lineWidth = 6))
+    )
+
+    val screen = new VirtualScreen(width = 6, height = 3)
+
+    screen.applyAnsi(captureRendererOut(renderer, first))
+    screen.applyAnsi(captureRendererOut(renderer, second))
+
+    assert(screen.rowText(2).contains("ghi"))
 
   test("renderDiff clears removed rows when current frame shrinks"):
     val prev = RootNode(
@@ -381,10 +467,7 @@ class AnsiRendererSpec extends AnyFunSuite:
       input = None
     )
 
-    val out = captureOut {
-      renderer.render(first, None)
-      renderer.render(second, None)
-    }
+    val out = captureRendererOut(renderer, first) + captureRendererOut(renderer, second)
     assert(out.contains(ANSI.clearScreen))
     assert(out.contains(ANSI.homeCursor))
 
@@ -403,12 +486,8 @@ class AnsiRendererSpec extends AnyFunSuite:
       input = Some(InputNode(XCoord(2), YCoord(4), ">> hello", Style(), cursor = 5, lineWidth = 10, prefixLength = 3))
     )
 
-    captureOut {
-      renderer.render(first, None)
-    }
-    val secondOut = captureOut {
-      renderer.render(second, None)
-    }
+    captureRendererOut(renderer, first)
+    val secondOut = captureRendererOut(renderer, second)
     assert(secondOut.nonEmpty)
     assert(!secondOut.contains(ANSI.clearScreen))
     assert(!secondOut.contains(ANSI.homeCursor))
@@ -428,11 +507,7 @@ class AnsiRendererSpec extends AnyFunSuite:
       input = None
     )
 
-    captureOut {
-      renderer.render(first, None)
-    }
-    val secondOut = captureOut {
-      renderer.render(second, None)
-    }
+    captureRendererOut(renderer, first)
+    val secondOut = captureRendererOut(renderer, second)
     assert(secondOut.contains(ANSI.clearScreen))
     assert(secondOut.contains(ANSI.homeCursor))

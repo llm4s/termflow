@@ -5,6 +5,7 @@ import org.jline.terminal.TerminalBuilder
 
 import java.io.InputStreamReader
 import java.io.Reader
+import java.io.Writer
 
 /** Basic read-only terminal information. */
 trait TerminalInfo:
@@ -14,6 +15,9 @@ trait TerminalInfo:
 /** Backend that provides terminal dimensions and a reader for raw key input. */
 trait TerminalBackend extends TerminalInfo:
   def reader: Reader
+  def writer: Writer
+  def write(text: String): Unit = writer.write(text)
+  def flush(): Unit             = writer.flush()
   def close(): Unit
 
 /** Default JLine-backed terminal implementation. */
@@ -32,6 +36,9 @@ final class JLineTerminalBackend extends TerminalBackend:
 
   override def reader: Reader =
     new InputStreamReader(input)
+
+  override def writer: Writer =
+    terminal.writer()
 
   override def width: Int  = terminal.getWidth
   override def height: Int = terminal.getHeight

@@ -1,5 +1,6 @@
 import sbt._
 import Keys._
+import _root_.scalafix.sbt.{BuildInfo => ScalafixBuildInfo}
 
 val scala3   = Versions.scala3
 val fixedLocalVersion = "0.1.1-SNAPSHOT"
@@ -66,6 +67,16 @@ lazy val commonSettings = Seq(
   Test / fork := true
 )
 
+lazy val scalafixRuleDependencies = Def.setting {
+  Seq(
+    ("ch.epfl.scala" %% "scalafix-core" % ScalafixBuildInfo.scalafixVersion)
+      .cross(CrossVersion.for3Use2_13) % ScalafixConfig
+  ) ++
+    (if (scalaBinaryVersion.value == "3")
+       Seq("org.scala-lang" %% "scala3-library" % scalaVersion.value % ScalafixConfig)
+     else Nil)
+}
+
 lazy val root = (project in file("."))
   .aggregate(termflow, termflowSample)
   .settings(
@@ -78,8 +89,12 @@ lazy val termflow = (project in file("modules/termflow"))
     name := "termflow",
     description := "A small, functional terminal UI (TUI) framework for Scala",
     commonSettings,
+    scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix-termflow.conf"),
+    libraryDependencies ++= scalafixRuleDependencies.value,
     libraryDependencies ++= Seq(
       Deps.jline,
+      Deps.pureconfigCore,
+      Deps.pureconfigGenericScala3,
       Deps.scalatest % Test
     )
   )

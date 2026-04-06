@@ -2,12 +2,14 @@ package termflow.run.jline
 
 import termflow.tui.ConsoleKeyPressSource
 import termflow.tui.InputRead
+import termflow.tui.JLineTerminalBackend
 import termflow.tui.KeyDecoder
 import termflow.tui.Prompt
 
 object LineEditorInspectorMain:
   def main(args: Array[String]): Unit =
-    val source  = ConsoleKeyPressSource()
+    val backend = new JLineTerminalBackend()
+    val source  = ConsoleKeyPressSource(backend.reader)
     var state   = Prompt.State()
     var running = true
 
@@ -76,5 +78,6 @@ object LineEditorInspectorMain:
               moveTo(1, 5)
               print(s"LAST   : $other")
 
-      clearScreen()
-      println("Exiting LineEditor Inspector.")
+    backend.close()
+    clearScreen()
+    println("Exiting LineEditor Inspector.")

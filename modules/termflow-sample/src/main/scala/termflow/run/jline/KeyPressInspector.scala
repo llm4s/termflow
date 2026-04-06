@@ -1,15 +1,17 @@
 package termflow.run.jline
 
-import termflow.tui.ACSUtils
+import termflow.tui.ANSI
 import termflow.tui.ConsoleKeyPressSource
 import termflow.tui.InputRead
+import termflow.tui.JLineTerminalBackend
 
-object KeyPressInspectorMain:
+object KeyPressInspector:
   def main(args: Array[String]): Unit =
     val _         = args
-    val inputKeys = ConsoleKeyPressSource()
+    val backend   = new JLineTerminalBackend()
+    val inputKeys = ConsoleKeyPressSource(backend.reader)
     var running   = true
-    ACSUtils.EnterAlternateBuffer()
+    print(ANSI.enterAltBuffer)
     println("🧭  Raw Input Inspector")
     println("Press any key to see its details, Ctrl+C or Ctrl+D to exit.\n")
 
@@ -21,4 +23,5 @@ object KeyPressInspectorMain:
           err.printStackTrace()
         case InputRead.End =>
           running = false
-    ACSUtils.EnterNormalBuffer()
+    backend.close()
+    print(ANSI.exitAltBuffer)

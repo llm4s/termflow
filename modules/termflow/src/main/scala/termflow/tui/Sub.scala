@@ -46,10 +46,7 @@ object Sub:
       private val scheduler        = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
       private val handle =
         scheduler.scheduleAtFixedRate(
-          new Runnable {
-            override def run(): Unit =
-              sink.publish(Cmd.GCmd[Msg](msg()))
-          },
+          () => sink.publish(Cmd.GCmd[Msg](msg())),
           0L,
           millis,
           TimeUnit.MILLISECONDS
@@ -78,26 +75,25 @@ object Sub:
     val sub = new Sub[Msg]:
       @volatile private var active = true
 
-      private val thread = ThreadUtils.startThread(new Runnable {
-        override def run(): Unit =
-          try
-            while active do
-              source.next() match
-                case InputRead.Key(key) =>
-                  if active then sink.publish(Cmd.GCmd(msg(key)))
-                case InputRead.End =>
-                  active = false
-                case InputRead.Failed(_: InterruptedException) =>
-                  active = false
-                case InputRead.Failed(err) =>
-                  if active then sink.publish(Cmd.GCmd(onError(err)))
-          catch {
-            case _: InterruptedException =>
-              ()
-            case e: Throwable =>
-              if active then sink.publish(Cmd.GCmd(onError(e)))
-          }
-      })
+      private val thread = ThreadUtils.startThread(() =>
+        try
+          while active do
+            source.next() match
+              case InputRead.Key(key) =>
+                if active then sink.publish(Cmd.GCmd(msg(key)))
+              case InputRead.End =>
+                active = false
+              case InputRead.Failed(_: InterruptedException) =>
+                active = false
+              case InputRead.Failed(err) =>
+                if active then sink.publish(Cmd.GCmd(onError(err)))
+        catch {
+          case _: InterruptedException =>
+            ()
+          case e: Throwable =>
+            if active then sink.publish(Cmd.GCmd(onError(e)))
+        }
+      )
 
       override def isActive: Boolean = active
 
@@ -128,18 +124,14 @@ object Sub:
 
       private val handle =
         scheduler.scheduleAtFixedRate(
-          new Runnable {
-            override def run(): Unit =
-              if active then {
-                val w = ctx.terminal.width
-                val h = ctx.terminal.height
-                if w != w0 || h != h0 then {
-                  w0 = w
-                  h0 = h
-                  ctx.publish(Cmd.GCmd(mkMsg(w, h)))
-                }
-              }
-          },
+          () =>
+            if active then
+              val w = ctx.terminal.width
+              val h = ctx.terminal.height
+              if w != w0 || h != h0 then
+                w0 = w
+                h0 = h
+                ctx.publish(Cmd.GCmd(mkMsg(w, h))),
           0L,
           millis,
           TimeUnit.MILLISECONDS
@@ -158,12 +150,12 @@ object Sub:
         }
     ctx.registerSub(sub)
 
-  /** Create an InputKey subscription with a console reader (JLine-based by default). */
+  /** Create an InputKey subscription from an explicit reader. */
   def InputKeyWithReader[Msg](
     msg: InputKey => Msg,
     onError: Throwable => Msg,
     sink: EventSink[Msg],
-    reader: Reader = ConsoleKeyPressSource.JLineReader()
+    reader: Reader
   ): Sub[Msg] =
     InputKeyFromSource(ConsoleKeyPressSource(reader), msg, onError, sink)
 
@@ -193,12 +185,10 @@ object RandomUtil:
     def asEventSource(sink: EventSink[Msg]): Sub[Msg] =
       val scheduler = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
       scheduler.scheduleAtFixedRate(
-        new Runnable {
-          override def run(): Unit = {
-            val value = next()
-            sink.publish(Cmd.GCmd[Msg](toMsg(value)))
-          }
-        },
+        () =>
+          val value = next()
+          sink.publish(Cmd.GCmd[Msg](toMsg(value)))
+        ,
         0L,
         period,
         TimeUnit.MILLISECONDS

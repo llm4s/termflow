@@ -1,25 +1,53 @@
 package termflow.tui
 
-/** X coordinate wrapper (1-based column). */
+/**
+ * 1-based column coordinate.
+ *
+ * Opaque over `Int` to prevent accidental mixing with row coordinates. The
+ * `TuiPrelude` package provides `2.x` syntax sugar for constructing these
+ * at call sites.
+ */
 opaque type XCoord = Int
 object XCoord:
+
+  /** Construct an `XCoord` from a raw 1-based column. */
   def apply(value: Int): XCoord = value
 
   extension (x: XCoord)
-    def value: Int         = x
+
+    /** Unwrap to the raw 1-based column. */
+    def value: Int = x
+
+    /** Shift right by `dx` columns. */
     def +(dx: Int): XCoord = x + dx
+
+    /** Shift left by `dx` columns. */
     def -(dx: Int): XCoord = x - dx
 
-/** Y coordinate wrapper (1-based row). */
+/**
+ * 1-based row coordinate.
+ *
+ * Opaque over `Int`; see [[XCoord]] for rationale. Construct at call sites
+ * with `3.y` via the `TuiPrelude` extension.
+ */
 opaque type YCoord = Int
 object YCoord:
+
+  /** Construct a `YCoord` from a raw 1-based row. */
   def apply(value: Int): YCoord = value
 
   extension (y: YCoord)
-    def value: Int         = y
+
+    /** Unwrap to the raw 1-based row. */
+    def value: Int = y
+
+    /** Shift down by `dy` rows. */
     def +(dy: Int): YCoord = y + dy
+
+    /** Shift up by `dy` rows. */
     def -(dy: Int): YCoord = y - dy
 
+/** An `(x, y)` cell position on the terminal, 1-based. */
 final case class Coord(x: XCoord, y: YCoord)
 
 object ANSI:

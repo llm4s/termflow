@@ -36,10 +36,22 @@ object Sub:
       case _ =>
         sub
 
+  /** A no-op subscription. Useful as a placeholder in model fields. */
   case object NoSub extends Sub[Nothing]:
     override def isActive: Boolean = false
     override def cancel(): Unit    = ()
 
+  /**
+   * Create a timer subscription that fires at a fixed interval.
+   *
+   * Each tick publishes `Cmd.GCmd(msg())` through `sink`. The thunk runs on
+   * a single background scheduler thread, so `msg()` must not block.
+   *
+   * @param millis Interval between ticks, in milliseconds.
+   * @param msg Thunk producing the next message on each tick.
+   * @param sink Where to publish ticks. When called with a [[RuntimeCtx]]
+   *             the subscription auto-registers for cleanup on exit.
+   */
   def Every[Msg](millis: Long, msg: () => Msg, sink: EventSink[Msg]): Sub[Msg] =
     val sub = new Sub[Msg]:
       @volatile private var active = true
@@ -65,7 +77,16 @@ object Sub:
         }
     autoRegisterIfRuntimeCtx(sub, sink)
 
-  /** Create an InputKey subscription from a TerminalKeySource. */
+  /**
+   * Create a keyboard-input subscription from an explicit
+   * [[TerminalKeySource]].
+   *
+   * Each decoded [[KeyDecoder.InputKey]] is wrapped with `msg` and published
+   * to `sink`. Read failures are surfaced via `onError`.
+   *
+   * Most apps should prefer [[InputKey]], which uses the runtime context's
+   * terminal reader.
+   */
   def InputKeyFromSource[Msg](
     source: TerminalKeySource,
     msg: InputKey => Msg,
@@ -110,7 +131,17 @@ object Sub:
         }
     autoRegisterIfRuntimeCtx(sub, sink)
 
-  /** Poll terminal dimensions and emit a message when they change. */
+  /**
+   * Poll terminal dimensions at a fixed interval and publish a message when
+   * they change.
+   *
+   * Useful for apps that need to re-flow their view when the window is
+   * resized. The subscription publishes through `ctx.publish` and
+   * auto-registers for cleanup on exit.
+   *
+   * @param millis Polling interval, in milliseconds.
+   * @param mkMsg Function producing the resize message from `(width, height)`.
+   */
   def TerminalResize[Msg](
     millis: Long,
     mkMsg: (Int, Int) => Msg,
@@ -150,7 +181,12 @@ object Sub:
         }
     ctx.registerSub(sub)
 
-  /** Create an InputKey subscription from an explicit reader. */
+  /**
+   * Create a keyboard-input subscription from an explicit [[java.io.Reader]].
+   *
+   * Prefer [[InputKey]] for apps using the runtime's terminal backend. This
+   * form is mainly useful for tests and bespoke embeddings.
+   */
   def InputKeyWithReader[Msg](
     msg: InputKey => Msg,
     onError: Throwable => Msg,
@@ -159,25 +195,42 @@ object Sub:
   ): Sub[Msg] =
     InputKeyFromSource(ConsoleKeyPressSource(reader), msg, onError, sink)
 
-  /** Create an InputKey subscription using the shared terminal backend from the runtime context. */
+  /**
+   * Create a keyboard-input subscription using the terminal reader from the
+   * runtime context. The idiomatic form for `TuiApp.init`:
+   *
+   * {{{
+   * override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+   *   Model(
+   *     input = Sub.InputKey(Msg.KeyPress.apply, Msg.KeyError.apply, ctx),
+   *     ...
+   *   ).tui
+   * }}}
+   */
   def InputKey[Msg](msg: InputKey => Msg, onError: Throwable => Msg, ctx: RuntimeCtx[Msg]): Sub[Msg] =
     InputKeyFromSource(ConsoleKeyPressSource(ctx.terminal.reader), msg, onError, ctx)
 
 /**
- * Sink that receives commands from subscriptions and other sources.
- * Commands are queued and processed by the runtime loop.
+ * Sink that receives commands from subscriptions and other asynchronous
+ * sources. The runtime implements this via [[CmdBus]].
+ *
+ * @note SPI. Custom implementations are only needed when replacing the
+ *       default command bus.
  */
 trait EventSink[Msg]:
 
-  /** Publish a command to be processed by the runtime. */
+  /** Publish a command to be processed by the runtime loop. Thread-safe. */
   def publish(cmd: Cmd[Msg]): Unit
 
 /**
- * Source that produces events and sends them to a sink.
+ * Producer of events that can be started against a sink.
+ *
+ * @note SPI. Most applications construct subscriptions directly via the
+ *       factories on the [[Sub]] companion rather than implementing this.
  */
 trait EventSource[Msg]:
 
-  /** Start the source and return a subscription handle. */
+  /** Start the source, publishing to `sink`, and return a cancellation handle. */
   def start(sink: EventSink[Msg]): Sub[Msg]
 
 object RandomUtil:

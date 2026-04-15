@@ -1,0 +1,15 @@
+# width=40 height=13
+# cursor=6,10
+|┌──────────────────────────────────┐    |
+|│Current count: -2                 │    |
+|│                                  │    |
+|│Commands:                         │    |
+|│  increment | + -> increase counter    |
+|└  decrement | - -> decrease counter    |
+|   exit          -> quit                |
+|                                        |
+|                                        |
+| []>                                    |
+|                                        |
+|                                        |
+|                                        |

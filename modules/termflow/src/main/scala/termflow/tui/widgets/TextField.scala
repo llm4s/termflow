@@ -83,6 +83,16 @@ object TextField:
     /** Number of characters in the buffer (not counting the placeholder). */
     def length: Int = buffer.length
 
+    /**
+     * Drop the buffer and reset the cursor while preserving the placeholder.
+     *
+     * Convenience for prompt-style "submit and clear" callers: when the
+     * `onSubmit` message fires, replace the field state with `field.cleared`
+     * to reset for the next entry. Form-style "submit and keep" callers
+     * leave the state alone.
+     */
+    def cleared: State = State(buffer = "", cursor = 0, placeholder = placeholder)
+
   object State:
 
     /** Empty field with no placeholder. */
@@ -106,8 +116,14 @@ object TextField:
    *   - `ArrowRight`  cursor += 1 (clamped)
    *   - `Home`        cursor = 0
    *   - `End`         cursor = buffer length
-   *   - `Enter`       call `onSubmit(buffer)`, then clear buffer + cursor
+   *   - `Enter`       call `onSubmit(buffer)`; **state is unchanged**
    *   - other keys    no change
+   *
+   * `Enter` deliberately does not mutate the field. Multi-field forms want
+   * to keep the user's input across a submit (Enter typically advances focus
+   * via the returned message); prompt-style apps that want clear-on-submit
+   * can replace the state with [[State.cleared]] when they observe the
+   * submit message.
    *
    * `Ctrl+C` / `Ctrl+D` and other framework-level keys are intentionally
    * **not** handled — apps should route those via a top-level [[Keymap]]
@@ -126,8 +142,7 @@ object TextField:
     import KeyDecoder.InputKey.*
     key match
       case Enter =>
-        val msg = onSubmit(state.buffer)
-        (state.copy(buffer = "", cursor = 0), msg)
+        (state, onSubmit(state.buffer))
 
       case Backspace =>
         if state.cursor > 0 then

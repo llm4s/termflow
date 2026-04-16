@@ -132,6 +132,7 @@ addCommandAlias(
 // to a dumb backend when stdin/stdout are pipes.
 addCommandAlias("hubDemo",      "termflowSample/runMain termflow.run.SampleHubMain")
 addCommandAlias("widgetsDemo",  "termflowSample/runMain termflow.apps.widgets.WidgetsDemoApp")
+addCommandAlias("formDemo",     "termflowSample/runMain termflow.apps.forms.FormDemoApp")
 addCommandAlias("echoDemo",     "termflowSample/runMain termflow.apps.echo.EchoApp")
 addCommandAlias("counterDemo",  "termflowSample/runMain termflow.apps.counter.SyncCounter")
 addCommandAlias("futureDemo",   "termflowSample/runMain termflow.apps.counter.FutureCounter")

@@ -15,6 +15,7 @@ Working `sbt` commands for launching the sample apps in `modules/termflow-sample
 
 ```bash
 sbt widgetsDemo       # Layout + Theme + Button/ProgressBar/Spinner/StatusBar
+sbt formDemo          # TextField + FocusManager + Keymap multi-field form
 sbt hubDemo           # Sample hub dashboard (launches other demos)
 sbt echoDemo          # Echo / chat-style scrollback
 sbt counterDemo       # Sync counter (Layout-based)
@@ -55,6 +56,7 @@ sbt "termflowSample/runMain termflow.apps.chat.ProviderChatRenderReproMain"
 | Alias | App | Demonstrates |
 |---|---|---|
 | `widgetsDemo` | `WidgetsDemoApp` | The full new stack: `Layout.column`/`row`, a `given Theme` with toggleable dark/light, `Button` focus, `Spinner` + `ProgressBar` driven by `Sub.Every`, `StatusBar` at the bottom, `FocusManager` + `Keymap` for input dispatch |
+| `formDemo` | `FormDemoApp` | Multi-field form using three `TextField`s plus Submit / Reset buttons; demonstrates Tab focus cycling and Enter routing across input + button elements |
 | `hubDemo` | `SampleHubApp` | Menu launcher; pick a sub-app by name or number |
 | `counterDemo` | `SyncCounter` | Minimal Elm-style app; the simplest example to read |
 | `futureDemo` | `FutureCounter` | `Cmd.FCmd` for async work, with a spinner while pending |
@@ -76,6 +78,19 @@ The widgets demo (`sbt widgetsDemo`) is interactive:
 | `+` / `-` | nudge progress ± 10 % |
 | `q` / `Ctrl+C` / `Esc` | quit |
 
+## Form demo keys
+
+The form demo (`sbt formDemo`) is interactive:
+
+| Key | Action |
+|---|---|
+| `Tab` | cycle focus through fields then buttons (Name → Email → Bio → Submit → Reset) |
+| `Enter` (in field) | advance focus to the next element, **keeping the typed text** |
+| `Enter` / `Space` (button) | activate Submit (capture all fields) or Reset (clear) |
+| `Backspace` / `Delete` / `Arrow*` / `Home` / `End` | standard text editing in the focused field |
+| `t` | toggle dark / light theme |
+| `q` / `Ctrl+C` / `Esc` | quit |
+
 ## Convenience shell snippet (optional)
 
 If you'd rather have shell-level shortcuts, drop this in `~/.zshrc` /
@@ -85,10 +100,10 @@ If you'd rather have shell-level shortcuts, drop this in `~/.zshrc` /
 termflow-run() {
   local app="$1"
   case "$app" in
-    hub|widgets|echo|counter|future|clock|tabs|task|stress|sine|input)
+    hub|widgets|form|echo|counter|future|clock|tabs|task|stress|sine|input)
       sbt "${app}Demo" ;;
     *)
-      echo "Usage: termflow-run {hub|widgets|echo|counter|future|clock|tabs|task|stress|sine|input}"
+      echo "Usage: termflow-run {hub|widgets|form|echo|counter|future|clock|tabs|task|stress|sine|input}"
       return 1
       ;;
   esac

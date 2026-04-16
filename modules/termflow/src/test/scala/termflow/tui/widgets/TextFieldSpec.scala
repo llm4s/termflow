@@ -102,19 +102,33 @@ class TextFieldSpec extends AnyFunSuite:
 
   // --- handleKey: submit ----------------------------------------------------
 
-  test("Enter calls onSubmit with the buffer and clears the field"):
+  test("Enter calls onSubmit with the buffer and leaves the state unchanged"):
     val s0      = TextField.State.of("ready")
     val (s1, m) = TextField.handleKey(s0, InputKey.Enter)(b => Some(s"submitted:$b"))
-    assert(s1.buffer == "")
-    assert(s1.cursor == 0)
+    assert(s1 == s0) // form-style: keep the input around for the next focus
     assert(m.contains("submitted:ready"))
 
-  test("Enter still clears the buffer even when onSubmit returns None"):
+  test("Enter with onSubmit returning None still leaves state unchanged"):
     val s0      = TextField.State.of("nope")
     val (s1, m) = TextField.handleKey(s0, InputKey.Enter)(_ => None)
+    assert(s1 == s0)
+    assert(m.isEmpty)
+
+  test("State.cleared resets buffer + cursor while preserving placeholder"):
+    val s0 = TextField.State.of("hello").copy(placeholder = "name")
+    val s1 = s0.cleared
     assert(s1.buffer == "")
     assert(s1.cursor == 0)
-    assert(m.isEmpty)
+    assert(s1.placeholder == "name")
+
+  test("prompt-style callers can clear via State.cleared after observing the submit msg"):
+    // Demonstrates the recommended pattern for prompt-like usage where
+    // Enter should both fire a Msg and reset the field.
+    val s0      = TextField.State.of("query")
+    val (s1, m) = TextField.handleKey(s0, InputKey.Enter)(b => Some(b))
+    assert(m.contains("query"))
+    val sNext = if m.isDefined then s1.cleared else s1
+    assert(sNext.buffer == "" && sNext.cursor == 0)
 
   test("global keys (Ctrl+C, Ctrl+D) are NOT handled — pass through unchanged"):
     val s0       = TextField.State.of("abc")

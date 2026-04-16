@@ -60,7 +60,16 @@ final class TuiTestDriver[Model, Msg](
   def frame: RenderFrame =
     AnsiRenderer.buildFrame(app.view(model))
 
-  /** Call `app.init(ctx)`, store the initial model, and apply the startup `Cmd`. */
+  /**
+   * Call `app.init(ctx)`, store the initial model, and apply the startup `Cmd`.
+   *
+   * After init runs, every subscription the app registered (directly or via
+   * `Sub.*` factories) is cancelled and any commands they published in the
+   * meantime are dropped. This is necessary because some `Sub.*` factories —
+   * notably `Sub.Every` — start background schedulers inside their own
+   * constructors, before `registerSub` even runs; leaving them live would
+   * leak non-deterministic ticks into the test.
+   */
   def init(): Unit =
     if _initialized then throw new IllegalStateException("TuiTestDriver.init() called twice")
     val initial = app.init(ctx)
@@ -68,6 +77,10 @@ final class TuiTestDriver[Model, Msg](
     _initialized = true
     applyCmd(initial.cmd)
     drainCtxQueue()
+    // Shut down any background schedulers the app spun up in `init`, then
+    // discard anything those schedulers may have published in the race.
+    ctx.cancelSubs()
+    val _ = ctx.drainCmds()
 
   /**
    * Dispatch a message through `app.update` and apply the resulting `Cmd`.

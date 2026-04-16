@@ -42,4 +42,5 @@ object SampleSmoke:
     smokeApp("stress", termflow.apps.stress.RenderStressApp.App)
     smokeApp("tabs", termflow.apps.tabs.TabsDemoApp.App)
     smokeApp("input-line", termflow.apps.input.InputLineReproApp.App)
+    smokeApp("widgets-demo", termflow.apps.widgets.WidgetsDemoApp.App)
     Console.out.println("Sample smoke checks passed.")

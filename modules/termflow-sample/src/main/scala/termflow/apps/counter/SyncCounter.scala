@@ -69,24 +69,41 @@ object SyncCounter:
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
       // Use terminal width with a small right margin.
       val boxWidth = math.max(2, m.terminalWidth - 4)
+
+      // Vertical stack of text rows starting at (2, 2). The Spacer slots a
+      // blank row between the count line and the command list to match the
+      // original hand-positioned layout.
+      val textColumn = Layout.Column(
+        gap = 0,
+        children = List(
+          Layout.Elem(
+            TextNode(
+              1.x,
+              1.y,
+              List(
+                "Current count: ".text,
+                Text(s"${m.counter.count}", renderCount(m.counter.count))
+              )
+            )
+          ),
+          Layout.Spacer(1, 1),
+          Layout.Elem(TextNode(1.x, 1.y, List("Commands:".text(fg = Yellow)))),
+          Layout.Elem(TextNode(1.x, 1.y, List("  increment | + -> increase counter".text))),
+          Layout.Elem(TextNode(1.x, 1.y, List("  decrement | - -> decrease counter".text))),
+          Layout.Elem(TextNode(1.x, 1.y, List("  exit          -> quit".text)))
+        )
+      )
+      val textChildren = textColumn.resolve(Coord(2.x, 2.y))
+
+      // Background border box drawn behind the text column. BoxNodes are
+      // visual-only today (they don't lay out children), so we keep the box
+      // as a sibling of the resolved column rather than wrapping it.
+      val border = BoxNode(1.x, 1.y, boxWidth, 6, children = Nil, style = Style(border = true, fg = Blue))
+
       RootNode(
         m.terminalWidth,
         13,
-        children = List(
-          BoxNode(1.x, 1.y, boxWidth, 6, children = List(), style = Style(border = true, fg = Blue)),
-          TextNode(
-            2.x,
-            2.y,
-            List(
-              "Current count: ".text,
-              Text(s"${m.counter.count}", renderCount(m.counter.count))
-            )
-          ),
-          TextNode(2.x, 4.y, List("Commands:".text(fg = Yellow))),
-          TextNode(2.x, 5.y, List("  increment | + -> increase counter".text)),
-          TextNode(2.x, 6.y, List("  decrement | - -> decrease counter".text)),
-          TextNode(2.x, 7.y, List("  exit          -> quit".text))
-        ),
+        children = border :: textChildren,
         input = Some(
           InputNode(
             2.x,

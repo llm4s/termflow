@@ -133,6 +133,7 @@ addCommandAlias(
 addCommandAlias("hubDemo",      "termflowSample/runMain termflow.run.SampleHubMain")
 addCommandAlias("widgetsDemo",  "termflowSample/runMain termflow.apps.widgets.WidgetsDemoApp")
 addCommandAlias("formDemo",     "termflowSample/runMain termflow.apps.forms.FormDemoApp")
+addCommandAlias("catalogDemo",  "termflowSample/runMain termflow.apps.catalog.CatalogDemoApp")
 addCommandAlias("echoDemo",     "termflowSample/runMain termflow.apps.echo.EchoApp")
 addCommandAlias("counterDemo",  "termflowSample/runMain termflow.apps.counter.SyncCounter")
 addCommandAlias("futureDemo",   "termflowSample/runMain termflow.apps.counter.FutureCounter")

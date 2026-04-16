@@ -44,4 +44,5 @@ object SampleSmoke:
     smokeApp("input-line", termflow.apps.input.InputLineReproApp.App)
     smokeApp("widgets-demo", termflow.apps.widgets.WidgetsDemoApp.App)
     smokeApp("form-demo", termflow.apps.forms.FormDemoApp.App)
+    smokeApp("catalog-demo", termflow.apps.catalog.CatalogDemoApp.App)
     Console.out.println("Sample smoke checks passed.")

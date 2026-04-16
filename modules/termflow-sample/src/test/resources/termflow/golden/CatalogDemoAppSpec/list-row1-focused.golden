@@ -1,0 +1,25 @@
+# width=96 height=24
+|                                                                                                |
+| Task Catalog                                                                                   |
+|                                                                                                |
+|                                                                                                |
+|                                                                                                |
+| New:                              Priority:                                                    |
+|                                                                                                |
+| new task description…             ▾ medium                                                     |
+|                                                                                                |
+|                                                                                                |
+|                                                                                                |
+| [ Add ]  [ Clear all ]                                                                         |
+|                                                                                                |
+|                                                                                                |
+|                                                                                                |
+| Tasks (4)                                                                                      |
+|                                                                                                |
+|   [medium] buy groceries                    Priority Count                                     |
+| ▸ [high] write report                       ──────────────                                     |
+|   [low] review PR                           high         2                                     |
+|   [high] call alice                         medium       1                                     |
+|                                             low          1                                     |
+|                                                                                                |
+| catalog            Tab/↑↓ nav  Enter add/select  Ctrl+T theme  Ctrl+C quit          theme=dark |

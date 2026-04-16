@@ -16,6 +16,7 @@ Working `sbt` commands for launching the sample apps in `modules/termflow-sample
 ```bash
 sbt widgetsDemo       # Layout + Theme + Button/ProgressBar/Spinner/StatusBar
 sbt formDemo          # TextField + FocusManager + Keymap multi-field form
+sbt catalogDemo       # ListView + Select + Table + TextField task catalog
 sbt hubDemo           # Sample hub dashboard (launches other demos)
 sbt echoDemo          # Echo / chat-style scrollback
 sbt counterDemo       # Sync counter (Layout-based)
@@ -57,6 +58,7 @@ sbt "termflowSample/runMain termflow.apps.chat.ProviderChatRenderReproMain"
 |---|---|---|
 | `widgetsDemo` | `WidgetsDemoApp` | The full new stack: `Layout.column`/`row`, a `given Theme` with toggleable dark/light, `Button` focus, `Spinner` + `ProgressBar` driven by `Sub.Every`, `StatusBar` at the bottom, `FocusManager` + `Keymap` for input dispatch |
 | `formDemo` | `FormDemoApp` | Multi-field form using three `TextField`s plus Submit / Reset buttons; demonstrates Tab focus cycling and Enter routing across input + button elements |
+| `catalogDemo` | `CatalogDemoApp` | Task manager combining `TextField` + `Select` dropdown + `ListView` (scrollable, selectable) + `Table` (live summary). Add tasks, remove them, switch priority — exercises every stateful widget at once. |
 | `hubDemo` | `SampleHubApp` | Menu launcher; pick a sub-app by name or number |
 | `counterDemo` | `SyncCounter` | Minimal Elm-style app; the simplest example to read |
 | `futureDemo` | `FutureCounter` | `Cmd.FCmd` for async work, with a spinner while pending |
@@ -94,6 +96,22 @@ The form demo (`sbt formDemo`) is interactive:
 | `Ctrl+T` (anywhere) / `t` (on a button) | toggle dark / light theme |
 | `q` (on a button) / `Ctrl+C` / `Esc` | quit |
 
+## Catalog demo keys
+
+The catalog demo (`sbt catalogDemo`) is interactive:
+
+| Key | Action |
+|---|---|
+| `Tab` / `Shift+Tab` | cycle focus (Task field → Priority → Add → Clear → Task list) |
+| `Enter` (in Task field) | add a task with the selected priority |
+| `Enter` / `Space` (on Priority) | open the dropdown (or, when open, commit the selection and close) |
+| `↑` / `↓` (in open Priority or Task list) | navigate items **within** that widget |
+| `Enter` (on a list row) | remove the selected task |
+| `Enter` / `Space` (on a button) | activate Add / Clear |
+| `←` / `→` (on a button) | previous / next focus |
+| `Ctrl+T` (anywhere) / `t` (on a button) | toggle dark / light theme |
+| `q` (on a button) / `Ctrl+C` / `Esc` | quit |
+
 ## Convenience shell snippet (optional)
 
 If you'd rather have shell-level shortcuts, drop this in `~/.zshrc` /
@@ -103,10 +121,10 @@ If you'd rather have shell-level shortcuts, drop this in `~/.zshrc` /
 termflow-run() {
   local app="$1"
   case "$app" in
-    hub|widgets|form|echo|counter|future|clock|tabs|task|stress|sine|input)
+    hub|widgets|form|catalog|echo|counter|future|clock|tabs|task|stress|sine|input)
       sbt "${app}Demo" ;;
     *)
-      echo "Usage: termflow-run {hub|widgets|form|echo|counter|future|clock|tabs|task|stress|sine|input}"
+      echo "Usage: termflow-run {hub|widgets|form|catalog|echo|counter|future|clock|tabs|task|stress|sine|input}"
       return 1
       ;;
   esac

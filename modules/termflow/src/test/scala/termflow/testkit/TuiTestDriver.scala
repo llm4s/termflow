@@ -63,12 +63,15 @@ final class TuiTestDriver[Model, Msg](
   /**
    * Call `app.init(ctx)`, store the initial model, and apply the startup `Cmd`.
    *
-   * After init runs, every subscription the app registered (directly or via
-   * `Sub.*` factories) is cancelled and any commands they published in the
-   * meantime are dropped. This is necessary because some `Sub.*` factories —
-   * notably `Sub.Every` — start background schedulers inside their own
-   * constructors, before `registerSub` even runs; leaving them live would
-   * leak non-deterministic ticks into the test.
+   * Subscriptions the app registers via `Sub.*` factories pass through
+   * [[TestRuntimeCtx.registerSub]], which deliberately does not invoke
+   * `Sub.start()`. Combined with `Sub.Every`'s deferred-start design (see
+   * `llm4s/termflow#92`), this means timer-driven subscriptions stay
+   * dormant in tests — no race-prone ticks land in the model.
+   *
+   * Subscriptions that still start eagerly in their own constructor (e.g.
+   * `Sub.InputKey` with the testkit's empty `StringReader`) terminate
+   * harmlessly on the test backend.
    */
   def init(): Unit =
     if _initialized then throw new IllegalStateException("TuiTestDriver.init() called twice")
@@ -77,10 +80,6 @@ final class TuiTestDriver[Model, Msg](
     _initialized = true
     applyCmd(initial.cmd)
     drainCtxQueue()
-    // Shut down any background schedulers the app spun up in `init`, then
-    // discard anything those schedulers may have published in the race.
-    ctx.cancelSubs()
-    val _ = ctx.drainCmds()
 
   /**
    * Dispatch a message through `app.update` and apply the resulting `Cmd`.

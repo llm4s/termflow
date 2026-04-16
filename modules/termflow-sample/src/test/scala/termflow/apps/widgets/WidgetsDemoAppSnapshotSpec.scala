@@ -4,21 +4,20 @@ import org.scalatest.funsuite.AnyFunSuite
 import termflow.apps.widgets.WidgetsDemoApp.CancelFocus
 import termflow.apps.widgets.WidgetsDemoApp.Msg
 import termflow.apps.widgets.WidgetsDemoApp.SaveFocus
+import termflow.testkit.GoldenSupport
 import termflow.testkit.TuiTestDriver
 import termflow.tui.*
 
 /**
  * Integration coverage for the widgets demo.
  *
- * Instead of full-frame golden snapshots — which would be flaky against the
- * `Sub.Every` timer race in `init` (the scheduler fires its initial tick on a
- * background thread before `TuiTestDriver` can cancel it; tracked in
- * `llm4s/termflow#92`) — this spec drives the demo synchronously and asserts
- * on cell-level properties that are invariant to the tick count: which
- * button is focused, what style the status row is painted in, and whether
- * `Cmd.Exit` is observed on quit.
+ * Combines structural assertions (which button is focused, what style the
+ * status row is painted in) with proper golden-frame snapshots. The latter
+ * are only safe because PR #92 made `Sub.Every` defer its scheduler to
+ * `start()` — the testkit doesn't call `start()`, so the demo's animation
+ * timer stays dormant during snapshot tests.
  */
-class WidgetsDemoAppSnapshotSpec extends AnyFunSuite:
+class WidgetsDemoAppSnapshotSpec extends AnyFunSuite with GoldenSupport:
 
   private val Width  = 80
   private val Height = 14
@@ -117,3 +116,20 @@ class WidgetsDemoAppSnapshotSpec extends AnyFunSuite:
     assert(k.lookup(CharKey('q')).contains(Msg.Quit))
     assert(k.lookup(Ctrl('C')).contains(Msg.Quit))
     assert(k.lookup(Escape).contains(Msg.Quit))
+
+  // --- Golden-frame snapshots (timer-deterministic thanks to #92) ----------
+
+  test("initial frame matches the dark-theme golden"):
+    val d = driver()
+    // Confirm the timer never fired.
+    assert(d.model.tick == 0)
+    assert(d.model.progress == 0.0)
+    assertGoldenFrame(d.frame, "initial-dark")
+
+  test("light theme + focused Cancel after a few input keys"):
+    val d = driver()
+    d.send(Msg.ToggleTheme)
+    d.send(Msg.NextFocus)
+    d.send(Msg.BumpProgress(0.4))
+    d.send(Msg.Activate)
+    assertGoldenFrame(d.frame, "light-cancel-clicked")

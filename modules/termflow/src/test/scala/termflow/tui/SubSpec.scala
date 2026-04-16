@@ -179,3 +179,71 @@ class SubSpec extends AnyFunSuite:
     val msgs = sink.messages.collect { case Cmd.GCmd(v: String) => v }
     assert(msgs.count(_.startsWith("key:")) == 1)
     assert(!msgs.exists(_.startsWith("err:")))
+
+  // --- Sub.start() / deferred-start contract --------------------------------
+
+  /** Stub RuntimeCtx that records subs but never calls `start()`. */
+  private class CapturingCtx[Msg] extends RuntimeCtx[Msg]:
+    private val captured                              = new java.util.concurrent.ConcurrentLinkedQueue[Cmd[Msg]]()
+    private val subs                                  = new java.util.concurrent.ConcurrentLinkedQueue[Sub[Msg]]()
+    override def terminal: TerminalBackend            = throw new UnsupportedOperationException("not used in test")
+    override def config: TermFlowConfig               = throw new UnsupportedOperationException("not used in test")
+    override def publish(cmd: Cmd[Msg]): Unit         = captured.add(cmd): Unit
+    override def registerSub(sub: Sub[Msg]): Sub[Msg] = { subs.add(sub): Unit; sub }
+    def messages: List[Cmd[Msg]]                      = captured.iterator().asScala.toList
+    def registered: List[Sub[Msg]]                    = subs.iterator().asScala.toList
+
+  test("Sub.Every does not tick when registered into a RuntimeCtx that omits start()"):
+    val ctx = new CapturingCtx[String]
+    val sub = Sub.Every(20, () => "tick", ctx)
+    assert(ctx.registered == List(sub))
+    Thread.sleep(80) // enough wall-clock for several missed intervals
+    assert(ctx.messages.isEmpty, s"expected no ticks but saw ${ctx.messages}")
+    sub.cancel()
+
+  test("Sub.Every starts ticking once start() is invoked explicitly"):
+    val ctx = new CapturingCtx[String]
+    val sub = Sub.Every(20, () => "tick", ctx)
+    assert(ctx.messages.isEmpty)
+    sub.start()
+    try
+      // Wait for at least one tick.
+      val deadline = System.currentTimeMillis() + 500
+      while ctx.messages.isEmpty && System.currentTimeMillis() < deadline do Thread.sleep(10)
+      assert(ctx.messages.nonEmpty, "expected a tick after start()")
+      assert(ctx.messages.head == Cmd.GCmd("tick"))
+    finally sub.cancel()
+
+  test("Sub.Every.start() is idempotent — multiple calls do not spawn extra schedulers"):
+    val ctx = new CapturingCtx[String]
+    val sub = Sub.Every(50, () => "tick", ctx)
+    sub.start()
+    sub.start()
+    sub.start()
+    Thread.sleep(120)
+    sub.cancel()
+    // We only assert determinism via "did not blow up"; concretely, double-start
+    // would have leaked extra scheduler threads. The cancel above should still
+    // tear everything down cleanly; this test is primarily about not throwing.
+    assert(!sub.isActive)
+
+  test("Sub.Every with a bare EventSink (non-RuntimeCtx) still starts eagerly"):
+    // Back-compat: when caller passes a plain EventSink, the factory must
+    // start the sub itself so existing code keeps working.
+    val sink = new TestSink[String]
+    val sub  = Sub.Every(20, () => "tick", sink)
+    try
+      assert(sink.awaitFirst(500))
+      assert(sink.messages.nonEmpty)
+    finally sub.cancel()
+
+  test("Sub trait default start() is a no-op"):
+    val sub = new Sub[Nothing]:
+      override def isActive: Boolean = true
+      override def cancel(): Unit    = ()
+      // Inherit default start, which is a no-op.
+    // Should not throw and should leave isActive untouched.
+    sub.start()
+    assert(sub.isActive)
+    sub.start()
+    assert(sub.isActive)

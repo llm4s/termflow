@@ -103,7 +103,14 @@ final class LocalCmdBus[Msg](val terminal: TerminalBackend, val config: TermFlow
   override def take(): Cmd[Msg]                       = queue.take()
   override def poll(timeoutMillis: Long): Option[Cmd[Msg]] =
     Option(queue.poll(timeoutMillis, TimeUnit.MILLISECONDS))
-  override def registerSub(sub: Sub[Msg]): Sub[Msg] = { subscriptions.add(sub); sub }
+  override def registerSub(sub: Sub[Msg]): Sub[Msg] = {
+    subscriptions.add(sub): Unit
+    // Start any deferred-start machinery (e.g. Sub.Every's scheduler).
+    // Eagerly-started subs override `start` as a no-op, so this is safe
+    // for every existing implementation.
+    sub.start()
+    sub
+  }
   override def cancelAllSubscriptions(): Unit =
     subscriptions.forEach { sub =>
       try sub.cancel()

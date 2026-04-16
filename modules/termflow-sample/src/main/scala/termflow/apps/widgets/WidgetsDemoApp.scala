@@ -6,19 +6,17 @@ import termflow.tui.TuiPrelude.*
 import termflow.tui.widgets.*
 
 /**
- * End-to-end demo of the `termflow.tui.widgets` package.
- *
- * Drives [[Button]], [[ProgressBar]], [[Spinner]], and [[StatusBar]]
- * through a `Layout.column` + `Layout.row` composition, using a `given
- * Theme` that the user can toggle at runtime.
+ * End-to-end demo of the new TermFlow stack: [[Layout]], [[Theme]], the
+ * stateless widgets in `termflow.tui.widgets`, plus [[FocusManager]] and
+ * [[Keymap]] for input dispatch.
  *
  * ## Keys
  *
- *   - `Tab` / `Shift+Tab` — cycle button focus
+ *   - `Tab`               — cycle button focus
  *   - `Enter` / `Space`   — activate the focused button
  *   - `t`                 — toggle dark / light theme
  *   - `+` / `-`           — nudge progress by ±10 %
- *   - `q` / `Ctrl+C`      — quit
+ *   - `q` / `Ctrl+C` / `Esc` — quit
  *
  * The spinner and progress bar are driven by a `Sub.Every` timer so they
  * animate on their own.
@@ -34,8 +32,9 @@ object WidgetsDemoApp:
     val _ = args
     TuiRuntime.run(App)
 
-  enum Focus:
-    case Save, Cancel
+  /** Stable focus identifiers for the two demo buttons. */
+  val SaveFocus: FocusId   = FocusId("save")
+  val CancelFocus: FocusId = FocusId("cancel")
 
   enum Msg:
     case Tick
@@ -53,12 +52,34 @@ object WidgetsDemoApp:
     terminalHeight: Int,
     tick: Int,
     progress: Double,
-    focus: Focus,
+    fm: FocusManager,
     darkTheme: Boolean,
     lastAction: String
   )
 
   import Msg.*
+
+  /**
+   * Declarative key bindings — composed from the standard quit + focus
+   * presets layered with the demo's app-specific shortcuts.
+   *
+   * Defining the keymap once at object scope rather than per-call keeps the
+   * `update` body short and lets the bindings be inspected and tested
+   * independently.
+   */
+  val Keys: Keymap[Msg] =
+    Keymap.quit(Quit) ++
+      Keymap.focus(next = NextFocus, previous = PrevFocus) ++
+      Keymap(
+        KeyDecoder.InputKey.Enter        -> Activate,
+        KeyDecoder.InputKey.CharKey(' ') -> Activate,
+        KeyDecoder.InputKey.CharKey('t') -> ToggleTheme,
+        KeyDecoder.InputKey.CharKey('T') -> ToggleTheme,
+        KeyDecoder.InputKey.CharKey('+') -> BumpProgress(0.1),
+        KeyDecoder.InputKey.CharKey('=') -> BumpProgress(0.1),
+        KeyDecoder.InputKey.CharKey('-') -> BumpProgress(-0.1),
+        KeyDecoder.InputKey.CharKey('_') -> BumpProgress(-0.1)
+      )
 
   object App extends TuiApp[Model, Msg]:
 
@@ -71,14 +92,15 @@ object WidgetsDemoApp:
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       // Spinner / progress animation.
       Sub.Every(millis = 120L, msg = () => Tick, sink = ctx)
-      // Keyboard input. We don't use Prompt here — keys are handled directly.
+      // Keyboard input. We don't use Prompt here — keys are dispatched via
+      // the declarative Keymap below.
       Sub.InputKey(ConsoleInputKey.apply, ConsoleInputError.apply, ctx)
       Model(
         terminalWidth = ctx.terminal.width,
         terminalHeight = ctx.terminal.height,
         tick = 0,
         progress = 0.0,
-        focus = Focus.Save,
+        fm = FocusManager(Vector(SaveFocus, CancelFocus)),
         darkTheme = true,
         lastAction = "—"
       ).tui
@@ -93,16 +115,18 @@ object WidgetsDemoApp:
           sized.copy(tick = sized.tick + 1, progress = nextProgress).tui
 
         case NextFocus =>
-          val nf = if sized.focus == Focus.Save then Focus.Cancel else Focus.Save
-          sized.copy(focus = nf).tui
+          sized.copy(fm = sized.fm.next).tui
 
         case PrevFocus =>
-          // Two-button demo; prev and next are symmetric.
-          val nf = if sized.focus == Focus.Save then Focus.Cancel else Focus.Save
-          sized.copy(focus = nf).tui
+          sized.copy(fm = sized.fm.previous).tui
 
         case Activate =>
-          sized.copy(lastAction = s"clicked ${sized.focus}").tui
+          val label = sized.fm.current match
+            case Some(id) if id == SaveFocus   => "Save"
+            case Some(id) if id == CancelFocus => "Cancel"
+            case Some(id)                      => id.value
+            case None                          => "(nothing focused)"
+          sized.copy(lastAction = s"clicked $label").tui
 
         case ToggleTheme =>
           sized.copy(darkTheme = !sized.darkTheme).tui
@@ -115,25 +139,12 @@ object WidgetsDemoApp:
           Tui(sized, Cmd.Exit)
 
         case ConsoleInputKey(key) =>
-          keyToMsg(key) match
+          Keys.lookup(key) match
             case Some(next) => update(sized, next, ctx)
             case None       => sized.tui
 
         case ConsoleInputError(e) =>
           sized.copy(lastAction = s"input error: ${Option(e.getMessage).getOrElse("unknown")}").tui
-
-    private def keyToMsg(key: KeyDecoder.InputKey): Option[Msg] =
-      import KeyDecoder.InputKey.*
-      key match
-        // Tab arrives as Ctrl+I via the ASCII decoder.
-        case Ctrl('I')                   => Some(NextFocus)
-        case Enter | CharKey(' ')        => Some(Activate)
-        case CharKey('t') | CharKey('T') => Some(ToggleTheme)
-        case CharKey('+') | CharKey('=') => Some(BumpProgress(0.1))
-        case CharKey('-') | CharKey('_') => Some(BumpProgress(-0.1))
-        case CharKey('q') | CharKey('Q') => Some(Quit)
-        case Ctrl('C') | Escape          => Some(Quit)
-        case _                           => None
 
     override def view(m: Model): RootNode =
       given Theme = if m.darkTheme then Theme.dark else Theme.light
@@ -157,10 +168,11 @@ object WidgetsDemoApp:
         ProgressBar(m.progress, width = barWidth)
       )
 
-      // Button row with focus tracking.
+      // Button row driven by the focus manager — the manager owns which id
+      // is focused; widgets just ask `isFocused(id)` and render accordingly.
       val buttons = Layout.row(gap = 2)(
-        Button(label = "Save", focused = m.focus == Focus.Save),
-        Button(label = "Cancel", focused = m.focus == Focus.Cancel)
+        Button(label = "Save", focused = m.fm.isFocused(SaveFocus)),
+        Button(label = "Cancel", focused = m.fm.isFocused(CancelFocus))
       )
 
       // Instructions + last-action feedback.

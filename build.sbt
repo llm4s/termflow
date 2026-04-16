@@ -125,3 +125,19 @@ addCommandAlias(
   "publishLocalFixed",
   s"""set ThisBuild / version := "$fixedLocalVersion"; publishLocal"""
 )
+
+// --- Sample-app launchers --------------------------------------------------
+// Short aliases so contributors can run a demo without typing the full
+// runMain incantation. Use a real interactive terminal — JLine falls back
+// to a dumb backend when stdin/stdout are pipes.
+addCommandAlias("hubDemo",      "termflowSample/runMain termflow.run.SampleHubMain")
+addCommandAlias("widgetsDemo",  "termflowSample/runMain termflow.apps.widgets.WidgetsDemoApp")
+addCommandAlias("echoDemo",     "termflowSample/runMain termflow.apps.echo.EchoApp")
+addCommandAlias("counterDemo",  "termflowSample/runMain termflow.apps.counter.SyncCounter")
+addCommandAlias("futureDemo",   "termflowSample/runMain termflow.apps.counter.FutureCounter")
+addCommandAlias("clockDemo",    "termflowSample/runMain termflow.apps.clock.DigitalClock")
+addCommandAlias("tabsDemo",     "termflowSample/runMain termflow.apps.tabs.TabsDemoApp")
+addCommandAlias("taskDemo",     "termflowSample/runMain termflow.apps.task.Task")
+addCommandAlias("stressDemo",   "termflowSample/runMain termflow.apps.stress.RenderStressApp")
+addCommandAlias("sineDemo",     "termflowSample/runMain termflow.apps.stress.SineWaveApp")
+addCommandAlias("inputDemo",    "termflowSample/runMain termflow.apps.input.InputLineReproApp")

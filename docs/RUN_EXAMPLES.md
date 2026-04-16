@@ -84,12 +84,15 @@ The form demo (`sbt formDemo`) is interactive:
 
 | Key | Action |
 |---|---|
-| `Tab` | cycle focus through fields then buttons (Name → Email → Bio → Submit → Reset) |
-| `Enter` (in field) | advance focus to the next element, **keeping the typed text** |
-| `Enter` / `Space` (button) | activate Submit (capture all fields) or Reset (clear) |
-| `Backspace` / `Delete` / `Arrow*` / `Home` / `End` | standard text editing in the focused field |
-| `t` | toggle dark / light theme |
-| `q` / `Ctrl+C` / `Esc` | quit |
+| `Tab` / `Shift+Tab` | cycle focus forward / backward (Name → Email → Bio → Submit → Reset) |
+| `↑` / `↓` | same as `Shift+Tab` / `Tab` — work anywhere, including inside a text field |
+| `←` / `→` (on a button) | previous / next focus |
+| `←` / `→` (in a text field) | move the **in-field cursor** (does not change focus) |
+| `Enter` (in field) | submit the form (capture all field values) |
+| `Enter` / `Space` (button) | activate Submit or Reset |
+| `Backspace` / `Delete` / `Home` / `End` | standard text editing in the focused field |
+| `Ctrl+T` (anywhere) / `t` (on a button) | toggle dark / light theme |
+| `q` (on a button) / `Ctrl+C` / `Esc` | quit |
 
 ## Convenience shell snippet (optional)
 

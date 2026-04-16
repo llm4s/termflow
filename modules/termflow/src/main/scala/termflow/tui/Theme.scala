@@ -70,8 +70,8 @@ package termflow.tui
  *       The renderer does not fill the whole frame with `theme.background` —
  *       it only colours cells that are actually drawn, so `theme.background`
  *       and `theme.foreground` only become visible on cells whose `Style`
- *       references them. If you toggle from [[dark]] to [[light]] on a
- *       black-background terminal, plain text using `fg = theme.foreground`
+ *       references them. If you toggle from [[Theme.dark]] to [[Theme.light]]
+ *       on a black-background terminal, plain text using `fg = theme.foreground`
  *       (i.e. black) becomes invisible because the surrounding cells are not
  *       repainted to white. Workarounds:
  *

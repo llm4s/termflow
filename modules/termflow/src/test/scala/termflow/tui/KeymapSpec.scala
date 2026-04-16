@@ -61,6 +61,32 @@ class KeymapSpec extends AnyFunSuite:
     assert(k.lookup(InputKey.BackTab).contains(DemoMsg.A))
     assert(k.size == 2)
 
+  test("Keymap.focusVertical binds ArrowUp to previous and ArrowDown to next"):
+    val k = Keymap.focusVertical(previous = DemoMsg.A, next = DemoMsg.B)
+    assert(k.lookup(InputKey.ArrowUp).contains(DemoMsg.A))
+    assert(k.lookup(InputKey.ArrowDown).contains(DemoMsg.B))
+    assert(k.size == 2)
+
+  test("Keymap.focusHorizontal binds ArrowLeft to previous and ArrowRight to next"):
+    val k = Keymap.focusHorizontal(previous = DemoMsg.A, next = DemoMsg.B)
+    assert(k.lookup(InputKey.ArrowLeft).contains(DemoMsg.A))
+    assert(k.lookup(InputKey.ArrowRight).contains(DemoMsg.B))
+    assert(k.size == 2)
+
+  test("focus / focusVertical / focusHorizontal compose orthogonally via ++"):
+    val k =
+      Keymap.focus(next = DemoMsg.NextFocus, previous = DemoMsg.A) ++
+        Keymap.focusVertical(previous = DemoMsg.A, next = DemoMsg.NextFocus) ++
+        Keymap.focusHorizontal(previous = DemoMsg.A, next = DemoMsg.NextFocus)
+    assert(k.size == 6) // Tab + BackTab + Up + Down + Left + Right
+    // Spot-check that all six distinct keys land where expected.
+    assert(k.lookup(InputKey.Ctrl('I')).contains(DemoMsg.NextFocus))
+    assert(k.lookup(InputKey.BackTab).contains(DemoMsg.A))
+    assert(k.lookup(InputKey.ArrowUp).contains(DemoMsg.A))
+    assert(k.lookup(InputKey.ArrowDown).contains(DemoMsg.NextFocus))
+    assert(k.lookup(InputKey.ArrowLeft).contains(DemoMsg.A))
+    assert(k.lookup(InputKey.ArrowRight).contains(DemoMsg.NextFocus))
+
   test("Keymap.editing binds Enter, Backspace, ArrowLeft, ArrowRight"):
     val k = Keymap.editing(
       onEnter = DemoMsg.A,

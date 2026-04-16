@@ -110,6 +110,51 @@ object Keymap:
     )
 
   /**
+   * Bind `ArrowUp` / `ArrowDown` to `previous` / `next` focus messages.
+   *
+   * Safe to compose into a truly-global keymap because single-line widgets
+   * like [[termflow.tui.widgets.TextField]] don't consume vertical arrows.
+   *
+   * {{{
+   * val Globals =
+   *   Keymap.focus(next = NextFocus, previous = PrevFocus) ++
+   *     Keymap.focusVertical(previous = PrevFocus, next = NextFocus)
+   * }}}
+   *
+   * @param previous Message dispatched on `ArrowUp`.
+   * @param next     Message dispatched on `ArrowDown`.
+   */
+  def focusVertical[Msg](previous: Msg, next: Msg): Keymap[Msg] =
+    Keymap(
+      InputKey.ArrowUp   -> previous,
+      InputKey.ArrowDown -> next
+    )
+
+  /**
+   * Bind `ArrowLeft` / `ArrowRight` to `previous` / `next` focus messages.
+   *
+   * **Compose into a non-text focus layer only.** Inside a
+   * [[termflow.tui.widgets.TextField]], the horizontal arrows are used for
+   * in-field cursor movement — binding them globally would break editing.
+   * The idiom is to layer the apps' per-element routing so that fields
+   * consume these keys themselves and button-focused (or no-focus) rows
+   * fall through to this keymap.
+   *
+   * {{{
+   * val NonTextShortcuts =
+   *   Keymap.focusHorizontal(previous = PrevFocus, next = NextFocus)
+   * }}}
+   *
+   * @param previous Message dispatched on `ArrowLeft`.
+   * @param next     Message dispatched on `ArrowRight`.
+   */
+  def focusHorizontal[Msg](previous: Msg, next: Msg): Keymap[Msg] =
+    Keymap(
+      InputKey.ArrowLeft  -> previous,
+      InputKey.ArrowRight -> next
+    )
+
+  /**
    * Conventional editing bindings: arrow keys, Home, End, Enter, Backspace.
    *
    * Useful when wiring an app that handles its own text input (without

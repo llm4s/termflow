@@ -45,6 +45,73 @@ class FormDemoAppSpec extends AnyFunSuite with GoldenSupport:
     d.send(Msg.ConsoleInputKey(InputKey.BackTab))
     assert(d.model.fm.isFocused(BioId))
 
+  // --- arrow-key focus navigation ------------------------------------------
+
+  test("ArrowDown advances focus from inside a TextField (vertical arrows are global)"):
+    val d = driver()
+    typeKeys(d, "alice")
+    d.send(Msg.ConsoleInputKey(InputKey.ArrowDown))
+    assert(d.model.fm.isFocused(EmailId))
+    assert(d.model.name.buffer == "alice", "ArrowDown must not damage the field buffer")
+
+  test("ArrowUp on a TextField walks back through the cycle"):
+    val d = driver()
+    d.send(Msg.NextFocus) // Email
+    d.send(Msg.NextFocus) // Bio
+    d.send(Msg.ConsoleInputKey(InputKey.ArrowUp))
+    assert(d.model.fm.isFocused(EmailId))
+
+  test("ArrowDown from the last element wraps back to Name"):
+    val d = driver()
+    (1 to 4).foreach(_ => d.send(Msg.NextFocus)) // -> Reset
+    d.send(Msg.ConsoleInputKey(InputKey.ArrowDown))
+    assert(d.model.fm.isFocused(NameId))
+
+  test("ArrowUp from Name wraps to Reset"):
+    val d = driver()
+    d.send(Msg.ConsoleInputKey(InputKey.ArrowUp))
+    assert(d.model.fm.isFocused(ResetId))
+
+  test("ArrowRight / ArrowLeft on a button advances / retreats focus"):
+    val d = driver()
+    (1 to 3).foreach(_ => d.send(Msg.NextFocus)) // -> Submit
+    d.send(Msg.ConsoleInputKey(InputKey.ArrowRight))
+    assert(d.model.fm.isFocused(ResetId))
+    d.send(Msg.ConsoleInputKey(InputKey.ArrowLeft))
+    assert(d.model.fm.isFocused(SubmitId))
+    d.send(Msg.ConsoleInputKey(InputKey.ArrowLeft))
+    assert(d.model.fm.isFocused(BioId)) // linear cycle: Submit <- Bio
+
+  test("ArrowLeft inside a TextField moves the in-field cursor, NOT focus"):
+    val d = driver()
+    typeKeys(d, "abc")
+    assert(d.model.name.cursor == 3)
+    d.send(Msg.ConsoleInputKey(InputKey.ArrowLeft))
+    assert(d.model.fm.isFocused(NameId), "focus must stay on Name")
+    assert(d.model.name.cursor == 2, "cursor should have moved within the buffer")
+
+  test("ArrowRight inside a TextField moves the in-field cursor, NOT focus"):
+    val d = driver()
+    typeKeys(d, "abc")
+    // Move to index 1, then press right and expect index 2.
+    d.send(Msg.ConsoleInputKey(InputKey.Home))
+    d.send(Msg.ConsoleInputKey(InputKey.ArrowRight))
+    assert(d.model.fm.isFocused(NameId))
+    assert(d.model.name.cursor == 1)
+
+  test("Globals bind vertical arrows but NOT horizontal arrows"):
+    val g = FormDemoApp.Globals
+    assert(g.lookup(InputKey.ArrowUp).contains(Msg.PrevFocus))
+    assert(g.lookup(InputKey.ArrowDown).contains(Msg.NextFocus))
+    // Left/Right must stay out of Globals so they can reach TextField.
+    assert(g.lookup(InputKey.ArrowLeft).isEmpty)
+    assert(g.lookup(InputKey.ArrowRight).isEmpty)
+
+  test("NonTextShortcuts bind horizontal arrows for button-focus routing"):
+    val n = FormDemoApp.NonTextShortcuts
+    assert(n.lookup(InputKey.ArrowLeft).contains(Msg.PrevFocus))
+    assert(n.lookup(InputKey.ArrowRight).contains(Msg.NextFocus))
+
   // --- TextField key routing -----------------------------------------------
 
   test("typing into the focused field updates only that field's buffer"):

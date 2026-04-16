@@ -130,6 +130,45 @@ class TextFieldSpec extends AnyFunSuite:
     val sNext = if m.isDefined then s1.cleared else s1
     assert(sNext.buffer == "" && sNext.cursor == 0)
 
+  // --- handleKeyOrSubmit helper --------------------------------------------
+
+  test("handleKeyOrSubmit dispatches submitMsg on Enter"):
+    val s0      = TextField.State.of("ready")
+    val (s1, m) = TextField.handleKeyOrSubmit(s0, InputKey.Enter)("submit!")
+    assert(s1 == s0, "state must be preserved on Enter, same as handleKey")
+    assert(m.contains("submit!"))
+
+  test("handleKeyOrSubmit edits the buffer for non-Enter keys and returns None"):
+    val s0       = TextField.State.empty
+    val (s1, m1) = TextField.handleKeyOrSubmit(s0, InputKey.CharKey('a'))("submit!")
+    assert(s1.buffer == "a")
+    assert(s1.cursor == 1)
+    assert(m1.isEmpty)
+    val (s2, m2) = TextField.handleKeyOrSubmit(s1, InputKey.CharKey('b'))("submit!")
+    assert(s2.buffer == "ab")
+    assert(m2.isEmpty)
+
+  test("handleKeyOrSubmit's submitMsg is by-name — not evaluated for non-Enter keys"):
+    // If the by-name contract is broken, the counter would bump on every
+    // keystroke; with a correct by-name param it only bumps on Enter.
+    val counter = new java.util.concurrent.atomic.AtomicInteger(0)
+    def makeMsg: String = {
+      counter.incrementAndGet()
+      "hit"
+    }
+    val s0 = TextField.State.empty
+    // 5 non-Enter keys — makeMsg must not fire
+    val (s1, _) = TextField.handleKeyOrSubmit(s0, InputKey.CharKey('h'))(makeMsg)
+    val (s2, _) = TextField.handleKeyOrSubmit(s1, InputKey.CharKey('i'))(makeMsg)
+    val (s3, _) = TextField.handleKeyOrSubmit(s2, InputKey.ArrowLeft)(makeMsg)
+    val (s4, _) = TextField.handleKeyOrSubmit(s3, InputKey.ArrowRight)(makeMsg)
+    val (s5, _) = TextField.handleKeyOrSubmit(s4, InputKey.Backspace)(makeMsg)
+    assert(counter.get() == 0, s"makeMsg should not have fired; counter=${counter.get()}")
+    // Finally, an Enter — now it should fire exactly once.
+    val (_, msg) = TextField.handleKeyOrSubmit(s5, InputKey.Enter)(makeMsg)
+    assert(counter.get() == 1)
+    assert(msg.contains("hit"))
+
   test("global keys (Ctrl+C, Ctrl+D) are NOT handled — pass through unchanged"):
     val s0       = TextField.State.of("abc")
     val (s1, m1) = TextField.handleKey(s0, InputKey.Ctrl('C'))(submitOpt)

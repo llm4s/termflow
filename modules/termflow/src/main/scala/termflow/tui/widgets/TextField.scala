@@ -172,6 +172,36 @@ object TextField:
       case _ => (state, None)
 
   /**
+   * Convenience wrapper around [[handleKey]] that bundles the
+   * Enter-submits-form pattern. When the key is `Enter`, the returned
+   * message is `Some(submitMsg)`; otherwise it behaves exactly like
+   * `handleKey` with a no-op `onSubmit` (every other key edits the buffer
+   * as normal and returns `None`).
+   *
+   * This is the idiomatic way to route a key into a TextField inside a
+   * multi-field form whose Enter submits the whole form rather than the
+   * single field. Without this helper, callers either repeat the
+   * `handleKey(s, k)(_ => Some(submitMsg))` closure at every call site or
+   * intercept `Enter` explicitly before calling `handleKey`.
+   *
+   * {{{
+   * val (next, maybeMsg) = TextField.handleKeyOrSubmit(state, key)(Msg.Submit)
+   * maybeMsg.foreach(m => runtime.dispatch(m))
+   * }}}
+   *
+   * @param state     Current field state.
+   * @param key       Decoded key event.
+   * @param submitMsg By-name message produced on `Enter` — only evaluated
+   *                  when the key actually is `Enter`, so it's safe to pass
+   *                  a value that would be expensive to compute eagerly.
+   */
+  def handleKeyOrSubmit[Msg](
+    state: State,
+    key: KeyDecoder.InputKey
+  )(submitMsg: => Msg): (State, Option[Msg]) =
+    handleKey(state, key)(_ => Some(submitMsg))
+
+  /**
    * Render the field as a single-row [[TextNode]] of exactly `lineWidth`
    * cells.
    *

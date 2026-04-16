@@ -13,19 +13,22 @@ import termflow.tui.widgets.*
  *
  * ## Keys
  *
- *   - `Tab`               cycle focus forward (Name → Email → Bio → Submit → Reset → Name)
- *   - `Shift+Tab`         cycle focus backward
- *   - `Enter` (in field)  submit the form (capture all field values)
+ *   - `Tab` / `Shift+Tab`  cycle focus forward / backward (Name → Email → Bio → Submit → Reset)
+ *   - `↑` / `↓`            same as Shift+Tab / Tab — work anywhere, including inside a text field
+ *   - `←` / `→`            on a button, move to the previous / next focus;
+ *                          inside a text field, move the in-field cursor (does NOT change focus)
+ *   - `Enter` (in field)   submit the form (capture all field values)
  *   - `Enter` / `Space` (button) activate Submit / Reset
- *   - `Backspace` / `Arrow*` / `Home` / `End` etc. — standard text editing in the focused field
- *   - `Ctrl+T`            toggle dark / light theme (works even inside a text field)
+ *   - `Backspace` / `Home` / `End` / `Delete` — standard text editing in the focused field
+ *   - `Ctrl+T`             toggle dark / light theme (works even inside a text field)
  *   - `t` (when not in a field) also toggles theme
  *   - `q` (when not in a field) / `Ctrl+C` / `Esc` quit
  *
- * `t` and `q` are deliberately **not** global — they would collide with
- * legitimate text input. Inside a focused [[TextField]] those keys are
- * routed straight to the field's buffer; on a focused [[Button]] (or with
- * no focus) they fall through to the app-level shortcuts table.
+ * `t` / `q` and `←` / `→` are deliberately **not** in the true-global keymap —
+ * they would collide with legitimate text input. Inside a focused
+ * [[TextField]] those keys are routed straight to the field; on a focused
+ * [[Button]] (or with no focus) they fall through to the non-text shortcuts
+ * layer.
  *
  * Run with:
  * {{{
@@ -82,26 +85,34 @@ object FormDemoApp:
   /**
    * Keys that fire regardless of which element is focused. These never
    * conflict with text input because they're either control sequences
-   * (`Ctrl+T`, `Ctrl+C`, `Esc`) or special keys (`Tab`, `Shift+Tab`).
+   * (`Ctrl+T`, `Ctrl+C`, `Esc`), special keys (`Tab`, `Shift+Tab`), or
+   * vertical arrows (TextField is single-line so it doesn't consume them).
    */
-  val Globals: Keymap[Msg] = Keymap(
-    KeyDecoder.InputKey.Ctrl('C') -> Quit,
-    KeyDecoder.InputKey.Escape    -> Quit,
-    KeyDecoder.InputKey.Ctrl('I') -> NextFocus, // Tab
-    KeyDecoder.InputKey.BackTab   -> PrevFocus, // Shift+Tab
-    KeyDecoder.InputKey.Ctrl('T') -> ToggleTheme
-  )
+  val Globals: Keymap[Msg] =
+    Keymap(
+      KeyDecoder.InputKey.Ctrl('C') -> Quit,
+      KeyDecoder.InputKey.Escape    -> Quit,
+      KeyDecoder.InputKey.Ctrl('T') -> ToggleTheme
+    ) ++
+      Keymap.focus(next = NextFocus, previous = PrevFocus) ++
+      Keymap.focusVertical(previous = PrevFocus, next = NextFocus)
 
   /**
-   * Letter shortcuts that only fire when focus is **not** on a [[TextField]] —
-   * inside a field they would collide with legitimate text input.
+   * Shortcuts that only fire when focus is **not** on a [[TextField]] —
+   * inside a field they would collide with legitimate editing keys:
+   *   - `ArrowLeft` / `ArrowRight` move the in-field cursor there
+   *   - letter keys insert into the buffer
+   *
+   * Buttons (and no-focus) fall through to this layer after [[Globals]].
    */
-  val NonTextShortcuts: Keymap[Msg] = Keymap(
-    KeyDecoder.InputKey.CharKey('t') -> ToggleTheme,
-    KeyDecoder.InputKey.CharKey('T') -> ToggleTheme,
-    KeyDecoder.InputKey.CharKey('q') -> Quit,
-    KeyDecoder.InputKey.CharKey('Q') -> Quit
-  )
+  val NonTextShortcuts: Keymap[Msg] =
+    Keymap(
+      KeyDecoder.InputKey.CharKey('t') -> ToggleTheme,
+      KeyDecoder.InputKey.CharKey('T') -> ToggleTheme,
+      KeyDecoder.InputKey.CharKey('q') -> Quit,
+      KeyDecoder.InputKey.CharKey('Q') -> Quit
+    ) ++
+      Keymap.focusHorizontal(previous = PrevFocus, next = NextFocus)
 
   /** Initial state for the three fields — placeholders shown until typed-in. */
   private def freshFields: (TextField.State, TextField.State, TextField.State) =
@@ -182,7 +193,8 @@ object FormDemoApp:
 
     /**
      * Forward a key to a focused [[TextField]]. Enter triggers a form
-     * Submit (the user-requested behaviour); other keys edit the buffer.
+     * Submit via [[TextField.handleKeyOrSubmit]]; every other key edits
+     * the field buffer.
      */
     private def routeField(
       m: Model,
@@ -199,13 +211,11 @@ object FormDemoApp:
         else if id == EmailId then m.email
         else m.bio
 
-      // Enter inside a field submits the whole form — TextField.handleKey
-      // would just fire onSubmit anyway, so dispatch directly here for
-      // clarity.
-      if key == KeyDecoder.InputKey.Enter then update(m, Submit, ctx)
-      else
-        val (next, _) = TextField.handleKey(getField, key)(_ => None)
-        setField(next).tui
+      val (next, maybeMsg) = TextField.handleKeyOrSubmit(getField, key)(Submit)
+      val nextModel        = setField(next)
+      maybeMsg match
+        case Some(follow) => update(nextModel, follow, ctx)
+        case None         => nextModel.tui
 
     override def view(m: Model): RootNode =
       given Theme = if m.darkTheme then Theme.dark else Theme.light
@@ -283,7 +293,7 @@ object FormDemoApp:
       // here flip — that's the always-visible signal the toggle worked.
       val helpBar = StatusBar(
         left = " form ",
-        center = "Tab/⇧Tab: nav  Enter: submit  Ctrl+T: theme  Ctrl+C: quit",
+        center = "Tab/⇧Tab/↑↓: nav  Enter: submit  Ctrl+T: theme  Ctrl+C: quit",
         right = s" theme=$themeName ",
         width = termWidth,
         at = Coord(1.x, termHeight.y)

@@ -106,7 +106,7 @@ object Sub:
       override def cancel(): Unit =
         lock.synchronized {
           active = false
-          if handle != null then handle.cancel(true)
+          if handle != null then handle.cancel(true): Unit
           if scheduler != null then
             scheduler.shutdownNow(): Unit
             try scheduler.awaitTermination(200L, TimeUnit.MILLISECONDS): Unit

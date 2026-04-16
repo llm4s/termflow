@@ -95,29 +95,19 @@ object Keymap:
   )
 
   /**
-   * Conventional focus bindings: `Tab` to advance, no shift-tab binding
-   * because the current `KeyDecoder` doesn't distinguish `Shift+Tab` from
-   * a bare ESC sequence.
+   * Conventional focus bindings: `Tab` advances, `Shift+Tab` retreats.
    *
-   * Apps that want explicit forward / backward bindings can pass both
-   * messages and add their own back-cycle key (e.g. `BackTick`):
+   * `Tab` arrives as `Ctrl+I` from the ASCII decoder; `Shift+Tab` arrives
+   * as `InputKey.BackTab` (decoded from the `\u001b[Z` escape sequence).
    *
-   * {{{
-   * Keymap.focus(next = Msg.NextFocus, previous = Msg.PrevFocus) ++
-   *   Keymap(InputKey.CharKey('`') -> Msg.PrevFocus)
-   * }}}
-   *
-   * `Tab` on most terminals is decoded as `Ctrl+I` by the ASCII control
-   * range, so that's the binding installed.
-   *
-   * @param next     Message to dispatch on Tab (`Ctrl+I`).
-   * @param previous Currently unused — wire your own binding via `++`. The
-   *                 parameter exists so the API doesn't have to change once
-   *                 `Shift+Tab` decoding is supported.
+   * @param next     Message dispatched on `Tab`.
+   * @param previous Message dispatched on `Shift+Tab`.
    */
   def focus[Msg](next: Msg, previous: Msg): Keymap[Msg] =
-    val _ = previous // reserved; see ScalaDoc
-    Keymap(InputKey.Ctrl('I') -> next)
+    Keymap(
+      InputKey.Ctrl('I') -> next,
+      InputKey.BackTab   -> previous
+    )
 
   /**
    * Conventional editing bindings: arrow keys, Home, End, Enter, Backspace.

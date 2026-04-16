@@ -65,6 +65,24 @@ package termflow.tui
  * @note `muted` / `dim` is intentionally omitted from v1. TermFlow's [[Style]]
  *       has no dim attribute, so a muted slot would have to alias an existing
  *       colour, which is misleading. Add when `Style` grows a dim/faint flag.
+ *
+ * @note **Background slots only paint cells that explicitly set them.**
+ *       The renderer does not fill the whole frame with `theme.background` —
+ *       it only colours cells that are actually drawn, so `theme.background`
+ *       and `theme.foreground` only become visible on cells whose `Style`
+ *       references them. If you toggle from [[dark]] to [[light]] on a
+ *       black-background terminal, plain text using `fg = theme.foreground`
+ *       (i.e. black) becomes invisible because the surrounding cells are not
+ *       repainted to white. Workarounds:
+ *
+ *         - Use [[termflow.tui.widgets.StatusBar]] for any row that needs to
+ *           stay visible across themes — it uses inverse video
+ *           (`fg = theme.background, bg = theme.primary`) which is always
+ *           painted.
+ *         - Pin foreground colours to a specific accent slot
+ *           (`theme.primary`, `theme.success`, …) rather than `foreground`.
+ *         - Or paint backgrounds explicitly via `Style(bg = theme.background)`
+ *           on each text run.
  */
 final case class Theme(
   primary: Color,

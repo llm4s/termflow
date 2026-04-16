@@ -55,11 +55,11 @@ class KeymapSpec extends AnyFunSuite:
     assert(k.lookup(InputKey.CharKey('q')).contains(DemoMsg.Quit))
     assert(k.lookup(InputKey.CharKey('Q')).contains(DemoMsg.Quit))
 
-  test("Keymap.focus binds Tab (Ctrl+I) to the next-focus message"):
+  test("Keymap.focus binds Tab (Ctrl+I) to next and BackTab (Shift+Tab) to previous"):
     val k = Keymap.focus(next = DemoMsg.NextFocus, previous = DemoMsg.A)
     assert(k.lookup(InputKey.Ctrl('I')).contains(DemoMsg.NextFocus))
-    // Shift+Tab is unsupported by KeyDecoder today; the parameter is reserved.
-    assert(k.size == 1)
+    assert(k.lookup(InputKey.BackTab).contains(DemoMsg.A))
+    assert(k.size == 2)
 
   test("Keymap.editing binds Enter, Backspace, ArrowLeft, ArrowRight"):
     val k = Keymap.editing(

@@ -8,16 +8,24 @@ import termflow.tui.widgets.*
 /**
  * Multi-field form demo wiring [[TextField]], [[FocusManager]], [[Keymap]],
  * and [[Layout]] together. Three editable fields (Name / Email / Bio) plus
- * Submit and Reset buttons share one focus order; Tab cycles through them
- * all and Enter does the right thing per element type.
+ * Submit and Reset buttons share one focus order; Tab cycles forward,
+ * Shift+Tab backward, and Enter does the right thing per element type.
  *
  * ## Keys
  *
- *   - `Tab`              cycle focus forward (Name → Email → Bio → Submit → Reset → Name)
- *   - `Enter` (in field) advance focus to the next element (keeps the typed text)
- *   - `Enter` (button)   activate Submit / Reset
- *   - `t`                toggle dark / light theme
- *   - `q` / `Ctrl+C` / `Esc` quit
+ *   - `Tab`               cycle focus forward (Name → Email → Bio → Submit → Reset → Name)
+ *   - `Shift+Tab`         cycle focus backward
+ *   - `Enter` (in field)  submit the form (capture all field values)
+ *   - `Enter` / `Space` (button) activate Submit / Reset
+ *   - `Backspace` / `Arrow*` / `Home` / `End` etc. — standard text editing in the focused field
+ *   - `Ctrl+T`            toggle dark / light theme (works even inside a text field)
+ *   - `t` (when not in a field) also toggles theme
+ *   - `q` (when not in a field) / `Ctrl+C` / `Esc` quit
+ *
+ * `t` and `q` are deliberately **not** global — they would collide with
+ * legitimate text input. Inside a focused [[TextField]] those keys are
+ * routed straight to the field's buffer; on a focused [[Button]] (or with
+ * no focus) they fall through to the app-level shortcuts table.
  *
  * Run with:
  * {{{
@@ -42,15 +50,18 @@ object FormDemoApp:
   /** The Tab cycle: fields first, then the buttons. */
   val FocusOrder: Vector[FocusId] = Vector(NameId, EmailId, BioId, SubmitId, ResetId)
 
-  /** Form result captured when Submit is activated. */
+  /** `true` when `id` corresponds to one of the editable text fields. */
+  def isFieldId(id: FocusId): Boolean = id == NameId || id == EmailId || id == BioId
+
+  /** Form result captured when Submit is activated (or Enter fires from a field). */
   final case class Submission(name: String, email: String, bio: String)
 
   enum Msg:
     case NextFocus
     case PrevFocus
-    case Activate
-    case ToggleTheme
+    case Submit
     case Reset
+    case ToggleTheme
     case ConsoleInputKey(key: KeyDecoder.InputKey)
     case ConsoleInputError(error: Throwable)
     case Quit
@@ -68,14 +79,29 @@ object FormDemoApp:
 
   import Msg.*
 
-  /** Global key bindings. Editing keys for the focused field/button are routed separately. */
-  val Keys: Keymap[Msg] =
-    Keymap.quit(Quit) ++
-      Keymap.focus(next = NextFocus, previous = PrevFocus) ++
-      Keymap(
-        KeyDecoder.InputKey.CharKey('t') -> ToggleTheme,
-        KeyDecoder.InputKey.CharKey('T') -> ToggleTheme
-      )
+  /**
+   * Keys that fire regardless of which element is focused. These never
+   * conflict with text input because they're either control sequences
+   * (`Ctrl+T`, `Ctrl+C`, `Esc`) or special keys (`Tab`, `Shift+Tab`).
+   */
+  val Globals: Keymap[Msg] = Keymap(
+    KeyDecoder.InputKey.Ctrl('C') -> Quit,
+    KeyDecoder.InputKey.Escape    -> Quit,
+    KeyDecoder.InputKey.Ctrl('I') -> NextFocus, // Tab
+    KeyDecoder.InputKey.BackTab   -> PrevFocus, // Shift+Tab
+    KeyDecoder.InputKey.Ctrl('T') -> ToggleTheme
+  )
+
+  /**
+   * Letter shortcuts that only fire when focus is **not** on a [[TextField]] —
+   * inside a field they would collide with legitimate text input.
+   */
+  val NonTextShortcuts: Keymap[Msg] = Keymap(
+    KeyDecoder.InputKey.CharKey('t') -> ToggleTheme,
+    KeyDecoder.InputKey.CharKey('T') -> ToggleTheme,
+    KeyDecoder.InputKey.CharKey('q') -> Quit,
+    KeyDecoder.InputKey.CharKey('Q') -> Quit
+  )
 
   /** Initial state for the three fields — placeholders shown until typed-in. */
   private def freshFields: (TextField.State, TextField.State, TextField.State) =
@@ -110,74 +136,76 @@ object FormDemoApp:
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       val sized = syncTerminalSize(m, ctx)
       msg match
-        case NextFocus =>
-          sized.copy(fm = sized.fm.next).tui
+        case NextFocus   => sized.copy(fm = sized.fm.next).tui
+        case PrevFocus   => sized.copy(fm = sized.fm.previous).tui
+        case ToggleTheme => sized.copy(darkTheme = !sized.darkTheme).tui
+        case Quit        => Tui(sized, Cmd.Exit)
 
-        case PrevFocus =>
-          sized.copy(fm = sized.fm.previous).tui
-
-        case ToggleTheme =>
-          sized.copy(darkTheme = !sized.darkTheme).tui
-
-        case Quit =>
-          Tui(sized, Cmd.Exit)
-
-        case Activate =>
-          sized.fm.current match
-            case Some(id) if id == SubmitId =>
-              sized
-                .copy(
-                  submitted = Some(Submission(sized.name.buffer, sized.email.buffer, sized.bio.buffer))
-                )
-                .tui
-            case Some(id) if id == ResetId =>
-              update(sized, Reset, ctx)
-            case _ => sized.tui
+        case Submit =>
+          sized
+            .copy(submitted = Some(Submission(sized.name.buffer, sized.email.buffer, sized.bio.buffer)))
+            .tui
 
         case Reset =>
           val (n, e, b) = freshFields
           sized.copy(name = n, email = e, bio = b, submitted = None).tui
 
         case ConsoleInputKey(key) =>
-          // Global bindings always win.
-          Keys.lookup(key) match
+          // 1. True globals (Tab / Shift+Tab / Ctrl+C / Esc / Ctrl+T) win
+          //    everywhere — including inside a TextField — because they
+          //    don't collide with any printable input.
+          Globals.lookup(key) match
             case Some(next) => update(sized, next, ctx)
             case None       =>
-              // Route uncaught keys to whichever element is focused. Each
-              // TextField uses Enter to advance focus (keeping its buffer);
-              // each Button activates on Enter / Space.
+              // 2. Otherwise route by focused element. Fields get all
+              //    remaining keys; buttons activate on Enter/Space and
+              //    fall through to NonTextShortcuts for letter shortcuts.
               sized.fm.current match
-                case Some(id) if id == NameId =>
-                  routeField(sized, key, _.name, (m, ns) => m.copy(name = ns), ctx)
-                case Some(id) if id == EmailId =>
-                  routeField(sized, key, _.email, (m, ns) => m.copy(email = ns), ctx)
-                case Some(id) if id == BioId =>
-                  routeField(sized, key, _.bio, (m, ns) => m.copy(bio = ns), ctx)
-                case Some(id) if id == SubmitId || id == ResetId =>
+                case Some(id) if isFieldId(id) =>
+                  routeField(sized, id, key, ctx)
+                case Some(id) if id == SubmitId =>
                   key match
                     case KeyDecoder.InputKey.Enter | KeyDecoder.InputKey.CharKey(' ') =>
-                      update(sized, Activate, ctx)
-                    case _ => sized.tui
-                case _ => sized.tui
+                      update(sized, Submit, ctx)
+                    case _ =>
+                      NonTextShortcuts.lookup(key).fold(sized.tui)(m => update(sized, m, ctx))
+                case Some(id) if id == ResetId =>
+                  key match
+                    case KeyDecoder.InputKey.Enter | KeyDecoder.InputKey.CharKey(' ') =>
+                      update(sized, Reset, ctx)
+                    case _ =>
+                      NonTextShortcuts.lookup(key).fold(sized.tui)(m => update(sized, m, ctx))
+                case _ =>
+                  NonTextShortcuts.lookup(key).fold(sized.tui)(m => update(sized, m, ctx))
 
         case ConsoleInputError(_) => sized.tui
 
     /**
-     * Forward a key to a focused [[TextField]] and pump any resulting message
-     * (typically `NextFocus` on Enter) back through `update`.
+     * Forward a key to a focused [[TextField]]. Enter triggers a form
+     * Submit (the user-requested behaviour); other keys edit the buffer.
      */
     private def routeField(
       m: Model,
+      id: FocusId,
       key: KeyDecoder.InputKey,
-      get: Model => TextField.State,
-      set: (Model, TextField.State) => Model,
       ctx: RuntimeCtx[Msg]
     ): Tui[Model, Msg] =
-      val (next, maybeMsg) = TextField.handleKey(get(m), key)(_ => Some(NextFocus))
-      val nextModel        = set(m, next)
-      maybeMsg match
-        case Some(follow) => update(nextModel, follow, ctx)
-        case None         => nextModel.tui
+      def setField(state: TextField.State): Model =
+        if id == NameId then m.copy(name = state)
+        else if id == EmailId then m.copy(email = state)
+        else m.copy(bio = state)
+      def getField: TextField.State =
+        if id == NameId then m.name
+        else if id == EmailId then m.email
+        else m.bio
+
+      // Enter inside a field submits the whole form — TextField.handleKey
+      // would just fire onSubmit anyway, so dispatch directly here for
+      // clarity.
+      if key == KeyDecoder.InputKey.Enter then update(m, Submit, ctx)
+      else
+        val (next, _) = TextField.handleKey(getField, key)(_ => None)
+        setField(next).tui
 
     override def view(m: Model): RootNode =
       given Theme = if m.darkTheme then Theme.dark else Theme.light
@@ -186,6 +214,7 @@ object FormDemoApp:
       val termWidth  = math.max(60, m.terminalWidth)
       val termHeight = math.max(20, m.terminalHeight)
       val fieldWidth = 30
+      val themeName  = if m.darkTheme then "dark" else "light"
 
       def fieldRow(label: String, state: TextField.State, focused: Boolean): Layout =
         Layout.row(gap = 2)(
@@ -222,25 +251,14 @@ object FormDemoApp:
               1.y,
               List(
                 Text("Last submitted: ", Style(fg = theme.success, bold = true)),
-                Text(s"name=${displayOrPlaceholder(s.name, m.name.placeholder)}", Style(fg = theme.foreground)),
-                Text(", ", Style(fg = theme.foreground)),
-                Text(s"email=${displayOrPlaceholder(s.email, m.email.placeholder)}", Style(fg = theme.foreground))
+                Text(
+                  s"name=${displayOrPlaceholder(s.name, m.name.placeholder)}, " +
+                    s"email=${displayOrPlaceholder(s.email, m.email.placeholder)}",
+                  Style(fg = theme.foreground)
+                )
               )
             )
           )
-
-      val help = Layout.Elem(
-        TextNode(
-          1.x,
-          1.y,
-          List(
-            Text(
-              "Tab: next   Enter: next/activate   t: theme   q: quit",
-              Style(fg = theme.foreground)
-            )
-          )
-        )
-      )
 
       val column = Layout.Column(
         gap = 1,
@@ -253,16 +271,28 @@ object FormDemoApp:
           Layout.Spacer(1, 1),
           buttons,
           Layout.Spacer(1, 1),
-          submittedLine,
-          Layout.Spacer(1, 1),
-          help
+          submittedLine
         )
+      )
+
+      // Inverse-video status bar pinned to the bottom row. This is the only
+      // row guaranteed to be readable across all terminal backgrounds — the
+      // rest of the demo uses theme.foreground which can collide with the
+      // user's terminal bg colour (see the Theme ScalaDoc note about
+      // background slots). When toggling themes, watch the inverse colours
+      // here flip — that's the always-visible signal the toggle worked.
+      val helpBar = StatusBar(
+        left = " form ",
+        center = "Tab/⇧Tab: nav  Enter: submit  Ctrl+T: theme  Ctrl+C: quit",
+        right = s" theme=$themeName ",
+        width = termWidth,
+        at = Coord(1.x, termHeight.y)
       )
 
       RootNode(
         width = termWidth,
         height = termHeight,
-        children = column.resolve(Coord(2.x, 2.y)),
+        children = column.resolve(Coord(2.x, 2.y)) :+ helpBar,
         input = None
       )
 

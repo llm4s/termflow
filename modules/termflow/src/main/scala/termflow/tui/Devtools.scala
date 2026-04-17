@@ -1,5 +1,7 @@
 package termflow.tui
 
+import termflow.tui.Tui.tui
+
 /**
  * In-memory recording primitives for time-travel debugging of TermFlow apps.
  *
@@ -14,19 +16,21 @@ package termflow.tui
  *   - [[Devtools.Frame]] — one transition: timestamp, optional `Msg`, resulting `Model`
  *   - Apps record manually in `update`; nothing in the runtime changes
  *
- * ## Phase 2 (partial — see [[Devtools.Panel]])
+ * ## Phase 2 — Panel viewer + app decorator
  *
- * [[Devtools.Panel]] ships a read-only viewer: takes a `History` plus a
+ * [[Devtools.Panel]] is a read-only viewer: takes a `History` plus a
  * cursor index and renders a scrollable list of recent frames. Apps
  * integrate by holding a cursor `Int` in their model and forwarding
  * arrow keys / Enter to `Panel.handleKey`. Enter returns the selected
  * frame's index so the app can rewind via [[Devtools.History.rewindTo]].
  *
- * Still deferred (Phase 2b): a `Devtools.wrap` app decorator that
- * records transitions and intercepts keys automatically. Prerequisite
- * is `llm4s/termflow#110` — making `Sub.InputKey` lazy-start (same
- * treatment as `Sub.Every` got in PR #95) so the wrapper can swap
- * the inner app's input source for its own without racing for keys.
+ * [[Devtools.wrap]] takes any [[TuiApp]] and returns a wrapped `TuiApp`
+ * that records every inner transition automatically, toggles between
+ * Live and Inspect modes on a hotkey, and rewinds to the selected frame
+ * on Enter. Relies on the deferred-start contract from PR #95 / #110:
+ * the inner app's `Sub.*` registrations are captured but not started,
+ * and the wrapper runs its own `Sub.InputKey` against the real
+ * terminal. See [[Devtools.wrap]]'s ScalaDoc for the integration call.
  *
  * ## Manual integration today
  *
@@ -324,7 +328,6 @@ object Devtools:
       focused: Boolean = false,
       title: String = "Devtools History"
     )(using theme: Theme): VNode =
-      import termflow.tui.TuiPrelude.*
       val w       = math.max(10, width)
       val rowsH   = math.max(1, visibleRows)
       val frames  = history.frames
@@ -377,3 +380,260 @@ object Devtools:
 
     /** Minimum panel width. */
     def width(lineWidth: Int): Int = math.max(10, lineWidth)
+
+  // -------------------------------------------------------------------------
+  // Phase 2b — Devtools.wrap app decorator
+  // -------------------------------------------------------------------------
+
+  /** Mode flag for a [[wrap]]ped app. */
+  enum WrapMode:
+
+    /** Inner app runs normally; keys are forwarded via `toInputMsg`. */
+    case Live
+
+    /** Inner app is paused; the Devtools.Panel is rendered as a modal viewer. */
+    case Inspect
+
+  /**
+   * Outer model for a [[wrap]]ped app. Holds the inner model plus the
+   * recording, the current mode, and the Inspect cursor.
+   */
+  final case class Wrapped[M, +Ms](
+    inner: M,
+    history: History[Ms, M],
+    mode: WrapMode,
+    cursor: Int,
+    terminalWidth: Int,
+    terminalHeight: Int
+  )
+
+  /** Outer message ADT for a [[wrap]]ped app. */
+  enum WrapMsg[+Ms]:
+
+    /** Toggle Live <-> Inspect. Fired by the configured hotkey. */
+    case Toggle
+
+    /** Wrap an inner app message so it flows through the outer update. */
+    case Inner[Ms](msg: Ms) extends WrapMsg[Ms]
+
+    /** Raw key event from the wrapper's own `Sub.InputKey`. */
+    case Key(k: KeyDecoder.InputKey)
+
+    /** Input-source error forwarded from the wrapper's `Sub.InputKey`. */
+    case KeyError(e: Throwable)
+
+  /**
+   * Wrap a [[TuiApp]] with devtools. Records every `inner.update`
+   * transition into a [[History]], listens for a hotkey to toggle
+   * between Live and Inspect modes, and lets the user rewind to any
+   * recorded frame by pressing `Enter` in Inspect.
+   *
+   * {{{
+   * object Counter:
+   *   enum Msg:
+   *     case Inc, Dec, Key(k: KeyDecoder.InputKey)
+   *   val App: TuiApp[Int, Msg] = ...
+   *
+   *   @main def run(): Unit =
+   *     TuiRuntime.run(Devtools.wrap(App, toInputMsg = Msg.Key.apply))
+   * }}}
+   *
+   * ## How the wrapper intercepts input
+   *
+   * The wrapper's `init` calls `inner.init` with a fake [[RuntimeCtx]]:
+   *
+   *   - `terminal.reader` is an empty `StringReader` so the inner's
+   *     `Sub.InputKey` creates a `ConsoleKeyPressSource` that
+   *     immediately hits end-of-stream and exits harmlessly.
+   *   - `registerSub` records the inner's subs but never calls
+   *     `start()` on them, so no inner sub (input, timer, or resize)
+   *     actually runs. Relies on the deferred-start contract from
+   *     PR #95 (`Sub.Every`) and PR #110 (`Sub.InputKey`).
+   *   - `publish` forwards inner commands to the real ctx, lifted to
+   *     the outer `WrapMsg[Ms]` type.
+   *
+   * The wrapper then registers its own `Sub.InputKey` against the
+   * real ctx. Keys arrive as `WrapMsg.Key(k)`:
+   *
+   *   - If `k == toggleKey` → flip mode.
+   *   - Else if mode is Live → dispatch `WrapMsg.Inner(toInputMsg(k))`
+   *     and let the inner update run normally.
+   *   - Else (Inspect) → route to [[Panel.handleKey]]. On Enter, rewind
+   *     the inner model from the selected frame and exit Inspect.
+   *
+   * ## Known limitations (v1)
+   *
+   * Because the wrapper captures but never starts inner subs, any
+   * `Sub.Every` / `Sub.TerminalResize` registered by the inner stays
+   * dormant. Apps that rely on those (animated clocks, stress demos)
+   * will see their animations pause while wrapped. Selective
+   * forwarding of non-input subs is a future follow-up.
+   *
+   * @param inner       The inner TuiApp to wrap.
+   * @param toInputMsg  How to turn a raw `InputKey` into the inner's
+   *                    own message ADT. Typically `Msg.Key.apply` or
+   *                    similar constructor.
+   * @param capacity    Max retained history frames (default 500).
+   * @param toggleKey   Which key toggles Live <-> Inspect
+   *                    (default `Ctrl+G`, which decodes cleanly
+   *                    through `KeyDecoder`).
+   * @param devTheme    Theme used for the Inspect-mode UI (independent
+   *                    of whatever theme the inner app uses).
+   */
+  def wrap[M, Ms](
+    inner: TuiApp[M, Ms],
+    toInputMsg: KeyDecoder.InputKey => Ms,
+    capacity: Int = 500,
+    toggleKey: KeyDecoder.InputKey = KeyDecoder.InputKey.Ctrl('G'),
+    devTheme: Theme = Theme.dark
+  ): TuiApp[Wrapped[M, Ms], WrapMsg[Ms]] = new TuiApp[Wrapped[M, Ms], WrapMsg[Ms]]:
+
+    override def init(ctx: RuntimeCtx[WrapMsg[Ms]]): Tui[Wrapped[M, Ms], WrapMsg[Ms]] =
+      val fake    = innerCtx(ctx)
+      val initial = inner.init(fake)
+      // Wrapper's own input source, running against the REAL ctx.
+      Sub.InputKey[WrapMsg[Ms]](WrapMsg.Key.apply, WrapMsg.KeyError.apply, ctx)
+      val history = History.empty[Ms, M](capacity).snapshot(initial.model)
+      Tui(
+        Wrapped(
+          inner = initial.model,
+          history = history,
+          mode = WrapMode.Live,
+          cursor = 0,
+          terminalWidth = ctx.terminal.width,
+          terminalHeight = ctx.terminal.height
+        ),
+        liftCmd(initial.cmd)
+      )
+
+    override def update(
+      m: Wrapped[M, Ms],
+      msg: WrapMsg[Ms],
+      ctx: RuntimeCtx[WrapMsg[Ms]]
+    ): Tui[Wrapped[M, Ms], WrapMsg[Ms]] =
+      val sized = m.copy(terminalWidth = ctx.terminal.width, terminalHeight = ctx.terminal.height)
+      msg match
+        case WrapMsg.Toggle =>
+          val nextMode = sized.mode match
+            case WrapMode.Live    => WrapMode.Inspect
+            case WrapMode.Inspect => WrapMode.Live
+          // Park the cursor on the most recent frame when entering Inspect.
+          val nextCursor =
+            if nextMode == WrapMode.Inspect then math.max(0, sized.history.size - 1)
+            else sized.cursor
+          sized.copy(mode = nextMode, cursor = nextCursor).tui
+
+        case WrapMsg.Inner(innerMsg) =>
+          if sized.mode == WrapMode.Inspect then sized.tui
+          else
+            val fake        = innerCtx(ctx)
+            val nextInner   = inner.update(sized.inner, innerMsg, fake)
+            val nextHistory = sized.history.record(innerMsg, nextInner.model)
+            Tui(
+              sized.copy(inner = nextInner.model, history = nextHistory),
+              liftCmd(nextInner.cmd)
+            )
+
+        case WrapMsg.Key(k) =>
+          if k == toggleKey then update(sized, WrapMsg.Toggle, ctx)
+          else
+            sized.mode match
+              case WrapMode.Live =>
+                update(sized, WrapMsg.Inner(toInputMsg(k)), ctx)
+              case WrapMode.Inspect =>
+                val (cursor, maybeIdx) = Panel.handleKey(sized.cursor, sized.history, k)
+                maybeIdx match
+                  case None => sized.copy(cursor = cursor).tui
+                  case Some(idx) =>
+                    val frame   = sized.history.at(idx).get
+                    val rewound = sized.history.rewindTo(idx).get
+                    sized
+                      .copy(
+                        inner = frame.model,
+                        history = rewound,
+                        mode = WrapMode.Live,
+                        cursor = math.max(0, math.min(rewound.size - 1, cursor))
+                      )
+                      .tui
+
+        case WrapMsg.KeyError(_) =>
+          sized.tui
+
+    override def view(m: Wrapped[M, Ms]): RootNode =
+      m.mode match
+        case WrapMode.Live =>
+          // Transparent pass-through — same frame the inner would draw.
+          inner.view(m.inner)
+
+        case WrapMode.Inspect =>
+          given Theme = devTheme
+          import TuiPrelude.*
+          val w          = math.max(40, m.terminalWidth)
+          val h          = math.max(12, m.terminalHeight)
+          val panelWidth = math.max(20, w - 4)
+          val panelRows  = math.max(3, h - 6)
+          val title = TextNode(
+            2.x,
+            1.y,
+            List(
+              Text(
+                "Devtools — ↑↓ select · Enter rewind · " +
+                  formatToggleLabel(toggleKey) + " resume",
+                Style(fg = devTheme.primary, bold = true, underline = true)
+              )
+            )
+          )
+          val panel = Panel.view(
+            history = m.history,
+            cursor = m.cursor,
+            at = Coord(2.x, 3.y),
+            width = panelWidth,
+            visibleRows = panelRows,
+            focused = true,
+            title = "History"
+          )
+          RootNode(w, h, List(title, panel), None)
+
+    override def toMsg(input: TuiPrelude.PromptLine): TuiPrelude.Result[WrapMsg[Ms]] =
+      inner.toMsg(input).map(WrapMsg.Inner(_))
+
+    /** Fake RuntimeCtx that the inner app sees. See class ScalaDoc. */
+    private def innerCtx(real: RuntimeCtx[WrapMsg[Ms]]): RuntimeCtx[Ms] =
+      new RuntimeCtx[Ms]:
+        override def terminal: TerminalBackend = innerTerminal(real.terminal)
+        override def config: TermFlowConfig    = real.config
+        override def publish(cmd: Cmd[Ms]): Unit =
+          real.publish(liftCmd(cmd))
+        override def registerSub(sub: Sub[Ms]): Sub[Ms] =
+          // Capture but do not start — wrapper owns all input flow.
+          sub
+
+    /** Terminal that the inner sees: same dims, real writer, empty reader. */
+    private def innerTerminal(real: TerminalBackend): TerminalBackend = new TerminalBackend:
+      override def reader: java.io.Reader = new java.io.StringReader("")
+      override def writer: java.io.Writer = real.writer
+      override def width: Int             = real.width
+      override def height: Int            = real.height
+      override def close(): Unit          = ()
+
+    /** Lift a Cmd[Ms] from the inner app into Cmd[WrapMsg[Ms]] for the real ctx. */
+    private def liftCmd(cmd: Cmd[Ms]): Cmd[WrapMsg[Ms]] = cmd match
+      case Cmd.NoCmd                     => Cmd.NoCmd
+      case Cmd.Exit                      => Cmd.Exit
+      case Cmd.GCmd(innerMsg)            => Cmd.GCmd(WrapMsg.Inner(innerMsg))
+      case Cmd.TermFlowErrorCmd(err)     => Cmd.TermFlowErrorCmd(err)
+      case fc: Cmd.FCmd[a, ?] @unchecked =>
+        // Erasure-safe: Cmd.FCmd's second type parameter is always the
+        // enclosing Cmd[Ms]'s Msg type. The @unchecked suppresses the
+        // structural-type test warning since JVM can't see the Ms.
+        Cmd.FCmd[a, WrapMsg[Ms]](
+          task = fc.task,
+          toCmd = (res: a) => liftCmd(fc.toCmd(res).asInstanceOf[Cmd[Ms]]),
+          onEnqueue = fc.onEnqueue.map(m => WrapMsg.Inner(m.asInstanceOf[Ms]))
+        )
+
+    /** Pretty-print a toggle key for the Inspect banner. */
+    private def formatToggleLabel(key: KeyDecoder.InputKey): String = key match
+      case KeyDecoder.InputKey.Ctrl(c) => s"Ctrl+$c"
+      case KeyDecoder.InputKey.Escape  => "Esc"
+      case other                       => other.toString

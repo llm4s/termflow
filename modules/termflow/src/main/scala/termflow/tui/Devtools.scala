@@ -445,10 +445,19 @@ object Devtools:
    *   - `terminal.reader` is an empty `StringReader` so the inner's
    *     `Sub.InputKey` creates a `ConsoleKeyPressSource` that
    *     immediately hits end-of-stream and exits harmlessly.
-   *   - `registerSub` records the inner's subs but never calls
-   *     `start()` on them, so no inner sub (input, timer, or resize)
-   *     actually runs. Relies on the deferred-start contract from
-   *     PR #95 (`Sub.Every`) and PR #110 (`Sub.InputKey`).
+   *   - `registerSub` splits the inner's subs by kind:
+   *     - Any [[Sub.InputSub]] (e.g. the inner's `Sub.InputKey`) is
+   *       captured but never started — the wrapper feeds the inner its
+   *       own input stream so keystrokes can be intercepted for
+   *       time-travel. Relies on the deferred-start contract from
+   *       PR #110 so the reader thread stays dormant.
+   *     - All other subs (`Sub.Every` timers, `Sub.TerminalResize`
+   *       polls, custom event sources) are started immediately, and
+   *       an adapter is registered on the real ctx so they're
+   *       cancelled when the wrapped app exits. Their ticks flow
+   *       through the fake ctx's `publish` and arrive at the wrapper
+   *       as `WrapMsg.Inner(...)` — exactly the shape the outer loop
+   *       expects.
    *   - `publish` forwards inner commands to the real ctx, lifted to
    *     the outer `WrapMsg[Ms]` type.
    *
@@ -461,13 +470,11 @@ object Devtools:
    *   - Else (Inspect) → route to [[Panel.handleKey]]. On Enter, rewind
    *     the inner model from the selected frame and exit Inspect.
    *
-   * ## Known limitations (v1)
-   *
-   * Because the wrapper captures but never starts inner subs, any
-   * `Sub.Every` / `Sub.TerminalResize` registered by the inner stays
-   * dormant. Apps that rely on those (animated clocks, stress demos)
-   * will see their animations pause while wrapped. Selective
-   * forwarding of non-input subs is a future follow-up.
+   * While in Inspect mode the wrapper still receives inner timer and
+   * resize events (the subs keep firing), but discards them — the
+   * model is frozen so the user can scrub history without it
+   * advancing underneath them. Ticks resume flowing into `inner.update`
+   * as soon as the user returns to Live.
    *
    * @param inner       The inner TuiApp to wrap.
    * @param toInputMsg  How to turn a raw `InputKey` into the inner's
@@ -605,8 +612,33 @@ object Devtools:
         override def publish(cmd: Cmd[Ms]): Unit =
           real.publish(liftCmd(cmd))
         override def registerSub(sub: Sub[Ms]): Sub[Ms] =
-          // Capture but do not start — wrapper owns all input flow.
-          sub
+          sub match
+            case _: Sub.InputSub[?] =>
+              // Capture but do not start — wrapper owns input flow and
+              // feeds the inner from its own Sub.InputKey against the
+              // real ctx (see `init`).
+              sub
+            case other =>
+              // Non-input subs (Sub.Every timers, Sub.TerminalResize
+              // polls, custom sources) keep working while wrapped. The
+              // sub was constructed with `sink = fake`, so ticks land
+              // on `fake.publish` which forwards to `real.publish` via
+              // `liftCmd`. Start it eagerly and hand an adapter to the
+              // real ctx so it's cancelled when the wrapped app exits.
+              other.start()
+              real.registerSub(adaptInnerSubForCleanup(other))
+              other
+
+    /**
+     * Wrap a `Sub[Ms]` so the real ctx can take ownership of its
+     * cleanup lifecycle. We only need `cancel` / `isActive` from the
+     * real ctx's perspective — the inner has already been started via
+     * its own `start()`, so the adapter's `start` is a no-op.
+     */
+    private def adaptInnerSubForCleanup(inner: Sub[Ms]): Sub[WrapMsg[Ms]] =
+      new Sub[WrapMsg[Ms]]:
+        override def isActive: Boolean = inner.isActive
+        override def cancel(): Unit    = inner.cancel()
 
     /** Terminal that the inner sees: same dims, real writer, empty reader. */
     private def innerTerminal(real: TerminalBackend): TerminalBackend = new TerminalBackend:

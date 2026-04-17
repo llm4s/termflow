@@ -198,3 +198,99 @@ class DevtoolsWrapSpec extends AnyFunSuite:
     assert(d.model.history.at(2).isEmpty)
     // The latest retained frames span 3..5 inclusive.
     assert(d.model.history.frames.map(_.index) == Vector(3, 4, 5))
+
+  // --- inner sub forwarding -----------------------------------------------
+
+  /** Test-only sub whose start/cancel flip flags and whose `fire` publishes on demand. */
+  private class RecordingSub[Msg](sink: EventSink[Msg], onTick: () => Msg) extends Sub[Msg]:
+    var started: Boolean           = false
+    var cancelled: Boolean         = false
+    override def isActive: Boolean = started && !cancelled
+    override def cancel(): Unit    = cancelled = true
+    override def start(): Unit     = started = true
+    def fire(): Unit               = sink.publish(Cmd.GCmd(onTick()))
+
+  /** Test-only input sub whose `start` flips a flag. */
+  private class RecordingInputSub[Msg] extends Sub.InputSub[Msg]:
+    var started: Boolean           = false
+    override def isActive: Boolean = false
+    override def cancel(): Unit    = ()
+    override def start(): Unit     = started = true
+
+  private def timerInner(subRef: RecordingSub[InnerMsg] => Unit): TuiApp[Int, InnerMsg] =
+    new TuiApp[Int, InnerMsg]:
+      override def init(ctx: RuntimeCtx[InnerMsg]): Tui[Int, InnerMsg] =
+        val s = new RecordingSub[InnerMsg](ctx, () => InnerMsg.Inc)
+        ctx.registerSub(s)
+        subRef(s)
+        0.tui
+      override def update(m: Int, msg: InnerMsg, ctx: RuntimeCtx[InnerMsg]): Tui[Int, InnerMsg] =
+        msg match
+          case InnerMsg.Inc    => (m + 1).tui
+          case InnerMsg.Dec    => (m - 1).tui
+          case InnerMsg.Reset  => 0.tui
+          case InnerMsg.Key(_) => m.tui
+      override def view(m: Int): RootNode                     = RootNode(10, 1, List.empty, None)
+      override def toMsg(input: PromptLine): Result[InnerMsg] = Right(InnerMsg.Inc)
+
+  test("wrapper starts inner non-input subs (e.g. Sub.Every) during init"):
+    var captured: RecordingSub[InnerMsg] = null
+    val wrapped                          = Devtools.wrap(timerInner(s => captured = s), toInputMsg = InnerMsg.Key.apply)
+    val d                                = TuiTestDriver(wrapped, width = 20, height = 4)
+    d.init()
+    assert(captured != null)
+    assert(captured.started, "wrapper should call start() on inner non-input subs")
+    assert(!captured.cancelled)
+
+  test("inner non-input sub ticks flow through as WrapMsg.Inner while Live"):
+    var captured: RecordingSub[InnerMsg] = null
+    val wrapped                          = Devtools.wrap(timerInner(s => captured = s), toInputMsg = InnerMsg.Key.apply)
+    val d                                = TuiTestDriver(wrapped, width = 20, height = 4)
+    d.init()
+    assert(d.model.inner == 0)
+    captured.fire() // queues Cmd.GCmd(WrapMsg.Inner(Inc)) on the real ctx
+    // Force a drain via a no-op message (KeyError is ignored by update).
+    d.send(WrapMsg.KeyError(new RuntimeException("drain")))
+    assert(d.model.inner == 1, "timer tick should have advanced the inner model")
+    // And it was recorded into history just like any other transition.
+    assert(d.model.history.size == 2)
+    assert(d.model.history.latest.get.msg.contains(InnerMsg.Inc))
+
+  test("inner non-input sub ticks are discarded while in Inspect mode"):
+    var captured: RecordingSub[InnerMsg] = null
+    val wrapped                          = Devtools.wrap(timerInner(s => captured = s), toInputMsg = InnerMsg.Key.apply)
+    val d                                = TuiTestDriver(wrapped, width = 20, height = 4)
+    d.init()
+    d.send(WrapMsg.Inner(InnerMsg.Inc)) // model=1
+    d.send(WrapMsg.Toggle)              // enter Inspect
+    captured.fire()                     // queues an Inc — but mode is Inspect
+    d.send(WrapMsg.KeyError(new RuntimeException("drain")))
+    assert(d.model.inner == 1, "ticks during Inspect must not advance the model")
+    assert(d.model.history.size == 2, "no new history frame while Inspect paused")
+
+  test("real ctx cancellation propagates to the inner non-input sub"):
+    var captured: RecordingSub[InnerMsg] = null
+    val wrapped                          = Devtools.wrap(timerInner(s => captured = s), toInputMsg = InnerMsg.Key.apply)
+    val d                                = TuiTestDriver(wrapped, width = 20, height = 4)
+    d.init()
+    assert(!captured.cancelled)
+    d.ctx.cancelSubs()
+    assert(captured.cancelled, "cancelling via real ctx should cancel the adapted inner sub")
+
+  test("inner Sub.InputSub is captured but never started"):
+    val probe = new RecordingInputSub[InnerMsg]
+    val inputInner: TuiApp[Int, InnerMsg] = new TuiApp[Int, InnerMsg]:
+      override def init(ctx: RuntimeCtx[InnerMsg]): Tui[Int, InnerMsg] =
+        ctx.registerSub(probe)
+        0.tui
+      override def update(m: Int, msg: InnerMsg, ctx: RuntimeCtx[InnerMsg]): Tui[Int, InnerMsg] = m.tui
+      override def view(m: Int): RootNode                     = RootNode(10, 1, List.empty, None)
+      override def toMsg(input: PromptLine): Result[InnerMsg] = Right(InnerMsg.Inc)
+
+    val wrapped = Devtools.wrap(inputInner, toInputMsg = InnerMsg.Key.apply)
+    val d       = TuiTestDriver(wrapped, width = 20, height = 4)
+    d.init()
+    assert(!probe.started, "wrapper must NOT start an inner Sub.InputSub")
+    // And the real ctx should have exactly one registered sub: the wrapper's own
+    // Sub.InputKey. The inner's InputSub is captured-not-forwarded.
+    assert(d.ctx.registeredSubs.size == 1)

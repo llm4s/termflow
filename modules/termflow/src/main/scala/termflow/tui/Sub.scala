@@ -52,6 +52,23 @@ trait Sub[+Msg]:
   def start(): Unit = ()
 
 object Sub:
+
+  /**
+   * Marker for subscriptions whose primary job is delivering keyboard
+   * input to the app.
+   *
+   * Decorators that want to intercept the user's keystrokes (the most
+   * prominent example is [[Devtools.wrap]]) use this marker to tell
+   * input-sources apart from timer-/resize-style subs: the decorator
+   * swallows [[InputSub]]s so it can feed the inner app its own input
+   * stream, while still starting all other subs normally.
+   *
+   * Only [[InputKeyFromSource]] extends this today — apps rarely need
+   * to construct an `InputSub` by hand, but custom key sources may
+   * extend it to opt into the same treatment.
+   */
+  trait InputSub[+Msg] extends Sub[Msg]
+
   private def autoRegisterIfRuntimeCtx[Msg](sub: Sub[Msg], sink: EventSink[Msg]): Sub[Msg] =
     sink match
       case ctx: RuntimeCtx[?] =>
@@ -147,7 +164,7 @@ object Sub:
     onError: Throwable => Msg,
     sink: EventSink[Msg]
   ): Sub[Msg] =
-    val sub = new Sub[Msg]:
+    val sub = new InputSub[Msg]:
       private val lock                     = new Object
       @volatile private var active         = true
       @volatile private var thread: Thread = null

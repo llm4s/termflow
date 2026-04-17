@@ -247,3 +247,95 @@ class SubSpec extends AnyFunSuite:
     assert(sub.isActive)
     sub.start()
     assert(sub.isActive)
+
+  // --- Sub.InputKey deferred-start contract (issue #110) -------------------
+
+  /**
+   * Stub `TerminalKeySource` that hands out a scripted sequence of
+   * `InputRead`s and records how many times it's been polled. Blocks on
+   * `latch` after exhausting its script so the consumer thread stays
+   * parked (simulating a live terminal that has no more keys yet).
+   */
+  private class ScriptedSource(script: List[InputRead]) extends TerminalKeySource:
+    private val queue = new java.util.concurrent.ConcurrentLinkedQueue[InputRead](script.asJava)
+    val polls         = new AtomicInteger(0)
+    private val done  = new CountDownLatch(1)
+    override def next(): InputRead =
+      polls.incrementAndGet(): Unit
+      Option(queue.poll()) match
+        case Some(r) => r
+        case None =>
+          try done.await(5, TimeUnit.SECONDS): Unit
+          catch { case _: InterruptedException => () }
+          InputRead.End
+    override def close(): Try[Unit] =
+      done.countDown()
+      Success(())
+
+  test("InputKeyFromSource does not read when registered into a RuntimeCtx that omits start()"):
+    val ctx = new CapturingCtx[String]
+    val source = new ScriptedSource(
+      List(InputRead.Key(KeyDecoder.InputKey.CharKey('a')))
+    )
+    val sub = Sub.InputKeyFromSource[String](source, k => s"key:$k", e => s"err:$e", ctx)
+    assert(ctx.registered == List(sub))
+    // Wait well past any plausible race window — if the thread were running
+    // it would have called `next` at least once.
+    Thread.sleep(80)
+    assert(source.polls.get() == 0, s"expected zero polls; saw ${source.polls.get()}")
+    assert(ctx.messages.isEmpty, s"expected no published messages; saw ${ctx.messages}")
+    sub.cancel()
+
+  test("InputKeyFromSource starts consuming once start() is called explicitly"):
+    val ctx = new CapturingCtx[String]
+    val source = new ScriptedSource(
+      List(InputRead.Key(KeyDecoder.InputKey.CharKey('z')))
+    )
+    val sub = Sub.InputKeyFromSource[String](source, k => s"key:$k", e => s"err:$e", ctx)
+    assert(ctx.messages.isEmpty)
+    sub.start()
+    try
+      // Wait for the 'z' to be published.
+      val deadline = System.currentTimeMillis() + 1000
+      while ctx.messages.isEmpty && System.currentTimeMillis() < deadline do Thread.sleep(10)
+      val msgs = ctx.messages.collect { case Cmd.GCmd(v: String) => v }
+      assert(msgs.exists(_.startsWith("key:")), s"expected key message; saw ${ctx.messages}")
+    finally sub.cancel()
+
+  test("InputKeyFromSource.start() is idempotent — multiple calls do not spawn extra threads"):
+    val ctx    = new CapturingCtx[String]
+    val source = new ScriptedSource(List(InputRead.Key(KeyDecoder.InputKey.CharKey('x'))))
+    val sub    = Sub.InputKeyFromSource[String](source, k => s"key:$k", e => s"err:$e", ctx)
+    sub.start()
+    sub.start()
+    sub.start()
+    // Wait for the single 'x' to arrive.
+    val deadline = System.currentTimeMillis() + 1000
+    while ctx.messages.isEmpty && System.currentTimeMillis() < deadline do Thread.sleep(10)
+    sub.cancel()
+    assert(!sub.isActive)
+
+  test("InputKeyFromSource cancel before start does not leave a dangling thread"):
+    val ctx    = new CapturingCtx[String]
+    val source = new ScriptedSource(List(InputRead.Key(KeyDecoder.InputKey.CharKey('a'))))
+    val sub    = Sub.InputKeyFromSource[String](source, k => s"key:$k", e => s"err:$e", ctx)
+    sub.cancel()
+    // A subsequent start() must NOT spin up a thread for a cancelled sub.
+    sub.start()
+    Thread.sleep(50)
+    assert(source.polls.get() == 0, "cancelled sub must not poll after start()")
+    assert(!sub.isActive)
+
+  test("InputKeyFromSource with a bare EventSink (non-RuntimeCtx) still starts eagerly"):
+    // Back-compat: when caller passes a plain EventSink, the factory must
+    // start the sub itself so existing code keeps working.
+    val sink = new TestSink[String]
+    val source = new ScriptedSource(
+      List(InputRead.Key(KeyDecoder.InputKey.CharKey('a')))
+    )
+    val sub = Sub.InputKeyFromSource[String](source, k => s"key:$k", e => s"err:$e", sink)
+    try
+      assert(sink.awaitFirst(500))
+      val msgs = sink.messages.collect { case Cmd.GCmd(v: String) => v }
+      assert(msgs.exists(_.startsWith("key:")))
+    finally sub.cancel()

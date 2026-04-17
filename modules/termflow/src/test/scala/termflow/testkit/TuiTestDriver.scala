@@ -65,13 +65,11 @@ final class TuiTestDriver[Model, Msg](
    *
    * Subscriptions the app registers via `Sub.*` factories pass through
    * [[TestRuntimeCtx.registerSub]], which deliberately does not invoke
-   * `Sub.start()`. Combined with `Sub.Every`'s deferred-start design (see
-   * `llm4s/termflow#92`), this means timer-driven subscriptions stay
-   * dormant in tests — no race-prone ticks land in the model.
-   *
-   * Subscriptions that still start eagerly in their own constructor (e.g.
-   * `Sub.InputKey` with the testkit's empty `StringReader`) terminate
-   * harmlessly on the test backend.
+   * `Sub.start()`. Combined with the deferred-start design shared by
+   * `Sub.Every` (see `llm4s/termflow#92`) and `Sub.InputKey` (see
+   * `llm4s/termflow#110`), this means every framework-provided sub stays
+   * dormant in tests — no race-prone timer ticks or input threads land in
+   * the model.
    */
   def init(): Unit =
     if _initialized then throw new IllegalStateException("TuiTestDriver.init() called twice")

@@ -31,15 +31,20 @@ trait Sub[+Msg]:
   /**
    * Begin any background activity (timers, reader threads, …).
    *
-   * The default is a no-op for back-compat with existing `Sub` implementations
-   * that start their work eagerly in their constructor. New deferred-start
-   * factories — currently only [[Sub.Every]] — override this so the cost of
-   * "starting a sub" can be controlled by the registering context:
+   * The default is a no-op for back-compat with `Sub` implementations that
+   * start their work eagerly in their constructor. Deferred-start factories
+   * — [[Sub.Every]] (timer scheduler) and [[Sub.InputKeyFromSource]]
+   * (keyboard reader thread) — override this so the registering context
+   * decides when the work actually begins:
    *
    *   - `LocalCmdBus.registerSub` calls `start()` immediately after recording
    *     the sub, preserving existing production behaviour.
    *   - `TestRuntimeCtx.registerSub` deliberately does **not** call `start()`,
-   *     so timer-driven subs stay dormant inside the testkit.
+   *     so both timer- and input-driven subs stay dormant inside the testkit.
+   *   - Wrapper decorators (e.g. a future `Devtools.wrap`) can intercept the
+   *     inner app's `registerSub`, swap its input source for their own, and
+   *     skip calling `start()` on the original — all without racing for
+   *     keystrokes.
    *
    * Calling `start()` more than once must be safe — the contract is "start if
    * not already started".
@@ -124,6 +129,15 @@ object Sub:
    * Each decoded [[KeyDecoder.InputKey]] is wrapped with `msg` and published
    * to `sink`. Read failures are surfaced via `onError`.
    *
+   * The producer thread is constructed lazily by [[Sub.start]] rather than
+   * in this factory so `TestRuntimeCtx` can keep input subs dormant during
+   * snapshot tests, and wrapper decorators can intercept the inner app's
+   * input subscription by swapping it for their own before `start()`
+   * is called. Production callers (`LocalCmdBus.registerSub` and bare
+   * `EventSink` sinks routed through [[autoRegisterIfRuntimeCtx]]) get
+   * `start()` invoked synchronously right after construction, so the
+   * observable behaviour is identical to the eager version.
+   *
    * Most apps should prefer [[InputKey]], which uses the runtime context's
    * terminal reader.
    */
@@ -134,40 +148,49 @@ object Sub:
     sink: EventSink[Msg]
   ): Sub[Msg] =
     val sub = new Sub[Msg]:
-      @volatile private var active = true
+      private val lock                     = new Object
+      @volatile private var active         = true
+      @volatile private var thread: Thread = null
 
-      private val thread = ThreadUtils.startThread(() =>
-        try
-          while active do
-            source.next() match
-              case InputRead.Key(key) =>
-                if active then sink.publish(Cmd.GCmd(msg(key)))
-              case InputRead.End =>
-                active = false
-              case InputRead.Failed(_: InterruptedException) =>
-                active = false
-              case InputRead.Failed(err) =>
-                if active then sink.publish(Cmd.GCmd(onError(err)))
-        catch {
-          case _: InterruptedException =>
-            ()
-          case e: Throwable =>
-            if active then sink.publish(Cmd.GCmd(onError(e)))
+      override def start(): Unit =
+        lock.synchronized {
+          if thread == null && active then
+            thread = ThreadUtils.startThread(() =>
+              try
+                while active do
+                  source.next() match
+                    case InputRead.Key(key) =>
+                      if active then sink.publish(Cmd.GCmd(msg(key)))
+                    case InputRead.End =>
+                      active = false
+                    case InputRead.Failed(_: InterruptedException) =>
+                      active = false
+                    case InputRead.Failed(err) =>
+                      if active then sink.publish(Cmd.GCmd(onError(err)))
+              catch {
+                case _: InterruptedException =>
+                  ()
+                case e: Throwable =>
+                  if active then sink.publish(Cmd.GCmd(onError(e)))
+              }
+            )
         }
-      )
 
       override def isActive: Boolean = active
 
       override def cancel(): Unit =
-        active = false
-        source.close() match
-          case Failure(_) => ()
-          case _          => ()
-        thread.interrupt()
-        try thread.join(200L)
-        catch {
-          case _: InterruptedException =>
-            Thread.currentThread().interrupt()
+        lock.synchronized {
+          active = false
+          source.close() match
+            case Failure(_) => ()
+            case _          => ()
+          if thread != null then
+            thread.interrupt()
+            try thread.join(200L)
+            catch {
+              case _: InterruptedException =>
+                Thread.currentThread().interrupt()
+            }
         }
     autoRegisterIfRuntimeCtx(sub, sink)
 

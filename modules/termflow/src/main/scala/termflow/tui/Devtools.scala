@@ -14,15 +14,19 @@ package termflow.tui
  *   - [[Devtools.Frame]] — one transition: timestamp, optional `Msg`, resulting `Model`
  *   - Apps record manually in `update`; nothing in the runtime changes
  *
- * ## Phase 2 (deferred follow-up)
+ * ## Phase 2 (partial — see [[Devtools.Panel]])
  *
- * A `TuiApp` wrapper that:
- *   - records every transition automatically
- *   - exposes a hotkey-toggled overlay (history list + rewind controls)
- *   - intercepts replay messages and re-applies forward transitions
+ * [[Devtools.Panel]] ships a read-only viewer: takes a `History` plus a
+ * cursor index and renders a scrollable list of recent frames. Apps
+ * integrate by holding a cursor `Int` in their model and forwarding
+ * arrow keys / Enter to `Panel.handleKey`. Enter returns the selected
+ * frame's index so the app can rewind via [[Devtools.History.rewindTo]].
  *
- * Phase 2 needs more design work around overlay rendering and key
- * interception — see the follow-up issue filed alongside this PR.
+ * Still deferred (Phase 2b): a `Devtools.wrap` app decorator that
+ * records transitions and intercepts keys automatically. Prerequisite
+ * is `llm4s/termflow#110` — making `Sub.InputKey` lazy-start (same
+ * treatment as `Sub.Every` got in PR #95) so the wrapper can swap
+ * the inner app's input source for its own without racing for keys.
  *
  * ## Manual integration today
  *
@@ -190,3 +194,186 @@ object Devtools:
     /** Build an empty history with the given retention capacity. */
     def empty[Msg, Model](capacity: Int): History[Msg, Model] =
       History(capacity, Vector.empty, 0)
+
+  /**
+   * Widget for viewing and navigating a [[Devtools.History]].
+   *
+   * Panel is a thin read-only projection over a History: the caller
+   * holds a cursor index in their model, forwards navigation keys
+   * via [[Panel.handleKey]], and renders the panel via [[Panel.view]].
+   * On `Enter`, `handleKey` returns the selected frame's
+   * lifetime-unique index so the app can call
+   * [[Devtools.History.rewindTo]] to time-travel.
+   *
+   * ## Integration pattern
+   *
+   * {{{
+   * case class Model(
+   *   count: Int,
+   *   history: Devtools.History[Msg, Model],
+   *   devCursor: Int,
+   *   devFocused: Boolean
+   * )
+   *
+   * // In update:
+   * case Msg.Inc =>
+   *   val next = model.copy(count = model.count + 1)
+   *   next.copy(history = next.history.record(msg, next)).tui
+   *
+   * case Msg.DevKey(k) =>
+   *   val (cursor, maybeIdx) = Devtools.Panel.handleKey(model.devCursor, model.history, k)
+   *   maybeIdx match
+   *     case None      => model.copy(devCursor = cursor).tui
+   *     case Some(idx) =>
+   *       // Rewind: restore the selected frame's model.
+   *       val frame = model.history.at(idx).get
+   *       frame.model.copy(history = model.history.rewindTo(idx).get,
+   *                        devCursor = cursor).tui
+   *
+   * // In view:
+   * Devtools.Panel.view(
+   *   history  = model.history,
+   *   cursor   = model.devCursor,
+   *   width    = 60,
+   *   visibleRows = 10,
+   *   focused  = model.devFocused
+   * )
+   * }}}
+   *
+   * The Panel itself doesn't own state — the caller parks the cursor
+   * `Int` wherever makes sense (directly in the model, inside a wrapper
+   * struct, etc). Stateless rendering keeps composition simple.
+   *
+   * ## Row format
+   *
+   * Each frame is rendered as:
+   * {{{
+   * #  4 · +120ms · Msg.Inc
+   * }}}
+   *
+   * The model snapshot is deliberately elided (models can be large);
+   * callers who want full details can print `history.toReport` on
+   * the side or use `history.at(cursor)` to drill in.
+   */
+  object Panel:
+
+    /**
+     * Process one keystroke. Returns the next cursor index and, if the
+     * key was `Enter` (or `Space`) on a valid frame, the selected
+     * frame's lifetime-unique `index` for the caller to rewind to.
+     *
+     * The cursor is a zero-based position into `history.frames` — not
+     * the frame's own `index`. That's so it keeps pointing at a row
+     * as frames scroll off the back of the ring buffer.
+     *
+     * Behaviour:
+     *   - `ArrowUp` / `ArrowDown` move the cursor within the retained range
+     *   - `Home` / `End`          jump to first / last retained frame
+     *   - `Enter` / `Space`       return the selected frame's `Frame.index`
+     *   - other keys              no change
+     *
+     * Empty-history operation is a no-op — cursor stays where it is and
+     * Enter returns `None`.
+     */
+    def handleKey[Msg, Model](
+      cursor: Int,
+      history: History[Msg, Model],
+      key: KeyDecoder.InputKey
+    ): (Int, Option[Int]) =
+      import KeyDecoder.InputKey.*
+      val size = history.size
+      if size == 0 then (cursor, None)
+      else
+        val clamped = math.max(0, math.min(size - 1, cursor))
+        key match
+          case ArrowUp   => (math.max(0, clamped - 1), None)
+          case ArrowDown => (math.min(size - 1, clamped + 1), None)
+          case Home      => (0, None)
+          case End       => (size - 1, None)
+          case Enter | CharKey(' ') =>
+            val frame = history.frames(clamped)
+            (clamped, Some(frame.index))
+          case _ => (clamped, None)
+
+    /**
+     * Render the panel as a [[BoxNode]] with a title row, a divider,
+     * and `visibleRows` body rows drawn from the tail of `history`.
+     *
+     * Sizing mirrors [[termflow.tui.widgets.Table]]: total height is
+     * `2 + visibleRows` cells (title + divider + viewport). Rows that
+     * don't have a frame render as blanks so the panel has a stable
+     * height regardless of how full the history is.
+     *
+     * Focus gates the cursor: only a focused panel shows the `▸ `
+     * marker + inverse-video row.
+     *
+     * @param history     The recording to display.
+     * @param cursor      Zero-based index into the visible frames list.
+     * @param at          Top-left cell. Defaults to `(1, 1)`.
+     * @param width       Total width in cells (minimum 10).
+     * @param visibleRows Viewport height in cells.
+     * @param focused     Whether the panel currently has focus.
+     * @param title       Title-row text.
+     */
+    def view[Msg, Model](
+      history: History[Msg, Model],
+      cursor: Int,
+      at: Coord = Coord(XCoord(1), YCoord(1)),
+      width: Int = 60,
+      visibleRows: Int = 10,
+      focused: Boolean = false,
+      title: String = "Devtools History"
+    )(using theme: Theme): VNode =
+      import termflow.tui.TuiPrelude.*
+      val w       = math.max(10, width)
+      val rowsH   = math.max(1, visibleRows)
+      val frames  = history.frames
+      val size    = frames.size
+      val clamped = math.max(0, math.min(math.max(0, size - 1), cursor))
+
+      val headerLabel = s"$title (${size}/${history.capacity})".take(w).padTo(w, ' ')
+      val headerStyle = Style(fg = theme.primary, bold = true)
+      val headerRow   = TextNode(at.x, at.y, List(Text(headerLabel, headerStyle)))
+      val divider     = TextNode(at.x, at.y + 1, List(Text("─" * w, Style(fg = theme.primary))))
+
+      // Scroll so the cursor stays in-view (simple window-follow logic).
+      val scrollOffset =
+        if size <= rowsH then 0
+        else if clamped < rowsH then 0
+        else math.min(size - rowsH, clamped - rowsH + 1)
+
+      val baseTs = frames.headOption.map(_.timestampMillis).getOrElse(0L)
+
+      val bodyRows = (0 until rowsH).map { r =>
+        val idx  = scrollOffset + r
+        val rowY = at.y + 2 + r
+        if idx >= size then TextNode(at.x, rowY, List(Text(" " * w, Style())))
+        else
+          val f          = frames(idx)
+          val rel        = f.timestampMillis - baseTs
+          val msgText    = f.msg.fold("(initial)")(_.toString)
+          val line       = f"#${f.index}%4d · +${rel}%5dms · ${msgText}"
+          val truncated  = line.take(w - 2).padTo(w - 2, ' ')
+          val isSelected = idx == clamped
+          val showCursor = isSelected && focused
+          val prefix     = if showCursor then "▸ " else "  "
+          val style =
+            if showCursor then Style(fg = theme.background, bg = theme.primary)
+            else Style(fg = theme.foreground)
+          TextNode(at.x, rowY, List(Text(prefix, style), Text(truncated, style)))
+      }.toList
+
+      BoxNode(
+        at.x,
+        at.y,
+        w,
+        2 + rowsH,
+        children = headerRow :: divider :: bodyRows,
+        style = Style()
+      )
+
+    /** Total rendered height in cells (title + divider + viewport). */
+    def height(visibleRows: Int): Int = 2 + math.max(1, visibleRows)
+
+    /** Minimum panel width. */
+    def width(lineWidth: Int): Int = math.max(10, lineWidth)

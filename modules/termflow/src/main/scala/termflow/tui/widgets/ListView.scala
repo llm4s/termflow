@@ -1,7 +1,6 @@
 package termflow.tui.widgets
 
 import termflow.tui.*
-import termflow.tui.TuiPrelude.*
 
 /**
  * Scrollable list of items with a selection cursor.

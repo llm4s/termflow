@@ -1,7 +1,6 @@
 package termflow.tui.widgets
 
 import termflow.tui.*
-import termflow.tui.TuiPrelude.*
 
 /**
  * Dropdown picker — a closed "current value" box that expands into a

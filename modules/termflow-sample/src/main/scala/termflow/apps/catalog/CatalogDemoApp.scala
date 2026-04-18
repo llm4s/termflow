@@ -178,11 +178,11 @@ object CatalogDemoApp:
           sized.copy(tasks = sized.tasks.withItems(Vector.empty)).tui
 
         case RemoveSelected =>
-          sized.tasks.selectedItem match
-            case None => sized.tui
-            case Some(task) =>
-              val remaining = sized.tasks.items.filterNot(_ == task)
-              sized.copy(tasks = sized.tasks.withItems(remaining)).tui
+          val idx = sized.tasks.selected
+          if idx < 0 || idx >= sized.tasks.items.size then sized.tui
+          else
+            val remaining = sized.tasks.items.patch(idx, Nil, 1)
+            sized.copy(tasks = sized.tasks.withItems(remaining)).tui
 
         case ConsoleInputKey(key) =>
           Globals.lookup(key) match

@@ -6,6 +6,7 @@ import java.io.Reader
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import scala.util.Failure
+import scala.util.Try
 
 /**
  * A subscription represents a long-running background task that emits messages.
@@ -158,24 +159,28 @@ object Sub:
    * Most apps should prefer [[InputKey]], which uses the runtime context's
    * terminal reader.
    */
-  def InputKeyFromSource[Msg](
-    source: TerminalKeySource,
+  private def inputKeyFromSourceFactory[Msg](
+    sourceFactory: () => TerminalKeySource,
+    closeUnstarted: () => Unit,
     msg: InputKey => Msg,
     onError: Throwable => Msg,
     sink: EventSink[Msg]
   ): Sub[Msg] =
     val sub = new InputSub[Msg]:
-      private val lock                     = new Object
-      @volatile private var active         = true
-      @volatile private var thread: Thread = null
+      private val lock                                = new Object
+      @volatile private var active                    = true
+      @volatile private var source: TerminalKeySource = null
+      @volatile private var thread: Thread            = null
 
       override def start(): Unit =
         lock.synchronized {
           if thread == null && active then
+            val startedSource = sourceFactory()
+            source = startedSource
             thread = ThreadUtils.startThread(() =>
               try
                 while active do
-                  source.next() match
+                  startedSource.next() match
                     case InputRead.Key(key) =>
                       if active then sink.publish(Cmd.GCmd(msg(key)))
                     case InputRead.End =>
@@ -198,9 +203,11 @@ object Sub:
       override def cancel(): Unit =
         lock.synchronized {
           active = false
-          source.close() match
-            case Failure(_) => ()
-            case _          => ()
+          if source == null then closeUnstarted()
+          else
+            source.close() match
+              case Failure(_) => ()
+              case _          => ()
           if thread != null then
             thread.interrupt()
             try thread.join(200L)
@@ -210,6 +217,20 @@ object Sub:
             }
         }
     autoRegisterIfRuntimeCtx(sub, sink)
+
+  def InputKeyFromSource[Msg](
+    source: TerminalKeySource,
+    msg: InputKey => Msg,
+    onError: Throwable => Msg,
+    sink: EventSink[Msg]
+  ): Sub[Msg] =
+    inputKeyFromSourceFactory(
+      sourceFactory = () => source,
+      closeUnstarted = () => { val _ = source.close() },
+      msg = msg,
+      onError = onError,
+      sink = sink
+    )
 
   /**
    * Poll terminal dimensions at a fixed interval and publish a message when
@@ -228,36 +249,48 @@ object Sub:
     ctx: RuntimeCtx[Msg]
   ): Sub[Msg] =
     val sub = new Sub[Msg]:
-      @volatile private var active = true
-      private val scheduler        = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
-      @volatile private var w0     = ctx.terminal.width
-      @volatile private var h0     = ctx.terminal.height
+      private val lock                                                               = new Object
+      @volatile private var active                                                   = true
+      @volatile private var scheduler: java.util.concurrent.ScheduledExecutorService = null
+      @volatile private var handle: java.util.concurrent.ScheduledFuture[?]          = null
+      @volatile private var w0                                                       = 0
+      @volatile private var h0                                                       = 0
 
-      private val handle =
-        scheduler.scheduleAtFixedRate(
-          () =>
-            if active then
-              val w = ctx.terminal.width
-              val h = ctx.terminal.height
-              if w != w0 || h != h0 then
-                w0 = w
-                h0 = h
-                ctx.publish(Cmd.GCmd(mkMsg(w, h))),
-          0L,
-          millis,
-          TimeUnit.MILLISECONDS
-        )
+      override def start(): Unit =
+        lock.synchronized {
+          if scheduler == null && active then
+            w0 = ctx.terminal.width
+            h0 = ctx.terminal.height
+            val s = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
+            scheduler = s
+            handle = s.scheduleAtFixedRate(
+              () =>
+                if active then
+                  val w = ctx.terminal.width
+                  val h = ctx.terminal.height
+                  if w != w0 || h != h0 then
+                    w0 = w
+                    h0 = h
+                    ctx.publish(Cmd.GCmd(mkMsg(w, h))),
+              0L,
+              millis,
+              TimeUnit.MILLISECONDS
+            )
+        }
 
       override def isActive: Boolean = active
 
       override def cancel(): Unit =
-        active = false
-        handle.cancel(true)
-        scheduler.shutdownNow(): Unit
-        try scheduler.awaitTermination(200L, TimeUnit.MILLISECONDS): Unit
-        catch {
-          case _: InterruptedException =>
-            Thread.currentThread().interrupt()
+        lock.synchronized {
+          active = false
+          if handle != null then handle.cancel(true): Unit
+          if scheduler != null then
+            scheduler.shutdownNow(): Unit
+            try scheduler.awaitTermination(200L, TimeUnit.MILLISECONDS): Unit
+            catch {
+              case _: InterruptedException =>
+                Thread.currentThread().interrupt()
+            }
         }
     ctx.registerSub(sub)
 
@@ -273,7 +306,13 @@ object Sub:
     sink: EventSink[Msg],
     reader: Reader
   ): Sub[Msg] =
-    InputKeyFromSource(ConsoleKeyPressSource(reader), msg, onError, sink)
+    inputKeyFromSourceFactory(
+      sourceFactory = () => ConsoleKeyPressSource(reader),
+      closeUnstarted = () => { val _ = Try(reader.close()) },
+      msg = msg,
+      onError = onError,
+      sink = sink
+    )
 
   /**
    * Create a keyboard-input subscription using the terminal reader from the
@@ -288,7 +327,13 @@ object Sub:
    * }}}
    */
   def InputKey[Msg](msg: InputKey => Msg, onError: Throwable => Msg, ctx: RuntimeCtx[Msg]): Sub[Msg] =
-    InputKeyFromSource(ConsoleKeyPressSource(ctx.terminal.reader), msg, onError, ctx)
+    inputKeyFromSourceFactory(
+      sourceFactory = () => ConsoleKeyPressSource(ctx.terminal.reader),
+      closeUnstarted = () => { val _ = Try(ctx.terminal.reader.close()) },
+      msg = msg,
+      onError = onError,
+      sink = ctx
+    )
 
 /**
  * Sink that receives commands from subscriptions and other asynchronous

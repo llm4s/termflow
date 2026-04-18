@@ -2,6 +2,10 @@ package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.io.Reader
+import java.io.StringReader
+import java.io.StringWriter
+import java.io.Writer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -183,15 +187,39 @@ class SubSpec extends AnyFunSuite:
   // --- Sub.start() / deferred-start contract --------------------------------
 
   /** Stub RuntimeCtx that records subs but never calls `start()`. */
-  private class CapturingCtx[Msg] extends RuntimeCtx[Msg]:
-    private val captured                              = new java.util.concurrent.ConcurrentLinkedQueue[Cmd[Msg]]()
-    private val subs                                  = new java.util.concurrent.ConcurrentLinkedQueue[Sub[Msg]]()
-    override def terminal: TerminalBackend            = throw new UnsupportedOperationException("not used in test")
+  private class CapturingCtx[Msg](terminalBackend: TerminalBackend = null) extends RuntimeCtx[Msg]:
+    private val captured = new java.util.concurrent.ConcurrentLinkedQueue[Cmd[Msg]]()
+    private val subs     = new java.util.concurrent.ConcurrentLinkedQueue[Sub[Msg]]()
+    override def terminal: TerminalBackend =
+      if terminalBackend == null then throw new UnsupportedOperationException("not used in test")
+      else terminalBackend
     override def config: TermFlowConfig               = throw new UnsupportedOperationException("not used in test")
     override def publish(cmd: Cmd[Msg]): Unit         = captured.add(cmd): Unit
     override def registerSub(sub: Sub[Msg]): Sub[Msg] = { subs.add(sub): Unit; sub }
     def messages: List[Cmd[Msg]]                      = captured.iterator().asScala.toList
     def registered: List[Sub[Msg]]                    = subs.iterator().asScala.toList
+
+  private class CountingReader(script: String = "") extends Reader:
+    private var idx           = 0
+    val reads: AtomicInteger  = new AtomicInteger(0)
+    val closes: AtomicInteger = new AtomicInteger(0)
+    override def read(cbuf: Array[Char], off: Int, len: Int): Int =
+      reads.incrementAndGet(): Unit
+      if idx >= script.length then -1
+      else
+        cbuf(off) = script.charAt(idx)
+        idx += 1
+        1
+    override def close(): Unit =
+      closes.incrementAndGet(): Unit
+
+  final private class MutableTerminal(var currentWidth: Int, var currentHeight: Int) extends TerminalBackend:
+    private val out             = new StringWriter()
+    override def reader: Reader = new StringReader("")
+    override def writer: Writer = out
+    override def width: Int     = currentWidth
+    override def height: Int    = currentHeight
+    override def close(): Unit  = ()
 
   test("Sub.Every does not tick when registered into a RuntimeCtx that omits start()"):
     val ctx = new CapturingCtx[String]
@@ -338,4 +366,48 @@ class SubSpec extends AnyFunSuite:
       assert(sink.awaitFirst(500))
       val msgs = sink.messages.collect { case Cmd.GCmd(v: String) => v }
       assert(msgs.exists(_.startsWith("key:")))
+    finally sub.cancel()
+
+  test("InputKeyWithReader does not construct reader threads until start()"):
+    val ctx    = new CapturingCtx[String]
+    val reader = new CountingReader("a")
+    val sub    = Sub.InputKeyWithReader[String](k => s"key:$k", e => s"err:$e", ctx, reader)
+    assert(ctx.registered == List(sub))
+    Thread.sleep(80)
+    assert(reader.reads.get() == 0, s"reader should be idle before start; saw ${reader.reads.get()} reads")
+
+    sub.start()
+    try
+      val deadline = System.currentTimeMillis() + 1000
+      while ctx.messages.isEmpty && System.currentTimeMillis() < deadline do Thread.sleep(10)
+      assert(reader.reads.get() > 0, "reader should be consumed after start()")
+      val msgs = ctx.messages.collect { case Cmd.GCmd(v: String) => v }
+      assert(msgs.exists(_.startsWith("key:")))
+    finally sub.cancel()
+
+  test("InputKeyWithReader closes its reader when cancelled before start()"):
+    val ctx    = new CapturingCtx[String]
+    val reader = new CountingReader("a")
+    val sub    = Sub.InputKeyWithReader[String](k => s"key:$k", e => s"err:$e", ctx, reader)
+
+    sub.cancel()
+    assert(reader.reads.get() == 0)
+    assert(reader.closes.get() == 1)
+
+  test("Sub.TerminalResize stays dormant until start()"):
+    val terminal = new MutableTerminal(80, 24)
+    val ctx      = new CapturingCtx[String](terminal)
+    val sub      = Sub.TerminalResize[String](20, (w, h) => s"$w:$h", ctx)
+    assert(ctx.registered == List(sub))
+
+    terminal.currentWidth = 81
+    Thread.sleep(80)
+    assert(ctx.messages.isEmpty, s"resize poll should be dormant before start; saw ${ctx.messages}")
+
+    sub.start()
+    try
+      terminal.currentWidth = 82
+      val deadline = System.currentTimeMillis() + 1000
+      while ctx.messages.isEmpty && System.currentTimeMillis() < deadline do Thread.sleep(10)
+      assert(ctx.messages.contains(Cmd.GCmd("82:24")), s"expected resize tick after start; saw ${ctx.messages}")
     finally sub.cancel()

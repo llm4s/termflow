@@ -1,7 +1,6 @@
 package termflow.tui.widgets
 
 import termflow.tui.*
-import termflow.tui.TuiPrelude.*
 
 /**
  * Bottom-of-screen status bar with left / center / right sections.

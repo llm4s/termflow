@@ -2,7 +2,6 @@ package termflow.tui.widgets
 
 import org.scalatest.funsuite.AnyFunSuite
 import termflow.tui.*
-import termflow.tui.TuiPrelude.*
 
 class ProgressBarSpec extends AnyFunSuite:
 

@@ -39,6 +39,7 @@ final class TuiTestDriver[Model, Msg](
   private var _model: Model                              = uninitialized
   private var _initialized: Boolean                      = false
   private var _exited: Boolean                           = false
+  private val pending: mutable.Queue[Cmd[Msg]]           = mutable.Queue.empty
   private val observed: mutable.ArrayBuffer[Cmd[Msg]]    = mutable.ArrayBuffer.empty
   private val errors: mutable.ArrayBuffer[TermFlowError] = mutable.ArrayBuffer.empty
 
@@ -76,8 +77,9 @@ final class TuiTestDriver[Model, Msg](
     val initial = app.init(ctx)
     _model = initial.model
     _initialized = true
-    applyCmd(initial.cmd)
-    drainCtxQueue()
+    enqueueCtxQueue()
+    pending.enqueue(initial.cmd)
+    processPending()
 
   /**
    * Dispatch a message through `app.update` and apply the resulting `Cmd`.
@@ -89,32 +91,38 @@ final class TuiTestDriver[Model, Msg](
   def send(msg: Msg): Unit =
     if !_initialized then throw new IllegalStateException("TuiTestDriver.send() called before init()")
     if _exited then throw new IllegalStateException("TuiTestDriver.send() called after Cmd.Exit")
+    dispatch(msg)
+    processPending()
+
+  private def dispatch(msg: Msg): Unit =
     val next = app.update(_model, msg, ctx)
     _model = next.model
-    applyCmd(next.cmd)
-    drainCtxQueue()
+    enqueueCtxQueue()
+    pending.enqueue(next.cmd)
 
-  private def drainCtxQueue(): Unit =
-    var drained = ctx.drainCmds()
-    while drained.nonEmpty do
-      drained.foreach(applyCmd)
-      drained = ctx.drainCmds()
+  private def enqueueCtxQueue(): Unit =
+    ctx.drainCmds().foreach(pending.enqueue(_))
+
+  private def processPending(): Unit =
+    while pending.nonEmpty && !_exited do applyCmd(pending.dequeue())
 
   private def applyCmd(cmd: Cmd[Msg]): Unit =
     observed += cmd
     cmd match
       case Cmd.NoCmd     => ()
       case Cmd.Exit      => _exited = true
-      case Cmd.GCmd(msg) => send(msg)
+      case Cmd.GCmd(msg) => dispatch(msg)
       case Cmd.TermFlowErrorCmd(e) =>
         errors += e
       case fc: Cmd.FCmd[a, ?] =>
         // Mirror runtime: onEnqueue fires immediately (synchronously), then
         // resolve the future eagerly. Tests must supply Future.successful.
-        fc.onEnqueue.foreach(m => applyCmd(Cmd.GCmd(m).asInstanceOf[Cmd[Msg]]))
+        fc.onEnqueue match
+          case Some(m) => pending.enqueue(Cmd.GCmd(m).asInstanceOf[Cmd[Msg]])
+          case None    => pending.enqueue(Cmd.NoCmd)
         fc.task.value match
           case Some(Success(v)) =>
-            applyCmd(fc.toCmd(v).asInstanceOf[Cmd[Msg]])
+            pending.enqueue(fc.toCmd(v).asInstanceOf[Cmd[Msg]])
           case Some(Failure(e)) =>
             errors += TermFlowError.Unexpected(
               Option(e.getMessage).getOrElse(e.getClass.getSimpleName),

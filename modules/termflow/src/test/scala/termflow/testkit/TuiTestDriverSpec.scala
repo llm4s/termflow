@@ -16,6 +16,9 @@ class TuiTestDriverSpec extends AnyFunSuite:
       case Inc
       case Plus(delta: Int)
       case Chain(a: Msg, b: Msg)
+      case AppendDigit(digit: Int)
+      case PublishThenReturn(published: Msg, returned: Msg)
+      case PublishExitThenReturn(returned: Msg)
       case Async(value: Int)
       case AsyncUnresolved
       case ReportError(text: String)
@@ -29,6 +32,14 @@ class TuiTestDriverSpec extends AnyFunSuite:
         case Msg.Inc         => Tui(model + 1)
         case Msg.Plus(d)     => Tui(model + d)
         case Msg.Chain(a, _) => Tui(model, Cmd.GCmd(a))
+        case Msg.AppendDigit(digit) =>
+          Tui(model * 10 + digit)
+        case Msg.PublishThenReturn(published, returned) =>
+          ctx.publish(Cmd.GCmd(published))
+          Tui(model, Cmd.GCmd(returned))
+        case Msg.PublishExitThenReturn(returned) =>
+          ctx.publish(Cmd.Exit)
+          Tui(model, Cmd.GCmd(returned))
         case Msg.Async(v) =>
           Tui(
             model,
@@ -105,6 +116,17 @@ class TuiTestDriverSpec extends AnyFunSuite:
     val d = driver()
     d.send(TinyApp.Msg.Chain(TinyApp.Msg.Plus(3), TinyApp.Msg.Noop))
     assert(d.model == 3)
+
+  test("commands published during update are processed before the returned Cmd"):
+    val d = driver()
+    d.send(TinyApp.Msg.PublishThenReturn(TinyApp.Msg.AppendDigit(1), TinyApp.Msg.AppendDigit(2)))
+    assert(d.model == 12)
+
+  test("Cmd.Exit stops processing queued follow-up commands"):
+    val d = driver()
+    d.send(TinyApp.Msg.PublishExitThenReturn(TinyApp.Msg.AppendDigit(2)))
+    assert(d.exited)
+    assert(d.model == 0)
 
   test("Cmd.FCmd with Future.successful resolves eagerly"):
     val d = driver()

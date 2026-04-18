@@ -125,6 +125,17 @@ class CatalogDemoAppSpec extends AnyFunSuite with GoldenSupport:
     d.send(Msg.ConsoleInputKey(InputKey.Enter))
     assert(!d.model.tasks.items.contains(targeted))
 
+  test("Enter on the list removes only the selected row when duplicate tasks exist"):
+    val d = driver()
+    typeKeys(d, "buy groceries")
+    d.send(Msg.ConsoleInputKey(InputKey.Enter))
+    val duplicate = Task("buy groceries", Priority.Medium)
+    assert(d.model.tasks.items.count(_ == duplicate) == 2)
+
+    (1 to 4).foreach(_ => d.send(Msg.NextFocus)) // -> List, selected row 0
+    d.send(Msg.ConsoleInputKey(InputKey.Enter))
+    assert(d.model.tasks.items.count(_ == duplicate) == 1)
+
   // --- globals -------------------------------------------------------------
 
   test("Ctrl+T toggles the theme from anywhere, including inside the Task field"):

@@ -1,0 +1,3 @@
+# Golden-frame snapshots depend on exact byte content; force LF so Windows
+# checkouts don't rewrite them and break the renderer regression harness.
+*.golden text eol=lf

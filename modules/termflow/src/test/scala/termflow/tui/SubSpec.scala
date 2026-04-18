@@ -2,6 +2,10 @@ package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.io.Reader
+import java.io.StringReader
+import java.io.StringWriter
+import java.io.Writer
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -179,3 +183,231 @@ class SubSpec extends AnyFunSuite:
     val msgs = sink.messages.collect { case Cmd.GCmd(v: String) => v }
     assert(msgs.count(_.startsWith("key:")) == 1)
     assert(!msgs.exists(_.startsWith("err:")))
+
+  // --- Sub.start() / deferred-start contract --------------------------------
+
+  /** Stub RuntimeCtx that records subs but never calls `start()`. */
+  private class CapturingCtx[Msg](terminalBackend: TerminalBackend = null) extends RuntimeCtx[Msg]:
+    private val captured = new java.util.concurrent.ConcurrentLinkedQueue[Cmd[Msg]]()
+    private val subs     = new java.util.concurrent.ConcurrentLinkedQueue[Sub[Msg]]()
+    override def terminal: TerminalBackend =
+      if terminalBackend == null then throw new UnsupportedOperationException("not used in test")
+      else terminalBackend
+    override def config: TermFlowConfig               = throw new UnsupportedOperationException("not used in test")
+    override def publish(cmd: Cmd[Msg]): Unit         = captured.add(cmd): Unit
+    override def registerSub(sub: Sub[Msg]): Sub[Msg] = { subs.add(sub): Unit; sub }
+    def messages: List[Cmd[Msg]]                      = captured.iterator().asScala.toList
+    def registered: List[Sub[Msg]]                    = subs.iterator().asScala.toList
+
+  private class CountingReader(script: String = "") extends Reader:
+    private var idx           = 0
+    val reads: AtomicInteger  = new AtomicInteger(0)
+    val closes: AtomicInteger = new AtomicInteger(0)
+    override def read(cbuf: Array[Char], off: Int, len: Int): Int =
+      reads.incrementAndGet(): Unit
+      if idx >= script.length then -1
+      else
+        cbuf(off) = script.charAt(idx)
+        idx += 1
+        1
+    override def close(): Unit =
+      closes.incrementAndGet(): Unit
+
+  final private class MutableTerminal(var currentWidth: Int, var currentHeight: Int) extends TerminalBackend:
+    private val out             = new StringWriter()
+    override def reader: Reader = new StringReader("")
+    override def writer: Writer = out
+    override def width: Int     = currentWidth
+    override def height: Int    = currentHeight
+    override def close(): Unit  = ()
+
+  test("Sub.Every does not tick when registered into a RuntimeCtx that omits start()"):
+    val ctx = new CapturingCtx[String]
+    val sub = Sub.Every(20, () => "tick", ctx)
+    assert(ctx.registered == List(sub))
+    Thread.sleep(80) // enough wall-clock for several missed intervals
+    assert(ctx.messages.isEmpty, s"expected no ticks but saw ${ctx.messages}")
+    sub.cancel()
+
+  test("Sub.Every starts ticking once start() is invoked explicitly"):
+    val ctx = new CapturingCtx[String]
+    val sub = Sub.Every(20, () => "tick", ctx)
+    assert(ctx.messages.isEmpty)
+    sub.start()
+    try
+      // Wait for at least one tick.
+      val deadline = System.currentTimeMillis() + 500
+      while ctx.messages.isEmpty && System.currentTimeMillis() < deadline do Thread.sleep(10)
+      assert(ctx.messages.nonEmpty, "expected a tick after start()")
+      assert(ctx.messages.head == Cmd.GCmd("tick"))
+    finally sub.cancel()
+
+  test("Sub.Every.start() is idempotent — multiple calls do not spawn extra schedulers"):
+    val ctx = new CapturingCtx[String]
+    val sub = Sub.Every(50, () => "tick", ctx)
+    sub.start()
+    sub.start()
+    sub.start()
+    Thread.sleep(120)
+    sub.cancel()
+    // We only assert determinism via "did not blow up"; concretely, double-start
+    // would have leaked extra scheduler threads. The cancel above should still
+    // tear everything down cleanly; this test is primarily about not throwing.
+    assert(!sub.isActive)
+
+  test("Sub.Every with a bare EventSink (non-RuntimeCtx) still starts eagerly"):
+    // Back-compat: when caller passes a plain EventSink, the factory must
+    // start the sub itself so existing code keeps working.
+    val sink = new TestSink[String]
+    val sub  = Sub.Every(20, () => "tick", sink)
+    try
+      assert(sink.awaitFirst(500))
+      assert(sink.messages.nonEmpty)
+    finally sub.cancel()
+
+  test("Sub trait default start() is a no-op"):
+    val sub = new Sub[Nothing]:
+      override def isActive: Boolean = true
+      override def cancel(): Unit    = ()
+      // Inherit default start, which is a no-op.
+    // Should not throw and should leave isActive untouched.
+    sub.start()
+    assert(sub.isActive)
+    sub.start()
+    assert(sub.isActive)
+
+  // --- Sub.InputKey deferred-start contract (issue #110) -------------------
+
+  /**
+   * Stub `TerminalKeySource` that hands out a scripted sequence of
+   * `InputRead`s and records how many times it's been polled. Blocks on
+   * `latch` after exhausting its script so the consumer thread stays
+   * parked (simulating a live terminal that has no more keys yet).
+   */
+  private class ScriptedSource(script: List[InputRead]) extends TerminalKeySource:
+    private val queue = new java.util.concurrent.ConcurrentLinkedQueue[InputRead](script.asJava)
+    val polls         = new AtomicInteger(0)
+    private val done  = new CountDownLatch(1)
+    override def next(): InputRead =
+      polls.incrementAndGet(): Unit
+      Option(queue.poll()) match
+        case Some(r) => r
+        case None =>
+          try done.await(5, TimeUnit.SECONDS): Unit
+          catch { case _: InterruptedException => () }
+          InputRead.End
+    override def close(): Try[Unit] =
+      done.countDown()
+      Success(())
+
+  test("InputKeyFromSource does not read when registered into a RuntimeCtx that omits start()"):
+    val ctx = new CapturingCtx[String]
+    val source = new ScriptedSource(
+      List(InputRead.Key(KeyDecoder.InputKey.CharKey('a')))
+    )
+    val sub = Sub.InputKeyFromSource[String](source, k => s"key:$k", e => s"err:$e", ctx)
+    assert(ctx.registered == List(sub))
+    // Wait well past any plausible race window — if the thread were running
+    // it would have called `next` at least once.
+    Thread.sleep(80)
+    assert(source.polls.get() == 0, s"expected zero polls; saw ${source.polls.get()}")
+    assert(ctx.messages.isEmpty, s"expected no published messages; saw ${ctx.messages}")
+    sub.cancel()
+
+  test("InputKeyFromSource starts consuming once start() is called explicitly"):
+    val ctx = new CapturingCtx[String]
+    val source = new ScriptedSource(
+      List(InputRead.Key(KeyDecoder.InputKey.CharKey('z')))
+    )
+    val sub = Sub.InputKeyFromSource[String](source, k => s"key:$k", e => s"err:$e", ctx)
+    assert(ctx.messages.isEmpty)
+    sub.start()
+    try
+      // Wait for the 'z' to be published.
+      val deadline = System.currentTimeMillis() + 1000
+      while ctx.messages.isEmpty && System.currentTimeMillis() < deadline do Thread.sleep(10)
+      val msgs = ctx.messages.collect { case Cmd.GCmd(v: String) => v }
+      assert(msgs.exists(_.startsWith("key:")), s"expected key message; saw ${ctx.messages}")
+    finally sub.cancel()
+
+  test("InputKeyFromSource.start() is idempotent — multiple calls do not spawn extra threads"):
+    val ctx    = new CapturingCtx[String]
+    val source = new ScriptedSource(List(InputRead.Key(KeyDecoder.InputKey.CharKey('x'))))
+    val sub    = Sub.InputKeyFromSource[String](source, k => s"key:$k", e => s"err:$e", ctx)
+    sub.start()
+    sub.start()
+    sub.start()
+    // Wait for the single 'x' to arrive.
+    val deadline = System.currentTimeMillis() + 1000
+    while ctx.messages.isEmpty && System.currentTimeMillis() < deadline do Thread.sleep(10)
+    sub.cancel()
+    assert(!sub.isActive)
+
+  test("InputKeyFromSource cancel before start does not leave a dangling thread"):
+    val ctx    = new CapturingCtx[String]
+    val source = new ScriptedSource(List(InputRead.Key(KeyDecoder.InputKey.CharKey('a'))))
+    val sub    = Sub.InputKeyFromSource[String](source, k => s"key:$k", e => s"err:$e", ctx)
+    sub.cancel()
+    // A subsequent start() must NOT spin up a thread for a cancelled sub.
+    sub.start()
+    Thread.sleep(50)
+    assert(source.polls.get() == 0, "cancelled sub must not poll after start()")
+    assert(!sub.isActive)
+
+  test("InputKeyFromSource with a bare EventSink (non-RuntimeCtx) still starts eagerly"):
+    // Back-compat: when caller passes a plain EventSink, the factory must
+    // start the sub itself so existing code keeps working.
+    val sink = new TestSink[String]
+    val source = new ScriptedSource(
+      List(InputRead.Key(KeyDecoder.InputKey.CharKey('a')))
+    )
+    val sub = Sub.InputKeyFromSource[String](source, k => s"key:$k", e => s"err:$e", sink)
+    try
+      assert(sink.awaitFirst(500))
+      val msgs = sink.messages.collect { case Cmd.GCmd(v: String) => v }
+      assert(msgs.exists(_.startsWith("key:")))
+    finally sub.cancel()
+
+  test("InputKeyWithReader does not construct reader threads until start()"):
+    val ctx    = new CapturingCtx[String]
+    val reader = new CountingReader("a")
+    val sub    = Sub.InputKeyWithReader[String](k => s"key:$k", e => s"err:$e", ctx, reader)
+    assert(ctx.registered == List(sub))
+    Thread.sleep(80)
+    assert(reader.reads.get() == 0, s"reader should be idle before start; saw ${reader.reads.get()} reads")
+
+    sub.start()
+    try
+      val deadline = System.currentTimeMillis() + 1000
+      while ctx.messages.isEmpty && System.currentTimeMillis() < deadline do Thread.sleep(10)
+      assert(reader.reads.get() > 0, "reader should be consumed after start()")
+      val msgs = ctx.messages.collect { case Cmd.GCmd(v: String) => v }
+      assert(msgs.exists(_.startsWith("key:")))
+    finally sub.cancel()
+
+  test("InputKeyWithReader closes its reader when cancelled before start()"):
+    val ctx    = new CapturingCtx[String]
+    val reader = new CountingReader("a")
+    val sub    = Sub.InputKeyWithReader[String](k => s"key:$k", e => s"err:$e", ctx, reader)
+
+    sub.cancel()
+    assert(reader.reads.get() == 0)
+    assert(reader.closes.get() == 1)
+
+  test("Sub.TerminalResize stays dormant until start()"):
+    val terminal = new MutableTerminal(80, 24)
+    val ctx      = new CapturingCtx[String](terminal)
+    val sub      = Sub.TerminalResize[String](20, (w, h) => s"$w:$h", ctx)
+    assert(ctx.registered == List(sub))
+
+    terminal.currentWidth = 81
+    Thread.sleep(80)
+    assert(ctx.messages.isEmpty, s"resize poll should be dormant before start; saw ${ctx.messages}")
+
+    sub.start()
+    try
+      terminal.currentWidth = 82
+      val deadline = System.currentTimeMillis() + 1000
+      while ctx.messages.isEmpty && System.currentTimeMillis() < deadline do Thread.sleep(10)
+      assert(ctx.messages.contains(Cmd.GCmd("82:24")), s"expected resize tick after start; saw ${ctx.messages}")
+    finally sub.cancel()

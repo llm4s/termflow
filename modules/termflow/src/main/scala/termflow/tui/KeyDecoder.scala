@@ -16,6 +16,9 @@ object KeyDecoder:
     case ArrowDown
     case ArrowLeft
     case ArrowRight
+
+    /** Shift+Tab — produced by the `\u001b[Z` escape sequence on most terminals. */
+    case BackTab
     case F1
     case F2
     case F3
@@ -58,6 +61,7 @@ object AsciiControl:
   val D       = 68
   val F       = 70
   val H       = 72
+  val Z       = 90
   val `48`    = 48
   val `49`    = 49
   val `53`    = 53

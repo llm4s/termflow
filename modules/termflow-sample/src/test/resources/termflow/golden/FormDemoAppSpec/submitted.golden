@@ -1,0 +1,23 @@
+# width=80 height=22
+|                                                                                |
+| User Profile Form                                                              |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| Name:     alice                                                                |
+|                                                                                |
+| Email:    a@b.c                                                                |
+|                                                                                |
+| Bio:      engineer                                                             |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| [ Submit ]  [ Reset ]                                                          |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| Last submitted: name=alice, email=a@b.c                                        |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| form   Tab/⇧Tab/↑↓: nav  Enter: submit  Ctrl+T: theme  Ctrl+C: quit theme=dark |

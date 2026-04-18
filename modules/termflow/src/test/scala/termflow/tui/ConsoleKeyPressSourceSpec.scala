@@ -29,6 +29,13 @@ class ConsoleKeyPressSourceSpec extends AnyFunSuite:
     assert(source.close().isSuccess)
     assert(source.close().isSuccess)
 
+  test("decodes ESC [ Z as BackTab (Shift+Tab)"):
+    val source = ConsoleKeyPressSource(new StringReader("\u001b[Z"))
+    try assert(source.next() == Key(InputKey.BackTab))
+    finally
+      assert(source.close().isSuccess)
+      ()
+
   test("close closes underlying reader once"):
     final class CountingReader(data: String) extends StringReader(data):
       val closedCount = new AtomicInteger(0)

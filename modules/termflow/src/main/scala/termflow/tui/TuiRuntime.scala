@@ -8,11 +8,28 @@ import scala.util.Failure
 import scala.util.Success
 
 /**
- * Renderer responsible for converting virtual DOM to terminal output.
+ * Pluggable renderer invoked by the runtime loop once per frame.
+ *
+ * The default implementation is `SimpleANSIRenderer` which delegates to
+ * `AnsiRenderer.buildFrame` + `AnsiRenderer.diff`. Custom renderers can be
+ * supplied to `TuiRuntime.run` for backends that emit something other than
+ * raw ANSI (e.g. test capture, alternate terminals).
+ *
+ * @note This is an SPI. Source-compatible changes are not guaranteed;
+ *       downstream implementers should expect the trait to evolve.
  */
 trait TuiRenderer:
 
-  /** Render the root node and optionally display an error. */
+  /**
+   * Render `textNode` onto `terminal`, optionally overlaying `err` as an
+   * error banner. Called at most once per frame by the runtime loop after
+   * coalescing queued commands.
+   *
+   * @param textNode The virtual DOM root produced by `TuiApp.view`.
+   * @param err A pending error to surface (cleared by the runtime after this call).
+   * @param terminal The backend to write ANSI output to.
+   * @param renderMetrics Metrics sink for diff size / coalescing counters.
+   */
   def render(
     textNode: RootNode,
     err: Option[TermFlowError],
@@ -45,16 +62,40 @@ trait RuntimeCtx[Msg] extends EventSink[Msg]:
    */
   def registerSub(sub: Sub[Msg]): Sub[Msg]
 
-/** Read side of the command bus used by the runtime loop. */
+/**
+ * Read side of the command bus consumed by the runtime loop.
+ *
+ * @note SPI. Applications should interact with commands through [[Cmd]] and
+ *       [[RuntimeCtx]], not this trait.
+ */
 trait CmdConsumer[Msg]:
+
+  /** Block until a command is available and return it. */
   def take(): Cmd[Msg]
+
+  /**
+   * Wait up to `timeoutMillis` for a command. Returns `None` on timeout.
+   * Used by the runtime to coalesce queued commands within a frame budget.
+   */
   def poll(timeoutMillis: Long): Option[Cmd[Msg]]
 
-/** Bidirectional command bus: producers publish, the runtime consumes. */
+/**
+ * Bidirectional command bus: producers publish, the runtime consumes.
+ *
+ * @note SPI. Custom implementations are only useful when replacing
+ *       `TuiRuntime.run` wholesale (e.g. for a bespoke test harness).
+ */
 trait CmdBus[Msg] extends RuntimeCtx[Msg] with CmdConsumer[Msg]:
+
+  /** Cancel every registered subscription, swallowing individual errors. */
   def cancelAllSubscriptions(): Unit
 
-/** Default in-memory command bus backed by a LinkedBlockingQueue. */
+/**
+ * Default in-memory [[CmdBus]] backed by a `LinkedBlockingQueue`.
+ *
+ * Thread-safe: multiple subscription threads can call `publish` concurrently
+ * while the runtime loop drains via `take` / `poll`.
+ */
 final class LocalCmdBus[Msg](val terminal: TerminalBackend, val config: TermFlowConfig) extends CmdBus[Msg]:
   private val queue                                   = new LinkedBlockingQueue[Cmd[Msg]]()
   private val subscriptions: java.util.List[Sub[Msg]] = new java.util.concurrent.CopyOnWriteArrayList[Sub[Msg]]()
@@ -62,7 +103,14 @@ final class LocalCmdBus[Msg](val terminal: TerminalBackend, val config: TermFlow
   override def take(): Cmd[Msg]                       = queue.take()
   override def poll(timeoutMillis: Long): Option[Cmd[Msg]] =
     Option(queue.poll(timeoutMillis, TimeUnit.MILLISECONDS))
-  override def registerSub(sub: Sub[Msg]): Sub[Msg] = { subscriptions.add(sub); sub }
+  override def registerSub(sub: Sub[Msg]): Sub[Msg] = {
+    subscriptions.add(sub): Unit
+    // Start any deferred-start machinery (e.g. Sub.Every's scheduler).
+    // Eagerly-started subs override `start` as a no-op, so this is safe
+    // for every existing implementation.
+    sub.start()
+    sub
+  }
   override def cancelAllSubscriptions(): Unit =
     subscriptions.forEach { sub =>
       try sub.cancel()
@@ -82,10 +130,26 @@ object TuiRuntime:
     Option(e.getMessage).filter(_.trim.nonEmpty).getOrElse(e.getClass.getSimpleName)
 
   /**
-   * Run a TUI application with the given renderer and terminal backend.
+   * Run a TUI application, loading configuration from the environment.
    *
-   * This method enters alternate buffer mode, runs the application loop,
-   * and ensures terminal state is restored on exit (whether normal or due to error).
+   * This is the entry point most applications use: it loads
+   * [[TermFlowConfig]], delegates to the lower-level
+   * [[TuiRuntime.run[Model,Msg](app,renderer,terminalBackend,config)* overload]],
+   * and writes a diagnostic message if config loading fails.
+   *
+   * The runtime:
+   *   1. enters the terminal alternate buffer,
+   *   2. installs a JVM shutdown hook that restores cursor/alt-buffer state,
+   *   3. drives an event loop that coalesces queued commands at 60 FPS,
+   *   4. renders at most one frame per command burst,
+   *   5. tears down subscriptions and restores terminal state on exit.
+   *
+   * The loop runs on the caller's thread and only returns when the app
+   * publishes [[Cmd.Exit]] or throws.
+   *
+   * @param app The application to run.
+   * @param renderer The renderer to use. Defaults to `SimpleANSIRenderer`.
+   * @param terminalBackend The terminal backend. Defaults to `JLineTerminalBackend`.
    */
   def run[Model, Msg](
     app: TuiApp[Model, Msg],
@@ -105,6 +169,17 @@ object TuiRuntime:
         terminalBackend.flush()
         terminalBackend.close()
 
+  /**
+   * Run a TUI application with an explicitly supplied [[TermFlowConfig]].
+   *
+   * Use this overload when you need to override the default config (e.g.
+   * from tests or custom embedding). Otherwise prefer the
+   * [[TuiRuntime.run[Model,Msg](app,renderer,terminalBackend)* three-argument overload]]
+   * which loads config from the environment.
+   *
+   * See the three-argument overload for the loop semantics — this method
+   * only differs in that it skips the `TermFlowConfig.load()` step.
+   */
   def run[Model, Msg](
     app: TuiApp[Model, Msg],
     renderer: TuiRenderer,

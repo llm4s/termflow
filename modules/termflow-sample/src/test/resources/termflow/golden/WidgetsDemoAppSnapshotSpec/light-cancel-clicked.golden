@@ -1,0 +1,15 @@
+# width=80 height=14
+|                                                                                |
+| TermFlow Widget Demo                                                           |
+|                                                                                |
+| ⠋  ████████████████░░░░░░░░░░░░░░░░░░░░░░░░  40%                               |
+|                                                                                |
+| [ Save ]  [ Cancel ]                                                           |
+|                                                                                |
+| Tab: focus   Enter/Space: activate   t: theme   +/-: nudge   q: quit           |
+|                                                                                |
+| last action: clicked Cancel                                                    |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| demo                         theme=light  tick=0                 progress= 40% |

@@ -64,7 +64,13 @@ lazy val commonSettings = Seq(
     "-Wsafe-init", // flag potentially unsafe field initialization order
     "-source:3.7-migration" // emit migration guidance without failing builds
   ),
-  Test / fork := true
+  Test / fork := true,
+  // Forward the golden-update flag into forked test JVMs so
+  // `sbt -Dtermflow.update-goldens=true test` works end-to-end.
+  Test / javaOptions ++= sys.props
+    .get("termflow.update-goldens")
+    .toSeq
+    .map(v => s"-Dtermflow.update-goldens=$v")
 )
 
 lazy val scalafixRuleDependencies = Def.setting {
@@ -100,7 +106,7 @@ lazy val termflow = (project in file("modules/termflow"))
   )
 
 lazy val termflowSample = (project in file("modules/termflow-sample"))
-  .dependsOn(termflow)
+  .dependsOn(termflow % "compile->compile;test->test")
   .settings(
     name := "termflow-sample",
     commonSettings,
@@ -119,3 +125,21 @@ addCommandAlias(
   "publishLocalFixed",
   s"""set ThisBuild / version := "$fixedLocalVersion"; publishLocal"""
 )
+
+// --- Sample-app launchers --------------------------------------------------
+// Short aliases so contributors can run a demo without typing the full
+// runMain incantation. Use a real interactive terminal — JLine falls back
+// to a dumb backend when stdin/stdout are pipes.
+addCommandAlias("hubDemo",      "termflowSample/runMain termflow.run.SampleHubMain")
+addCommandAlias("widgetsDemo",  "termflowSample/runMain termflow.apps.widgets.WidgetsDemoApp")
+addCommandAlias("formDemo",     "termflowSample/runMain termflow.apps.forms.FormDemoApp")
+addCommandAlias("catalogDemo",  "termflowSample/runMain termflow.apps.catalog.CatalogDemoApp")
+addCommandAlias("echoDemo",     "termflowSample/runMain termflow.apps.echo.EchoApp")
+addCommandAlias("counterDemo",  "termflowSample/runMain termflow.apps.counter.SyncCounter")
+addCommandAlias("futureDemo",   "termflowSample/runMain termflow.apps.counter.FutureCounter")
+addCommandAlias("clockDemo",    "termflowSample/runMain termflow.apps.clock.DigitalClock")
+addCommandAlias("tabsDemo",     "termflowSample/runMain termflow.apps.tabs.TabsDemoApp")
+addCommandAlias("taskDemo",     "termflowSample/runMain termflow.apps.task.Task")
+addCommandAlias("stressDemo",   "termflowSample/runMain termflow.apps.stress.RenderStressApp")
+addCommandAlias("sineDemo",     "termflowSample/runMain termflow.apps.stress.SineWaveApp")
+addCommandAlias("inputDemo",    "termflowSample/runMain termflow.apps.input.InputLineReproApp")

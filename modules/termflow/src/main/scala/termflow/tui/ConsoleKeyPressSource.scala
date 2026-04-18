@@ -67,6 +67,8 @@ object ConsoleKeyPressSource:
         InputKey.Home
       case (F, List(ESC, `[`)) =>
         InputKey.End
+      case (Z, List(ESC, `[`)) =>
+        InputKey.BackTab
       case (H, List(ESC, O)) =>
         InputKey.Home
       case (F, List(ESC, O)) =>

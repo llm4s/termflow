@@ -81,38 +81,48 @@ object EchoApp:
       val renderedPrompt = Prompt.renderWithPrefix(m.prompt, prefix)
       val innerHeight    = math.max(1, panelHeight - 2)
       val visible        = m.messages.takeRight(innerHeight)
-      val startY         = panelTop + 1 + (innerHeight - visible.length)
       val clearRowWidth  = math.max(1, contentWidth(m.terminalWidth))
 
-      // Explicitly clear message rows each frame so shorter content
-      // cannot leave stale characters behind.
-      val clearNodes =
-        (0 until innerHeight).toList.map { i =>
-          TextNode(2.x, (panelTop + 1 + i).y, List(Text(" " * clearRowWidth, Style())))
-        }
+      // The message panel is always exactly `innerHeight` rows. We pad with
+      // blank-text rows above the messages so they bottom-align inside the
+      // panel — the explicit blanks (rather than `Layout.Spacer`) double as
+      // erase rows so shorter content doesn't ghost previous frames.
+      def blankRow: Layout =
+        Layout.Elem(TextNode(1.x, 1.y, List(Text(" " * clearRowWidth, Style()))))
 
-      val messageNodes =
+      val panelRows: List[Layout] =
         if visible.nonEmpty then
-          visible.zipWithIndex.map { case (msg, i) =>
-            TextNode(2.x, (startY + i).y, List(msg.text))
-          }
+          val padding = innerHeight - visible.length
+          List.fill(padding)(blankRow) ++
+            visible.map(msg => Layout.Elem(TextNode(1.x, 1.y, List(msg.text))))
         else
-          List(
-            TextNode(2.x, (panelTop + 1 + (innerHeight / 2)).y, List("Type a message and press Enter".text(fg = Cyan)))
-          )
+          val before = innerHeight / 2
+          val after  = innerHeight - before - 1
+          List.fill(before)(blankRow) ++
+            List(Layout.Elem(TextNode(1.x, 1.y, List("Type a message and press Enter".text(fg = Cyan))))) ++
+            List.fill(after)(blankRow)
+
+      val column = Layout.Column(
+        gap = 0,
+        children = List(
+          Layout.Elem(TextNode(1.x, 1.y, List(Text("Messages", Style(fg = Blue, underline = true)))))
+        ) ++ panelRows ++ List(
+          // Original layout reserves one blank row between the panel
+          // (which is `innerHeight` tall) and the separator (which sits at
+          // `panelTop + panelHeight = panelTop + innerHeight + 2`).
+          Layout.Spacer(1, 1),
+          Layout.Elem(TextNode(1.x, 1.y, List("──────────────────────────────".text(fg = Cyan)))),
+          Layout.Elem(TextNode(1.x, 1.y, List("Commands:".text(fg = Yellow)))),
+          Layout.Elem(TextNode(1.x, 1.y, List("  clear | /clear -> clear chat".text))),
+          Layout.Elem(TextNode(1.x, 1.y, List("  exit           -> quit".text)))
+        )
+      )
+      val children = column.resolve(Coord(2.x, panelTop.y))
 
       RootNode(
         width = m.terminalWidth,
         height = panelHeight + 8,
-        children = List(
-          TextNode(2.x, panelTop.y, List(Text("Messages", Style(fg = Blue, underline = true))))
-        ) ++ clearNodes ++ messageNodes ++
-          List(
-            TextNode(2.x, (panelTop + panelHeight).y, List("──────────────────────────────".text(fg = Cyan))),
-            TextNode(2.x, (panelTop + panelHeight + 1).y, List("Commands:".text(fg = Yellow))),
-            TextNode(2.x, (panelTop + panelHeight + 2).y, List("  clear | /clear -> clear chat".text)),
-            TextNode(2.x, (panelTop + panelHeight + 3).y, List("  exit           -> quit".text))
-          ),
+        children = children,
         input = Some(
           InputNode(
             2.x,

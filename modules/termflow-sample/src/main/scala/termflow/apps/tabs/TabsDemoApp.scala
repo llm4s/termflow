@@ -137,31 +137,55 @@ object TabsDemoApp:
       val headerText = s"Active: ${active.name} | counter=${active.counter}"
       val headerFit  = if headerText.length <= innerWidth then headerText else headerText.take(innerWidth)
 
-      val children: List[VNode] = List(
-        BoxNode(1.x, 1.y, boxWidth, boxHeight, children = Nil, style = Style(border = true, fg = Blue)),
-        TextNode(2.x, 2.y, List(Text("Tabs Demo", Style(fg = Yellow, bold = true, underline = true)))),
-        TextNode(2.x, 3.y, List(Text(tabBarFit, Style(fg = Magenta, bold = true)))),
-        TextNode(2.x, 4.y, List(Text(headerFit, Style(fg = Cyan)))),
-        TextNode(2.x, 5.y, List(Text("-" * innerWidth, Style(fg = Blue)))),
-        TextNode(2.x, (notesStartY - 1).y, List(Text("Notes (per-tab persistent):", Style(fg = White))))
-      ) ++
-        (if notes.isEmpty then List(TextNode(2.x, notesStartY.y, List(Text("(none)", Style(fg = White)))))
-         else
-           notes.zipWithIndex.map { case (line, idx) =>
-             val text = if line.length <= innerWidth then line else line.take(innerWidth)
-             TextNode(2.x, (notesStartY + idx).y, List(Text(s"- $text", Style(fg = White))))
-           }
-        ) ++
-        List(
-          TextNode(2.x, (boxHeight - 4).y, List(Text("-" * innerWidth, Style(fg = Blue)))),
-          TextNode(
-            2.x,
-            (boxHeight - 3).y,
-            List(Text("Commands: next | prev | tab 1|2|3 | inc | dec", Style(fg = White)))
-          ),
-          TextNode(2.x, (boxHeight - 2).y, List(Text("          note <text> | clear | exit", Style(fg = White)))),
-          TextNode(2.x, (boxHeight - 1).y, List(Text(statusFit, Style(fg = Green))))
+      // Header section: title, tab bar, current-tab header line, separator.
+      val headerColumn = Layout.Column(
+        gap = 0,
+        children = List(
+          Layout.Elem(TextNode(1.x, 1.y, List(Text("Tabs Demo", Style(fg = Yellow, bold = true, underline = true))))),
+          Layout.Elem(TextNode(1.x, 1.y, List(Text(tabBarFit, Style(fg = Magenta, bold = true))))),
+          Layout.Elem(TextNode(1.x, 1.y, List(Text(headerFit, Style(fg = Cyan))))),
+          Layout.Elem(TextNode(1.x, 1.y, List(Text("-" * innerWidth, Style(fg = Blue)))))
         )
+      )
+
+      // Notes section: label sits ON TOP of the header separator (overlap is
+      // intentional in the original layout — text characters overwrite the
+      // dashes wherever the label has chars). Body lines flow below.
+      val notesBody: List[Layout] =
+        if notes.isEmpty then List(Layout.Elem(TextNode(1.x, 1.y, List(Text("(none)", Style(fg = White))))))
+        else
+          notes.map { line =>
+            val text = if line.length <= innerWidth then line else line.take(innerWidth)
+            Layout.Elem(TextNode(1.x, 1.y, List(Text(s"- $text", Style(fg = White)))))
+          }
+
+      // Footer section anchored to the bottom of the box: separator, two
+      // commands lines, status line. Resolved at boxHeight - 4 so it stays
+      // pinned regardless of how tall the notes panel grows.
+      val footerColumn = Layout.Column(
+        gap = 0,
+        children = List(
+          Layout.Elem(TextNode(1.x, 1.y, List(Text("-" * innerWidth, Style(fg = Blue))))),
+          Layout.Elem(
+            TextNode(
+              1.x,
+              1.y,
+              List(Text("Commands: next | prev | tab 1|2|3 | inc | dec", Style(fg = White)))
+            )
+          ),
+          Layout.Elem(TextNode(1.x, 1.y, List(Text("          note <text> | clear | exit", Style(fg = White))))),
+          Layout.Elem(TextNode(1.x, 1.y, List(Text(statusFit, Style(fg = Green)))))
+        )
+      )
+
+      val children: List[VNode] =
+        BoxNode(1.x, 1.y, boxWidth, boxHeight, children = Nil, style = Style(border = true, fg = Blue)) ::
+          headerColumn.resolve(Coord(2.x, 2.y)) :::
+          // Notes label OVERWRITES the header separator at row 5 (deliberate
+          // visual overlap from the original hand-positioned layout).
+          TextNode(2.x, (notesStartY - 1).y, List(Text("Notes (per-tab persistent):", Style(fg = White)))) ::
+          Layout.Column(gap = 0, children = notesBody).resolve(Coord(2.x, notesStartY.y)) :::
+          footerColumn.resolve(Coord(2.x, (boxHeight - 4).y))
 
       RootNode(
         width = m.terminalWidth,

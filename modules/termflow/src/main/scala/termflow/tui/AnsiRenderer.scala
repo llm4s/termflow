@@ -79,18 +79,98 @@ object AnsiRenderer:
   def moveTo(c: Coord): String =
     s"\u001b[${c.y.value};${c.x.value}H"
 
-  private def colorToAnsi(c: Color, isBg: Boolean): String = c match
-    case Color.Default => ""
-    case _ =>
-      val base = if isBg then 40 else 30
-      s"\u001b[${base + (c.ordinal - 1)}m"
+  /**
+   * Emit an SGR sequence for `c` at the given color depth, downgrading to
+   * the closest representable color when the depth is lower than what `c`
+   * carries. Returns `""` for `Color.Default` and for `ColorDepth.Mono`.
+   *
+   * Public-API contract: same return shape as the previous internal helper
+   * for the basic 8 colors at any depth >= Ansi8 - existing goldens and
+   * snapshot tests stay valid.
+   */
+  private[tui] def colorToAnsi(c: Color, isBg: Boolean, depth: ColorDepth): String =
+    if depth == ColorDepth.Mono then ""
+    else
+      c match
+        case Color.Default => ""
+        case named if Color.namedRgb.contains(named) =>
+          encodeNamed(named, isBg, depth)
+        case Color.Indexed(n) =>
+          val nn = math.max(0, math.min(255, n))
+          depth match
+            case ColorDepth.Indexed256 | ColorDepth.Truecolor =>
+              val prefix = if isBg then 48 else 38
+              s"\u001b[$prefix;5;${nn}m"
+            case ColorDepth.Ansi16 | ColorDepth.Ansi8 =>
+              val (r, g, b) = Color.indexedToRgb(nn)
+              encodeNamed(downgradeRgb(r, g, b, depth), isBg, depth)
+            case ColorDepth.Mono => ""
+        case Color.Rgb(r, g, b) =>
+          val rr = math.max(0, math.min(255, r))
+          val gg = math.max(0, math.min(255, g))
+          val bb = math.max(0, math.min(255, b))
+          depth match
+            case ColorDepth.Truecolor =>
+              val prefix = if isBg then 48 else 38
+              s"\u001b[$prefix;2;$rr;$gg;${bb}m"
+            case ColorDepth.Indexed256 =>
+              val n      = Color.nearestIndexed(rr, gg, bb)
+              val prefix = if isBg then 48 else 38
+              s"\u001b[$prefix;5;${n}m"
+            case ColorDepth.Ansi16 | ColorDepth.Ansi8 =>
+              encodeNamed(downgradeRgb(rr, gg, bb, depth), isBg, depth)
+            case ColorDepth.Mono => ""
+        case _ => ""
 
-  private def styleToAnsi(s: Style): String =
+  private def downgradeRgb(r: Int, g: Int, b: Int, depth: ColorDepth): Color =
+    if depth == ColorDepth.Ansi16 then Color.nearestAnsi16(r, g, b)
+    else Color.nearestAnsi8(r, g, b)
+
+  private def encodeNamed(c: Color, isBg: Boolean, depth: ColorDepth): String =
+    val baseFg = if isBg then 40 else 30
+    c match
+      case Color.Black   => s"\u001b[${baseFg + 0}m"
+      case Color.Red     => s"\u001b[${baseFg + 1}m"
+      case Color.Green   => s"\u001b[${baseFg + 2}m"
+      case Color.Yellow  => s"\u001b[${baseFg + 3}m"
+      case Color.Blue    => s"\u001b[${baseFg + 4}m"
+      case Color.Magenta => s"\u001b[${baseFg + 5}m"
+      case Color.Cyan    => s"\u001b[${baseFg + 6}m"
+      case Color.White   => s"\u001b[${baseFg + 7}m"
+      case bright =>
+        if depth == ColorDepth.Ansi8 then encodeNamed(brightToBase(bright), isBg, depth)
+        else
+          val brightBase = if isBg then 100 else 90
+          s"\u001b[${brightBase + brightOffset(bright)}m"
+
+  private def brightToBase(c: Color): Color = c match
+    case Color.BrightBlack   => Color.Black
+    case Color.BrightRed     => Color.Red
+    case Color.BrightGreen   => Color.Green
+    case Color.BrightYellow  => Color.Yellow
+    case Color.BrightBlue    => Color.Blue
+    case Color.BrightMagenta => Color.Magenta
+    case Color.BrightCyan    => Color.Cyan
+    case Color.BrightWhite   => Color.White
+    case other               => other
+
+  private def brightOffset(c: Color): Int = c match
+    case Color.BrightBlack   => 0
+    case Color.BrightRed     => 1
+    case Color.BrightGreen   => 2
+    case Color.BrightYellow  => 3
+    case Color.BrightBlue    => 4
+    case Color.BrightMagenta => 5
+    case Color.BrightCyan    => 6
+    case Color.BrightWhite   => 7
+    case _                   => 0
+
+  private def styleToAnsi(s: Style, depth: ColorDepth): String =
     val b = new StringBuilder
     if s.bold then b.append("\u001b[1m")
     if s.underline then b.append("\u001b[4m")
-    b.append(colorToAnsi(s.fg, isBg = false))
-    b.append(colorToAnsi(s.bg, isBg = true))
+    b.append(colorToAnsi(s.fg, isBg = false, depth))
+    b.append(colorToAnsi(s.bg, isBg = true, depth))
     b.toString
 
   def clearPatch: String =
@@ -99,42 +179,50 @@ object AnsiRenderer:
   def clear()(using terminal: TerminalBackend): Unit =
     terminal.write(clearPatch)
 
-  def renderPatch(root: RootNode): String =
+  def renderPatch(root: RootNode, depth: ColorDepth = ColorDepth.Ansi8): String =
     val out = new StringBuilder
-    root.children.foreach(renderNode(_, out))
-    root.input.foreach(renderInput(_, root.width, out))
+    root.children.foreach(renderNode(_, out, depth))
+    root.input.foreach(renderInput(_, root.width, out, depth))
     out.toString
 
   def render(root: RootNode)(using terminal: TerminalBackend): Unit =
-    terminal.write(renderPatch(root))
+    terminal.write(renderPatch(root, terminal.capabilities.colorDepth))
 
   /** Re-render only the input, leaving existing children intact. */
   def renderInputOnly(root: RootNode)(using terminal: TerminalBackend): Unit =
-    terminal.write(inputPatch(root))
+    terminal.write(inputPatch(root, terminal.capabilities.colorDepth))
 
   /** Build ANSI patch for input-only repaint. */
-  def inputPatch(root: RootNode): String =
+  def inputPatch(root: RootNode, depth: ColorDepth = ColorDepth.Ansi8): String =
     val out = new StringBuilder
-    root.input.foreach(renderInput(_, root.width, out))
+    root.input.foreach(renderInput(_, root.width, out, depth))
     out.toString
 
-  private def renderNode(v: VNode, out: StringBuilder): Unit = v match
+  private def renderNode(v: VNode, out: StringBuilder, depth: ColorDepth): Unit = v match
     case TextNode(x, y, l) =>
       out.append(moveTo(x, y))
       l.foreach { case Text(str, style) =>
-        out.append(styleToAnsi(style)).append(str).append(reset)
+        out.append(styleToAnsi(style, depth)).append(str).append(reset)
       }
 
     case BoxNode(x, y, w, h, children, style) =>
-      if style.border then drawBorder(x, y, w, h, style.fg, out)
-      children.foreach(renderNode(_, out))
+      if style.border then drawBorder(x, y, w, h, style.fg, out, depth)
+      children.foreach(renderNode(_, out, depth))
 
     case _: InputNode => () // handled separately
 
-  private def drawBorder(x: XCoord, y: YCoord, w: Int, h: Int, color: Color, out: StringBuilder): Unit =
+  private def drawBorder(
+    x: XCoord,
+    y: YCoord,
+    w: Int,
+    h: Int,
+    color: Color,
+    out: StringBuilder,
+    depth: ColorDepth
+  ): Unit =
     val inner      = math.max(0, w - 2)
     val horizontal = "─" * inner
-    out.append(moveTo(x, y)).append(colorToAnsi(color, isBg = false)).append(s"┌$horizontal┐")
+    out.append(moveTo(x, y)).append(colorToAnsi(color, isBg = false, depth)).append(s"┌$horizontal┐")
     (1 until (h - 1)).foreach(row => out.append(moveTo(x, y + row)).append(s"│${" " * inner}│"))
     out.append(moveTo(x, y + (h - 1))).append(s"└$horizontal┘")
     out.append(reset)
@@ -178,7 +266,7 @@ object AnsiRenderer:
     val cursorIndex = math.max(0, math.min(cursorLimit, unclampedCursorIndex))
     VisibleInput(visibleText, cursorIndex, width)
 
-  private def renderInput(inp: InputNode, rootWidth: Int, out: StringBuilder): Unit =
+  private def renderInput(inp: InputNode, rootWidth: Int, out: StringBuilder, depth: ColorDepth): Unit =
     val visible = visibleInput(inp, rootWidth)
 
     // Clear full terminal row from column 1, then position to input x.
@@ -188,7 +276,7 @@ object AnsiRenderer:
     out.append(moveTo(inp.x, inp.y))
 
     val baseStyle = inp.style
-    val baseAnsi  = styleToAnsi(baseStyle)
+    val baseAnsi  = styleToAnsi(baseStyle, depth)
     // Draw the bounded single-line viewport only; never rely on terminal soft-wrap.
     out.append(baseAnsi).append(visible.text).append(reset)
 
@@ -294,6 +382,10 @@ object AnsiRenderer:
 
   /** Diff two frames and emit only changed runs plus cursor movement. */
   def diff(prev: Option[RenderFrame], current: RenderFrame): DiffResult =
+    diff(prev, current, ColorDepth.Ansi8)
+
+  /** Diff two frames at the given color depth. */
+  def diff(prev: Option[RenderFrame], current: RenderFrame, depth: ColorDepth): DiffResult =
     def cellAt(frame: Option[RenderFrame], row: Int, col: Int): RenderCell =
       frame match
         case Some(f) if row < f.height && col < f.width => f.cells(row)(col)
@@ -317,7 +409,7 @@ object AnsiRenderer:
           var cursor = col
           while cursor < current.width && cellAt(Some(current), row, cursor) != blankCell do
             val style = cellAt(Some(current), row, cursor).style
-            out.append(reset).append(styleToAnsi(style))
+            out.append(reset).append(styleToAnsi(style, depth))
             var j = cursor
             while j < current.width &&
               cellAt(Some(current), row, j) != blankCell &&
@@ -351,7 +443,10 @@ object AnsiRenderer:
     DiffResult(out.toString, changedCellsCount, changedRowsCount)
 
   def renderDiff(prev: Option[RenderFrame], current: RenderFrame): String =
-    diff(prev, current).ansi
+    diff(prev, current, ColorDepth.Ansi8).ansi
+
+  def renderDiff(prev: Option[RenderFrame], current: RenderFrame, depth: ColorDepth): String =
+    diff(prev, current, depth).ansi
 
 final case class SimpleANSIRenderer() extends TuiRenderer:
   private var lastFrame: Option[AnsiRenderer.RenderFrame] = None
@@ -365,13 +460,14 @@ final case class SimpleANSIRenderer() extends TuiRenderer:
   ): Unit =
     val currentFrame = AnsiRenderer.buildFrame(textNode)
     val resized      = lastFrame.exists(prev => prev.width != currentFrame.width || prev.height != currentFrame.height)
+    val depth        = terminal.capabilities.colorDepth
     val initialDiff =
-      if resized then AnsiRenderer.diff(None, currentFrame)
-      else AnsiRenderer.diff(lastFrame, currentFrame)
+      if resized then AnsiRenderer.diff(None, currentFrame, depth)
+      else AnsiRenderer.diff(lastFrame, currentFrame, depth)
     val shouldFullRepaint =
       resized || initialDiff.changedRows >= math.min(currentFrame.height, FullRepaintRowThreshold)
     val diffResult =
-      if shouldFullRepaint then AnsiRenderer.diff(None, currentFrame)
+      if shouldFullRepaint then AnsiRenderer.diff(None, currentFrame, depth)
       else initialDiff
     val ansi =
       if shouldFullRepaint then ANSI.clearScreen + ANSI.homeCursor + diffResult.ansi

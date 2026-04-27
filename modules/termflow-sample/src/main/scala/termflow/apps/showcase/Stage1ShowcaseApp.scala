@@ -623,26 +623,27 @@ object Stage1ShowcaseApp:
 
     private def themesPanel(m: Model, r: Rect)(using theme: Theme): VNode =
       val title = TextNode(2.x, 1.y, List(" Themes (click) ".themed(_.primary)))
-      val rows = themePresets.zipWithIndex.toList.map { case ((name, _), i) =>
-        renderableRow(2, 3 + i, name, selected = i == m.themeIdx, theme)
-      }
+      // Use the RadioGroup widget instead of hand-rolled rows so the
+      // showcase exercises the real widget API.
+      val rows = widgets.RadioGroup(
+        options = themePresets.map(_._1),
+        selectedIndex = m.themeIdx,
+        focusedIndex = m.themeIdx,
+        at = Coord(2.x, 3.y)
+      )
       val hint = TextNode(2.x, (3 + themePresets.size + 1).y, List("scroll to cycle".themed(_.info)))
       panel(r, theme, (title :: rows) :+ hint)
 
     private def bordersPanel(m: Model, r: Rect)(using theme: Theme): VNode =
       val title = TextNode(2.x, 1.y, List(" Borders (click) ".themed(_.primary)))
-      val rows = borderStyles.zipWithIndex.toList.map { case ((name, _), i) =>
-        renderableRow(2, 3 + i, name, selected = i == m.borderIdx, theme)
-      }
+      val rows = widgets.RadioGroup(
+        options = borderStyles.map(_._1),
+        selectedIndex = m.borderIdx,
+        focusedIndex = m.borderIdx,
+        at = Coord(2.x, 3.y)
+      )
       val hint = TextNode(2.x, (3 + borderStyles.size + 1).y, List("scroll to cycle".themed(_.info)))
       panel(r, theme, (title :: rows) :+ hint)
-
-    private def renderableRow(col: Int, row: Int, name: String, selected: Boolean, theme: Theme): VNode =
-      val marker = if selected then "▸ " else "  "
-      val style =
-        if selected then Style(fg = theme.background, bg = theme.primary, bold = true)
-        else Style(fg = theme.foreground)
-      TextNode(col.x, row.y, List(Text(s"$marker$name", style)))
 
     private def stylesPanel(r: Rect)(using theme: Theme): VNode =
       val title = TextNode(2.x, 1.y, List(" Styles ".themed(_.primary)))
@@ -654,11 +655,12 @@ object Stage1ShowcaseApp:
         TextNode(2.x, 7.y, List(Text("reverse", Style(fg = theme.primary, reverse = true)))),
         TextNode(2.x, 8.y, List(Text("strike", Style(fg = theme.primary, strikethrough = true)))),
         TextNode(2.x, 9.y, List(Text("blink", Style(fg = theme.primary, blink = true)))),
-        TextNode(
-          2.x,
-          11.y,
-          List(Text("combo", Style(fg = theme.success, bold = true, italic = true, underline = true)))
-        )
+        // Quick CheckBox demo — three states rendered through the real
+        // widget so visual differences (theme.success on the checked
+        // marker, bold on focus) are visible at a glance.
+        widgets.CheckBox(label = "off", checked = false, focused = false, at = Coord(2.x, 10.y)),
+        widgets.CheckBox(label = "on", checked = true, focused = false, at = Coord(2.x, 11.y)),
+        widgets.CheckBox(label = "focus", checked = true, focused = true, at = Coord(2.x, 12.y))
       )
       panel(r, theme, title :: rows)
 

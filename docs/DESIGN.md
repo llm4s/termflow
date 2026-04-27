@@ -27,9 +27,22 @@ Commands represent side effects that happen “after” an update:
 
 - `Cmd.GCmd(msg)` – enqueue a message for the next update loop
 - `Cmd.FCmd(...)` – run an async task and publish its result as a message
+- `Cmd.asyncResult(task, onSuccess, onError)` – idiomatic helper for the
+  common case where the async task returns `AsyncResult[A]` (i.e.
+  `Future[Result[A]]`). Routes successes through `onSuccess`, logical
+  failures through `onError`, and lets the runtime surface infrastructure
+  failures via `Cmd.TermFlowErrorCmd` automatically.
 - `Cmd.Exit` – exit the runtime
+- `Cmd.TermFlowErrorCmd(err)` – surface a recoverable error to the renderer
 
 This keeps `update` mostly pure and makes long-running work explicit.
+
+**Effect-system stance.** TermFlow uses `scala.concurrent.Future` and the
+framework's `Result[A] = Either[TermFlowError, A]`, exposed as
+`type AsyncResult[+A] = Future[Result[A]]` in `TuiPrelude`. The alias
+mirrors the `llm4s` core 1:1 so values pass between the two libraries
+without an adapter. We do not ship cats-effect or ZIO integration modules;
+apps that use those bridge to a `Future` at the `Cmd` boundary.
 
 ### `Sub` (subscriptions)
 

@@ -133,28 +133,50 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
   // ---- Mouse hit-testing on the Themes / Borders panels --------------------
 
   /**
-   * Themes panel sits at `(width - 22, 3)` with 22 cols × 11 rows. The first
-   *  selectable row is the 4th row of the panel (top border + title + blank).
+   * Themes panel sits at `(width - 22, 3)` with 22 cols × 11 rows. The
+   * BoxNode draws its border on row 3 (the first panel row); panel-local
+   * Y=3 children translate to absolute row `3 + (panel.row - 1) =
+   * panel.row + 2 = 5`. So the rendered theme rows live at absolute
+   * Y = 5 (dark), 6 (light), 7 (mono).
    */
   private def themesRowCol(d: TuiTestDriver[Stage1ShowcaseApp.Model, Stage1ShowcaseApp.Msg]): Int =
     d.model.width - 22 + 5
 
-  test("clicking the second row of the Themes panel selects 'light'") {
-    val d           = driver
-    val themeRowTop = 3 + 3 // panel top + title/blank offset
+  /** Absolute row of theme/border item `idx` inside its panel. */
+  private val firstItemRow = 5
+
+  test("clicking the 'light' row in the Themes panel selects light") {
+    val d = driver
     d.send(
       Stage1ShowcaseApp.Msg.Key(
         InputKey.Mouse(
           termflow.tui.MouseEvent.Press(
             termflow.tui.MouseButton.Left,
             themesRowCol(d),
-            themeRowTop + 1,
+            firstItemRow + 1, // light is idx=1
             termflow.tui.KeyDecoder.Modifiers()
           )
         )
       )
     )
     assert(d.model.themeName == "light")
+  }
+
+  test("clicking the 'mono' row in the Themes panel selects mono") {
+    val d = driver
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Press(
+            termflow.tui.MouseButton.Left,
+            themesRowCol(d),
+            firstItemRow + 2, // mono is idx=2
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    assert(d.model.themeName == "mono")
   }
 
   test("scroll-down inside the Themes panel cycles to the next theme") {
@@ -269,6 +291,111 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(d.model.lastListPick.contains("cherry"), s"expected cherry, got ${d.model.lastListPick}")
   }
 
+  /**
+   * Resolve the listSelect dialog's expected rect for the default 100×28
+   *  driver. Dialog is 40×10, centred → top-left (31, 10). First item row
+   *  is at panel-local Y=3 → absolute row 12.
+   */
+  private val listDialogCol    = (100 - 40) / 2 + 1 + 5 // somewhere inside the rect, away from border
+  private val listFirstItemRow = (28 - 10) / 2 + 1 + 2  // oy + firstRowOffset(3) - 1
+
+  test("clicking a visible row inside listSelect accepts that item") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('l')))
+    // First visible item is "apple" at firstItemRow; row+1 is "banana".
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Press(
+            termflow.tui.MouseButton.Left,
+            listDialogCol,
+            listFirstItemRow + 1,
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None, "click on a row should commit + close")
+    assert(d.model.lastListPick.contains("banana"), s"expected banana, got ${d.model.lastListPick}")
+  }
+
+  test("clicking the top item row in listSelect picks the first item") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('l')))
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Press(
+            termflow.tui.MouseButton.Left,
+            listDialogCol,
+            listFirstItemRow,
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    assert(d.model.lastListPick.contains("apple"))
+  }
+
+  test("clicking outside the listSelect rectangle is a no-op") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('l')))
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Press(
+            termflow.tui.MouseButton.Left,
+            1,
+            1,
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    assert(d.model.dialog.isInstanceOf[Stage1ShowcaseApp.Dialog.ListSelect], "clicks outside must not close the dialog")
+    assert(d.model.lastListPick.isEmpty)
+  }
+
+  test("scrolling inside listSelect cycles the selected index") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('l')))
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Scroll(
+            termflow.tui.ScrollDirection.Down,
+            listDialogCol,
+            listFirstItemRow + 2,
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    d.model.dialog match
+      case Stage1ShowcaseApp.Dialog.ListSelect(idx) => assert(idx == 1, s"scroll down must advance idx, got $idx")
+      case other                                    => fail(s"expected ListSelect dialog, got $other")
+  }
+
+  test("scrolling outside the listSelect rect does nothing") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('l')))
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Scroll(
+            termflow.tui.ScrollDirection.Down,
+            1,
+            1,
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    d.model.dialog match
+      case Stage1ShowcaseApp.Dialog.ListSelect(idx) => assert(idx == 0, "scroll outside must not change idx")
+      case other                                    => fail(s"expected ListSelect dialog, got $other")
+  }
+
   test("'w' opens the waiting dialog with a deadline tick") {
     val d = driver
     d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('w')))
@@ -296,21 +423,40 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
   test("clicking a row in the Borders panel selects that border style") {
     val d            = driver
     val bordersStart = d.model.width - 22 - 22 - 1
-    val bordersTop   = 3 + 3
-    // Row 0 = sharp, row 1 = rounded (initial), row 2 = double.
+    // Row 0 = sharp (firstItemRow), 1 = rounded (default), 2 = double, 3 = ascii.
     d.send(
       Stage1ShowcaseApp.Msg.Key(
         InputKey.Mouse(
           termflow.tui.MouseEvent.Press(
             termflow.tui.MouseButton.Left,
             bordersStart + 5,
-            bordersTop + 2,
+            firstItemRow + 2, // double
             termflow.tui.KeyDecoder.Modifiers()
           )
         )
       )
     )
     assert(d.model.borderName == "double")
+  }
+
+  test("clicking the dark row in the Themes panel selects dark (top item)") {
+    val d = driver
+    // Cycle off dark first so the click actually changes state.
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('t')))
+    assert(d.model.themeName == "light")
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Press(
+            termflow.tui.MouseButton.Left,
+            themesRowCol(d),
+            firstItemRow, // dark is idx=0, lives on the first item row
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    assert(d.model.themeName == "dark", "click on the top item row must select index 0")
   }
 
   // Silence unused-import lint warning for AnsiRenderer (it's referenced

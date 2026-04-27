@@ -95,6 +95,18 @@ object Stage1ShowcaseApp:
   private val listSelectItems: Vector[String] =
     Vector("apple", "banana", "cherry", "date", "elderberry", "fig", "grape", "honeydew")
 
+  /**
+   * How many list rows the `l` dialog renders at once. Used by both the
+   *  view (to render) and the mouse hit-test (to map clicks to items).
+   */
+  private val listSelectMaxVisible: Int = 5
+
+  /**
+   * Title shown on the listSelect dialog's top border — declared once so
+   *  view / mouse hit-test stay in sync.
+   */
+  private val listSelectTitle: String = "List select demo"
+
   enum Dialog:
     case None
     case ConfirmQuit(yesFocused: Boolean)
@@ -265,11 +277,12 @@ object Stage1ShowcaseApp:
             case ArrowDown =>
               val next = math.min(listSelectItems.size - 1, idx + 1)
               Cmd.GCmd(SelectListIdx(next))
-            case Home   => Cmd.GCmd(SelectListIdx(0))
-            case End    => Cmd.GCmd(SelectListIdx(listSelectItems.size - 1))
-            case Enter  => Cmd.GCmd(ListSelectAccept(idx))
-            case Escape => Cmd.GCmd(CloseDialog)
-            case _      => Cmd.NoCmd
+            case Home      => Cmd.GCmd(SelectListIdx(0))
+            case End       => Cmd.GCmd(SelectListIdx(listSelectItems.size - 1))
+            case Enter     => Cmd.GCmd(ListSelectAccept(idx))
+            case Escape    => Cmd.GCmd(CloseDialog)
+            case Mouse(ev) => listSelectMouseDispatch(m, idx, ev)
+            case _         => Cmd.NoCmd
 
         case Dialog.Waiting(_, _) =>
           k match
@@ -331,15 +344,68 @@ object Stage1ShowcaseApp:
           (current + 1) % size
 
     /**
-     * Inside the Themes panel, the first selectable row is at `panel.row + 3`
-     *  (skip the top border + title + blank). One row per entry.
+     * Construct the listSelect Overlay used both for rendering and for
+     *  mouse hit-testing. Centralising the call keeps the title /
+     *  maxVisible / theme parameters consistent.
+     */
+    private def buildListSelectOverlay(idx: Int)(using Theme): Overlay =
+      Dialogs.listSelect(
+        title = listSelectTitle,
+        items = listSelectItems,
+        selectedIndex = idx,
+        maxVisible = listSelectMaxVisible
+      )
+
+    /**
+     * Resolved on-screen rectangle of the listSelect dialog at the
+     *  current selection. Mouse hit-tests use this to map clicks to
+     *  rows.
+     */
+    private def listSelectRect(m: Model, idx: Int): Rect =
+      given Theme  = m.theme
+      val o        = buildListSelectOverlay(idx)
+      val (ox, oy) = OverlayPosition.resolve(o.position, o.width, o.height, m.width, m.height)
+      Rect(col = ox.value, row = oy.value, width = o.width, height = o.height)
+
+    /**
+     * Mouse handling while the listSelect dialog is open: clicks on a
+     *  visible row commit that item, scroll-wheel cycles the selection.
+     */
+    private def listSelectMouseDispatch(m: Model, currentIdx: Int, ev: MouseEvent): Cmd[Msg] =
+      val (col, row) = ev.at
+      val rect       = listSelectRect(m, currentIdx)
+      val layout     = Dialogs.listSelectLayout(listSelectItems.size, currentIdx, listSelectMaxVisible)
+
+      if !rect.contains(col, row) then Cmd.NoCmd
+      else
+        ev match
+          case MouseEvent.Press(MouseButton.Left, _, _, _) =>
+            val firstItemRowAbs = rect.row + (layout.firstRowOffset - 1)
+            val itemOffset      = row - firstItemRowAbs
+            if itemOffset >= 0 && itemOffset < layout.visibleCount then
+              val itemIdx = layout.anchorIndex + itemOffset
+              if itemIdx < listSelectItems.size then Cmd.GCmd(ListSelectAccept(itemIdx))
+              else Cmd.NoCmd
+            else Cmd.NoCmd
+          case MouseEvent.Scroll(dir, _, _, _) =>
+            val next = nextIndex(currentIdx, listSelectItems.size, dir)
+            Cmd.GCmd(SelectListIdx(next))
+          case _ => Cmd.NoCmd
+
+    /**
+     * Inside a panel rendered via [[panel]], the BoxNode draws its border on
+     * the panel's first row and `translateInto` shifts every child down by
+     * `panel.row - 1`. A row authored at panel-local Y=3 (the first list
+     * row in `themesPanel` / `bordersPanel`) therefore lands at absolute
+     * row `3 + (panel.row - 1) = panel.row + 2`. Each subsequent item is
+     * one row below.
      */
     private def themeIndexAtRow(panel: Rect, row: Int): Option[Int] =
-      val offset = row - (panel.row + 3)
+      val offset = row - (panel.row + 2)
       if offset >= 0 && offset < themePresets.size then Some(offset) else None
 
     private def borderIndexAtRow(panel: Rect, row: Int): Option[Int] =
-      val offset = row - (panel.row + 3)
+      val offset = row - (panel.row + 2)
       if offset >= 0 && offset < borderStyles.size then Some(offset) else None
 
     private def themesRect(m: Model): Rect =
@@ -509,16 +575,7 @@ object Stage1ShowcaseApp:
             )
           )
         case Dialog.ListSelect(idx) =>
-          baseRoot.copy(overlays =
-            List(
-              Dialogs.listSelect(
-                title = "List select demo",
-                items = listSelectItems,
-                selectedIndex = idx,
-                maxVisible = 5
-              )
-            )
-          )
+          baseRoot.copy(overlays = List(buildListSelectOverlay(idx)))
         case Dialog.Waiting(openedAt, deadline) =>
           val remaining = math.max(0L, deadline - m.tick)
           baseRoot.copy(overlays =

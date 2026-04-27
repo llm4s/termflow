@@ -210,9 +210,15 @@ object ConsoleKeyPressSource:
       val col          = params(1)
       val row          = params(2)
       val releaseFinal = finalByte == 'm'
+      // `fromSgr` returns None for the scroll-wheel release byte some
+      // terminals duplicate after each press — surface as NoOp so the
+      // decoder loop drops it instead of polluting the stream with
+      // Unknowns. Other malformed sequences are reported as Unknown.
+      val isScrollRelease = (button & 0x40) != 0 && releaseFinal
       MouseEvent.fromSgr(button, col, row, releaseFinal) match
-        case Some(ev) => InputKey.Mouse(ev)
-        case None     => InputKey.Unknown(s"CSI <${params.mkString(";")}$finalByte")
+        case Some(ev)                => InputKey.Mouse(ev)
+        case None if isScrollRelease => InputKey.NoOp
+        case None                    => InputKey.Unknown(s"CSI <${params.mkString(";")}$finalByte")
 
   /**
    * Read pasted bytes after the `ESC [ 200 ~` start marker, stopping when
@@ -278,7 +284,10 @@ object ConsoleKeyPressSource:
               loop(false)
             else
               val key = processKey(c, bridge)
-              inputReads.put(InputRead.Key(key))
+              // InputKey.NoOp is a parser sentinel (see scroll-wheel
+              // release handling in decodeSgrMouse). Drop it here so apps
+              // never see it, but keep looping for the next byte.
+              if key != InputKey.NoOp then inputReads.put(InputRead.Key(key))
               loop(true)
         loop(true)
       catch {

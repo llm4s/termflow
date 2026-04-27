@@ -182,6 +182,47 @@ object Dialogs:
    * @param cancelLabel   Label for the cancel button.
    * @param position      Anchor (default [[OverlayPosition.Centered]]).
    */
+  /**
+   * Layout descriptor for a `listSelect` dialog. Apps wiring mouse
+   * hit-testing should use this to map a click row to an item index
+   * without re-deriving (and drifting from) the helper's anchor math.
+   *
+   * @param visibleCount Number of list rows actually drawn.
+   * @param anchorIndex  Index of the first visible item — selection
+   *                     scrolls relative to this.
+   * @param firstRowOffset Y-offset of the first list row inside the
+   *                       overlay rectangle (panel-local). The first row
+   *                       is at overlay-absolute Y = `overlay.row +
+   *                       firstRowOffset - 1` once positioned.
+   */
+  final case class ListSelectLayout(
+    visibleCount: Int,
+    anchorIndex: Int,
+    firstRowOffset: Int
+  )
+
+  /** First selectable row inside a listSelect dialog (panel-local Y). */
+  private val ListSelectFirstRowOffset: Int = 3
+
+  /**
+   * Compute the visible-window math `listSelect` uses internally so apps
+   * can hit-test mouse clicks without copying the formula.
+   *
+   * @param itemsSize     Number of items the dialog will be built over.
+   * @param selectedIndex Currently-selected item.
+   * @param maxVisible    Same value passed to [[listSelect]].
+   */
+  def listSelectLayout(itemsSize: Int, selectedIndex: Int, maxVisible: Int = 8): ListSelectLayout =
+    val visible = math.max(1, math.min(maxVisible, math.max(1, itemsSize)))
+    val anchor =
+      if itemsSize == 0 then 0
+      else
+        val sel    = math.max(0, math.min(itemsSize - 1, selectedIndex))
+        val maxTop = math.max(0, itemsSize - visible)
+        val raw    = sel - visible / 2
+        math.max(0, math.min(maxTop, raw))
+    ListSelectLayout(visible, anchor, ListSelectFirstRowOffset)
+
   def listSelect[A](
     title: String,
     items: Seq[A],
@@ -193,24 +234,15 @@ object Dialogs:
     cancelLabel: String = "Cancel",
     position: OverlayPosition = OverlayPosition.Centered
   )(using theme: Theme): Overlay =
-    val visible    = math.max(1, math.min(maxVisible, math.max(1, items.size)))
+    val layout     = listSelectLayout(items.size, selectedIndex, maxVisible)
+    val visible    = layout.visibleCount
+    val anchor     = layout.anchorIndex
     val choices    = List(Choice(okLabel, okFocused), Choice(cancelLabel, !okFocused))
     val titleLen   = title.length + 4
     val actionsLen = choiceWidth(choices) + 4
     val itemLen    = (0 +: items.map(a => render(a).length)).max + 6
     val width      = math.max(40, math.max(titleLen, math.max(actionsLen, itemLen)))
     val height     = 5 + visible
-
-    // Viewport: scroll so the selected row stays visible. We anchor the
-    // first visible row so that selection is centred when possible, but
-    // never past the end of the list.
-    val anchor =
-      if items.isEmpty then 0
-      else
-        val sel    = math.max(0, math.min(items.size - 1, selectedIndex))
-        val maxTop = math.max(0, items.size - visible)
-        val raw    = sel - visible / 2
-        math.max(0, math.min(maxTop, raw))
 
     val box = Theme.box(XCoord(1), YCoord(1), width, height)
     val titleNode =
@@ -227,7 +259,7 @@ object Dialogs:
           val style =
             if sel then Style(fg = theme.background, bg = theme.primary, bold = true)
             else Style(fg = theme.foreground)
-          TextNode(XCoord(3), YCoord(3 + i), List(Text(s"$marker${render(item)}", style)))
+          TextNode(XCoord(3), YCoord(layout.firstRowOffset + i), List(Text(s"$marker${render(item)}", style)))
         }
         .toList
 

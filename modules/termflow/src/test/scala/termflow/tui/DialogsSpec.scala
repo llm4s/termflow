@@ -131,6 +131,28 @@ class DialogsSpec extends AnyFunSuite:
     assert(s.contains("2:bob"))
   }
 
+  test("Dialogs.listSelectLayout exposes the same anchor math listSelect uses") {
+    // Empty input: anchor=0, visibleCount=1 (always render at least one row).
+    val empty = Dialogs.listSelectLayout(itemsSize = 0, selectedIndex = 0, maxVisible = 5)
+    assert(empty.anchorIndex == 0)
+    assert(empty.visibleCount == 1)
+
+    // Small list fits entirely in the viewport — anchor stays at 0.
+    val small = Dialogs.listSelectLayout(itemsSize = 3, selectedIndex = 1, maxVisible = 5)
+    assert(small.anchorIndex == 0)
+    assert(small.visibleCount == 3)
+
+    // Long list, selection near the bottom — anchor scrolls to keep it visible.
+    val long = Dialogs.listSelectLayout(itemsSize = 30, selectedIndex = 25, maxVisible = 6)
+    assert(long.visibleCount == 6)
+    assert(long.anchorIndex >= 25 - long.visibleCount + 1, "selection must be inside the visible window")
+    assert(long.anchorIndex <= 25, "anchor must not skip past the selection")
+
+    // firstRowOffset is documented as the panel-local Y of the first row;
+    // listSelect renders rows at that Y, so the value should match.
+    assert(long.firstRowOffset == 3)
+  }
+
   test("Dialogs.listSelect handles an empty item list without exploding") {
     val o = Dialogs.listSelect(title = "Pick", items = Seq.empty[String], selectedIndex = 0)
     assert(o.height >= 5)

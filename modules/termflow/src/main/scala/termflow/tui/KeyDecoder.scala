@@ -113,6 +113,19 @@ object KeyDecoder:
      * [[Capabilities.mouse]] is true.
      */
     case Mouse(event: MouseEvent)
+
+    /**
+     * Internal sentinel used by parsers to consume a byte sequence without
+     * surfacing an event to the application. Filtered by the decoder
+     * thread before it reaches `InputRead.Key`, so apps never see this
+     * value in practice — a guard is still worth having for tests that
+     * call decode helpers directly.
+     *
+     * Today's only emitter: scroll-wheel `release` bytes (`CSI <64;c;r m`)
+     * that some terminals send as a duplicate of the press. See
+     * [[MouseEvent.fromSgr]].
+     */
+    case NoOp
     case Unknown(seq: String)
     case EndOfInput
 

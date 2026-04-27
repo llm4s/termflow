@@ -89,7 +89,8 @@ Event streams that push `Cmd`s to the bus:
 
 ## Module Structure
 
-- `modules/termflow` - the library (published)
+- `modules/termflow` - the library (published as `org.llm4s:termflow_3`)
+- `modules/termflow-testkit` - deterministic test harness for downstream apps; published as `org.llm4s:termflow-testkit_3`, depend on as `% Test`
 - `modules/termflow-sample` - demo apps (not published)
 
 ## Scala Versions

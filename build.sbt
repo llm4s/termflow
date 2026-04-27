@@ -84,13 +84,18 @@ lazy val scalafixRuleDependencies = Def.setting {
 }
 
 lazy val root = (project in file("."))
-  .aggregate(termflow, termflowSample)
+  .aggregate(termflow, termflowTestkit, termflowSample)
   .settings(
     name          := "termflow",
     publish / skip := true
   )
 
 lazy val termflow = (project in file("modules/termflow"))
+  // No dep on termflowTestkit here. The few tests that genuinely needed
+  // the testkit (DevtoolsWrapSpec) live in termflowTestkit's own test
+  // sources, which avoids a build-level cycle (testkit -> termflow ->
+  // testkit). Sample apps depend on testkit at test scope as a regular
+  // downstream consumer.
   .settings(
     name := "termflow",
     description := "A small, functional terminal UI (TUI) framework for Scala",
@@ -105,8 +110,22 @@ lazy val termflow = (project in file("modules/termflow"))
     )
   )
 
+lazy val termflowTestkit = (project in file("modules/termflow-testkit"))
+  .dependsOn(termflow)
+  .settings(
+    name := "termflow-testkit",
+    description :=
+      "Deterministic test harness for TermFlow apps: TuiTestDriver, golden snapshots, virtual runtime context.",
+    commonSettings,
+    // ScalaTest is a compile-scope dep here because GoldenSupport mixes Suite into
+    // consumer test classes — they need scalatest types on the classpath at test time.
+    libraryDependencies ++= Seq(
+      Deps.scalatest
+    )
+  )
+
 lazy val termflowSample = (project in file("modules/termflow-sample"))
-  .dependsOn(termflow % "compile->compile;test->test")
+  .dependsOn(termflow % "compile->compile;test->test", termflowTestkit % Test)
   .settings(
     name := "termflow-sample",
     commonSettings,

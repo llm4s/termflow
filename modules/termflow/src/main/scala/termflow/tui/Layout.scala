@@ -105,6 +105,28 @@ enum Layout:
    */
   case Spacer(width: Int, height: Int)
 
+  /**
+   * Wrap `content` so that it consumes whatever space is left along the
+   * parent container's major axis (width in a [[Row]], height in a
+   * [[Column]]) after fixed-size siblings have been allocated.
+   *
+   * `Fill` only takes effect when the layout is resolved with a target
+   * size — i.e. when it appears inside a [[RootNode]] resolved by the
+   * renderer at render time, or when [[Layout.resolveTo]] is called
+   * directly. Resolving without an axis target (the default
+   * [[Layout.resolve]]) treats `Fill` as its inner content's natural size
+   * — same shape as today's behaviour.
+   *
+   * Multiple `Fill` siblings in the same axis split the remaining space
+   * evenly. There is no `Weight` yet; add when a real consumer wants
+   * uneven distribution.
+   *
+   * @param content The child whose major-axis size is variable. Its minor
+   *                axis (height inside a Row, width inside a Column) is
+   *                its natural size.
+   */
+  case Fill(content: Layout)
+
   /** Natural `(width, height)` of this layout, in cells. */
   def measure: (Int, Int) = Layout.measure(this)
 
@@ -170,6 +192,7 @@ object Layout:
   def measure(layout: Layout): (Int, Int) = layout match
     case Elem(v)      => measureVNode(v)
     case Spacer(w, h) => (math.max(0, w), math.max(0, h))
+    case Fill(inner)  => measure(inner)
 
     case Row(gap, cs) =>
       if cs.isEmpty then (0, 0)
@@ -208,46 +231,140 @@ object Layout:
    * The instance method [[Layout.resolve]] delegates here — prefer calling
    * the method form for readability.
    */
-  def resolve(layout: Layout, at: Coord): List[VNode] = layout match
-    case Elem(v) =>
-      val dx = at.x.value - v.x.value
-      val dy = at.y.value - v.y.value
-      if dx == 0 && dy == 0 then List(v)
-      else List(translate(v, dx, dy))
+  def resolve(layout: Layout, at: Coord): List[VNode] =
+    resolveTo(layout, at, availableWidth = -1, availableHeight = -1)
 
-    case Spacer(_, _) => Nil
+  /**
+   * Resolve a layout into absolute-positioned [[VNode]]s with optional
+   * axis-size constraints.
+   *
+   * Pass `-1` for either dimension to mean "no constraint" — `Fill`
+   * children in that axis fall back to their natural size, exactly the
+   * old behaviour. Passing a non-negative value enables `Fill` to consume
+   * whatever's left after fixed-size siblings; multiple Fill siblings
+   * split the remainder evenly (any leftover cells go to the last Fill
+   * child so totals add up exactly).
+   *
+   * @param at              Top-left of the layout's allocated rectangle.
+   * @param availableWidth  Width budget for the major axis of a [[Row]]
+   *                        (or just the layout, for an outermost call).
+   *                        `-1` = unbounded.
+   * @param availableHeight Height budget for the major axis of a
+   *                        [[Column]]. `-1` = unbounded.
+   */
+  def resolveTo(layout: Layout, at: Coord, availableWidth: Int, availableHeight: Int): List[VNode] =
+    layout match
+      case Elem(v) =>
+        val dx = at.x.value - v.x.value
+        val dy = at.y.value - v.y.value
+        if dx == 0 && dy == 0 then List(v)
+        else List(translate(v, dx, dy))
 
-    case Row(gap, cs) =>
-      val g       = math.max(0, gap)
-      var xCursor = at.x.value
-      val out     = List.newBuilder[VNode]
-      var i       = 0
-      val n       = cs.size
-      while i < n do
-        val child   = cs(i)
-        val (cw, _) = measure(child)
-        val placed  = resolve(child, Coord(XCoord(xCursor), at.y))
-        out ++= placed
-        xCursor += cw
-        if i < n - 1 then xCursor += g
-        i += 1
-      out.result()
+      case Spacer(_, _) => Nil
 
-    case Column(gap, cs) =>
-      val g       = math.max(0, gap)
-      var yCursor = at.y.value
-      val out     = List.newBuilder[VNode]
-      var i       = 0
-      val n       = cs.size
-      while i < n do
-        val child   = cs(i)
-        val (_, ch) = measure(child)
-        val placed  = resolve(child, Coord(at.x, YCoord(yCursor)))
-        out ++= placed
-        yCursor += ch
-        if i < n - 1 then yCursor += g
-        i += 1
-      out.result()
+      case Fill(inner) =>
+        inner match
+          case Elem(v) if availableWidth >= 0 || availableHeight >= 0 =>
+            // Actively resize the wrapped vnode to consume the assigned
+            // budget. Only BoxNodes can be resized; text/input keep their
+            // natural width — Fill around them just reserves space.
+            val resized = resizeForFill(v, availableWidth, availableHeight)
+            val dx      = at.x.value - resized.x.value
+            val dy      = at.y.value - resized.y.value
+            if dx == 0 && dy == 0 then List(resized)
+            else List(translate(resized, dx, dy))
+          case _ =>
+            // Forward the budget into nested Row/Column/Fill etc.
+            resolveTo(inner, at, availableWidth, availableHeight)
+
+      case Row(gap, cs) =>
+        val g         = math.max(0, gap)
+        val n         = cs.size
+        val widths    = distributeMajor(cs, availableWidth, g, axisIsRow = true)
+        val rowHeight = if availableHeight >= 0 then availableHeight else cs.map(measure(_)._2).maxOption.getOrElse(0)
+        var xCursor   = at.x.value
+        val out       = List.newBuilder[VNode]
+        var i         = 0
+        while i < n do
+          val child = cs(i)
+          val cw    = widths(i)
+          out ++= resolveTo(child, Coord(XCoord(xCursor), at.y), cw, rowHeight)
+          xCursor += cw
+          if i < n - 1 then xCursor += g
+          i += 1
+        out.result()
+
+      case Column(gap, cs) =>
+        val g        = math.max(0, gap)
+        val n        = cs.size
+        val heights  = distributeMajor(cs, availableHeight, g, axisIsRow = false)
+        val colWidth = if availableWidth >= 0 then availableWidth else cs.map(measure(_)._1).maxOption.getOrElse(0)
+        var yCursor  = at.y.value
+        val out      = List.newBuilder[VNode]
+        var i        = 0
+        while i < n do
+          val child = cs(i)
+          val ch    = heights(i)
+          out ++= resolveTo(child, Coord(at.x, YCoord(yCursor)), colWidth, ch)
+          yCursor += ch
+          if i < n - 1 then yCursor += g
+          i += 1
+        out.result()
+
+  /**
+   * Compute per-child major-axis sizes for a Row/Column under an optional
+   * total budget. Fill children share the budget left over after fixed
+   * siblings; without a budget they get their natural major-axis size.
+   */
+  private def distributeMajor(
+    children: List[Layout],
+    available: Int,
+    gap: Int,
+    axisIsRow: Boolean
+  ): IndexedSeq[Int] =
+    val n = children.size
+    if n == 0 then return IndexedSeq.empty[Int]
+    val natural = children.map { c =>
+      val (w, h) = measure(c)
+      if axisIsRow then w else h
+    }
+    val isFill  = children.map(_.isInstanceOf[Fill]).toIndexedSeq
+    val anyFill = isFill.contains(true)
+
+    if !anyFill || available < 0 then
+      // No fill children, or no budget — children take their natural size.
+      natural.toIndexedSeq
+    else
+      val totalGap  = gap * math.max(0, n - 1)
+      val fixedSize = natural.zip(isFill).collect { case (sz, false) => sz }.sum
+      val remaining = math.max(0, available - fixedSize - totalGap)
+      val fillCount = isFill.count(identity)
+      val per       = if fillCount > 0 then remaining / fillCount else 0
+      val leftover  = if fillCount > 0 then remaining - per * fillCount else 0
+      var fillSeen  = 0
+      val sizes = natural.toIndexedSeq.zip(isFill).zipWithIndex.map { case ((nat, fill), _) =>
+        if fill then
+          fillSeen += 1
+          // Last Fill absorbs any leftover so totals add up exactly.
+          if fillSeen == fillCount then per + leftover else per
+        else nat
+      }
+      sizes
+
+  /**
+   * Resize a leaf VNode to honour a Fill budget. Only [[BoxNode]] is
+   * resizable in the current model; text and input nodes are returned
+   * unchanged (Fill around them effectively just reserves the budget).
+   *
+   * A negative dimension means "no constraint in that axis"; the natural
+   * size is kept.
+   */
+  private def resizeForFill(v: VNode, availableWidth: Int, availableHeight: Int): VNode = v match
+    case bn: BoxNode =>
+      val newW = if availableWidth >= 0 then availableWidth else bn.width
+      val newH = if availableHeight >= 0 then availableHeight else bn.height
+      bn.copy(width = newW, height = newH)
+    case other => other
 
   /**
    * Translate a [[VNode]] by `(dx, dy)`, including any nested [[BoxNode]]

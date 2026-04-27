@@ -182,10 +182,28 @@ object AnsiRenderer:
   def renderPatch(root: RootNode, depth: ColorDepth = ColorDepth.Ansi8): String =
     val out = new StringBuilder
     root.children.foreach(renderNode(_, out, depth))
+    layoutChildren(root).foreach(renderNode(_, out, depth))
     if !hasModalOverlay(root) then root.input.foreach(renderInput(_, root.width, out, depth))
     root.overlays.foreach(renderOverlay(_, root.width, root.height, out, depth))
     activeOverlayInput(root).foreach(renderInput(_, root.width, out, depth))
     out.toString
+
+  /**
+   * Resolve `root.layout` (if any) using the frame's `(width, height)` as
+   * the available size budget. The resolution starts at `(1, 1)` so layouts
+   * fill the whole frame; apps that want a margin should wrap their layout
+   * in an outer `Column`/`Row` with a `Spacer`.
+   */
+  private def layoutChildren(root: RootNode): List[VNode] =
+    root.layout match
+      case Some(layout) =>
+        Layout.resolveTo(
+          layout,
+          at = Coord(XCoord(1), YCoord(1)),
+          availableWidth = math.max(0, root.width),
+          availableHeight = math.max(0, root.height)
+        )
+      case None => Nil
 
   def render(root: RootNode)(using terminal: TerminalBackend): Unit =
     terminal.write(renderPatch(root, terminal.capabilities.colorDepth))
@@ -414,6 +432,11 @@ object AnsiRenderer:
         ()
 
     root.children.foreach(drawNode)
+
+    // Resolve any RootNode-level layout into the cell grid using the
+    // frame's (width, height) as the size budget. Layouts that include
+    // Layout.Fill children expand here at render time.
+    layoutChildren(root).foreach(drawNode)
 
     val anyModalOverlay = root.overlays.exists(_.inputCapture == InputCapture.Modal)
 

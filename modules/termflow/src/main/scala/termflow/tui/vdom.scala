@@ -337,11 +337,19 @@ val InputNode = VNode.InputNode
  *                 overlay sets `inputCapture = InputCapture.Modal`, the base
  *                 view's `input` is suppressed and the topmost modal overlay's
  *                 `input` (if any) takes over the hardware cursor.
+ * @param layout   Optional [[Layout]] resolved by the renderer at render
+ *                 time using the frame's `(width, height)` as the size
+ *                 budget. Distinct from `children` (positioned-node
+ *                 authoring): apps using `layout` get reflow-on-resize and
+ *                 `Layout.Fill` semantics for free. Both `children` and
+ *                 `layout` may be present — `children` paints first, then
+ *                 the resolved layout.
  */
 final case class RootNode(
   width: Int,
   height: Int,
   children: List[VNode],
   input: Option[InputNode],
-  overlays: List[Overlay] = Nil
+  overlays: List[Overlay] = Nil,
+  layout: Option[Layout] = None
 )

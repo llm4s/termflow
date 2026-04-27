@@ -79,3 +79,33 @@ class ThemeSpec extends AnyFunSuite:
     val s = Style(bold = true).themed(_.error)
     assert(s.fg == Color.Default)
     assert(s.bold)
+
+  test("dark/light/mono all default to BorderChars.sharp"):
+    assert(Theme.dark.chars == BorderChars.sharp)
+    assert(Theme.light.chars == BorderChars.sharp)
+    assert(Theme.mono.chars == BorderChars.sharp)
+
+  test("Theme.rounded uses rounded corners but inherits dark colours"):
+    assert(Theme.rounded.chars == BorderChars.rounded)
+    assert(Theme.rounded.primary == Theme.dark.primary)
+    assert(Theme.rounded.background == Theme.dark.background)
+    assert(Theme.rounded.foreground == Theme.dark.foreground)
+
+  test("Theme.box uses ambient chars and border slot"):
+    given Theme = Theme.rounded
+    val box     = Theme.box(XCoord(2), YCoord(3), 10, 4)
+    box match
+      case b @ VNode.BoxNode(_, _, _, _, _, _, _) =>
+        assert(b.chars == BorderChars.rounded)
+        assert(b.style.fg == Theme.rounded.border)
+        assert(b.style.border)
+      case _ => fail("expected BoxNode")
+
+  test("Theme.box preserves an explicit fg colour passed via style"):
+    given Theme  = Theme.rounded
+    val redStyle = Style(border = true, fg = Color.Red)
+    val box      = Theme.box(XCoord(1), YCoord(1), 4, 4, style = redStyle)
+    box match
+      case b @ VNode.BoxNode(_, _, _, _, _, _, _) =>
+        assert(b.style.fg == Color.Red, "explicit fg must not be overridden by theme.border")
+      case _ => fail("expected BoxNode")

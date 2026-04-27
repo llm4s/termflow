@@ -30,8 +30,8 @@ class VDomSpec extends AnyFunSuite:
     assert(node.height == 10)
     assert(node.style == Style(fg = Color.Blue, border = true))
     node match
-      case VNode.BoxNode(_, _, _, _, children, _) => assert(children == List(child))
-      case _                                      => fail("expected BoxNode")
+      case VNode.BoxNode(_, _, _, _, children, _, _) => assert(children == List(child))
+      case _                                         => fail("expected BoxNode")
 
   test("InputNode computes width from prompt or lineWidth override"):
     val nodeByPrompt = InputNode(

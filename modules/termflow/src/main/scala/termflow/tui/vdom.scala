@@ -215,7 +215,8 @@ enum VNode:
    * A rectangular container anchored at `(x, y)`.
    *
    * `BoxNode` is currently visual-only: if `style.border` is set, the
-   * renderer draws a border from `(x, y)` to `(x + width - 1, y + height - 1)`.
+   * renderer draws a border from `(x, y)` to `(x + width - 1, y + height - 1)`
+   * using the glyphs defined by `chars` (defaults to [[BorderChars.sharp]]).
    * Children are drawn in document order on top of the box; they are not
    * automatically clipped or repositioned relative to the box.
    *
@@ -225,6 +226,9 @@ enum VNode:
    * @param height The box height including both border rows.
    * @param children Child nodes drawn inside / over the box.
    * @param style The box style. `Style(border = true)` is the usual setting.
+   * @param chars Box-drawing glyphs used when the border is on.
+   *              Pick one of [[BorderChars.sharp]] / [[BorderChars.rounded]] /
+   *              [[BorderChars.double]] / [[BorderChars.ascii]] or roll your own.
    */
   case BoxNode(
     override val x: XCoord,
@@ -232,7 +236,8 @@ enum VNode:
     override val width: Int,
     override val height: Int,
     children: List[VNode],
-    override val style: Style = Style()
+    override val style: Style = Style(),
+    chars: BorderChars = BorderChars.sharp
   )
 
   /**
@@ -265,13 +270,13 @@ enum VNode:
   /** Top-left column of this node (1-based). */
   def x: XCoord = this match
     case TextNode(x, _, _)              => x
-    case BoxNode(x, _, _, _, _, _)      => x
+    case BoxNode(x, _, _, _, _, _, _)   => x
     case InputNode(x, _, _, _, _, _, _) => x
 
   /** Top-left row of this node (1-based). */
   def y: YCoord = this match
     case TextNode(_, y, _)              => y
-    case BoxNode(_, y, _, _, _, _)      => y
+    case BoxNode(_, y, _, _, _, _, _)   => y
     case InputNode(_, y, _, _, _, _, _) => y
 
   /**
@@ -282,21 +287,21 @@ enum VNode:
    * `AnsiRenderer.buildFrame` for authoritative layout.
    */
   def width: Int = this match
-    case TextNode(_, _, _)             => 1
-    case BoxNode(_, _, width, _, _, _) => width
+    case TextNode(_, _, _)                => 1
+    case BoxNode(_, _, width, _, _, _, _) => width
     case InputNode(_, _, prompt, _, _, lineWidth, _) =>
       if lineWidth > 0 then lineWidth else prompt.length + 1
 
   /** Height of this node in cells. Always `1` for text and input nodes. */
   def height: Int = this match
-    case TextNode(_, _, _)              => 1
-    case BoxNode(_, _, _, height, _, _) => height
-    case InputNode(_, _, _, _, _, _, _) => 1
+    case TextNode(_, _, _)                 => 1
+    case BoxNode(_, _, _, height, _, _, _) => height
+    case InputNode(_, _, _, _, _, _, _)    => 1
 
   /** The style applied to this node. [[TextNode]] styles live on its segments. */
   def style: Style = this match
     case TextNode(_, _, _)                  => Style()
-    case BoxNode(_, _, _, _, _, style)      => style
+    case BoxNode(_, _, _, _, _, style, _)   => style
     case InputNode(_, _, _, style, _, _, _) => style
 
 /**

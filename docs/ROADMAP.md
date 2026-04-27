@@ -677,10 +677,17 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
 
 ## 10. Open questions
 
-1. **Coroutine integration.** Should `Cmd.FCmd` accept anything beyond
-   `Future`? Cats-Effect `IO`? ZIO? ZIO-style typed errors? Probably out of
-   scope for 1.0; revisit post-1.0 as a separate `termflow-effect-cats` /
-   `termflow-effect-zio` integration.
+1. ~~**Coroutine integration.** Should `Cmd.FCmd` accept anything beyond
+   `Future`?~~ **Decided 2026-04-27 — stay stdlib.** TermFlow speaks
+   `scala.concurrent.Future` plus `Result[A] = Either[TermFlowError, A]`,
+   exposed as `type AsyncResult[+A] = Future[Result[A]]` mirroring the
+   `llm4s` core 1:1 so values cross between the two libraries without an
+   adapter. `Cmd.asyncResult(task, onSuccess, onError)` is the ergonomic
+   bridge. **No** `termflow-effect-cats` / `termflow-effect-zio` modules
+   are planned; apps using `IO`/`ZIO` bridge to `Future` at the `Cmd`
+   boundary in a couple of characters. Rationale: zero new abstractions,
+   composes with `llm4s` and any other stdlib-`Future` library, no
+   per-effect-system maintenance tax on every release.
 2. **Cross-publish for Scala 2.13.** Already on `legacy-213-track`. Keep
    parity through 1.0, then re-evaluate based on adoption.
 3. **Native image.** `sbt-native-image` build for `graalvm-native-image`?
@@ -727,6 +734,14 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
   building this we hit and fixed the overlay-opacity bug: dialog interiors
   no longer leak the panels beneath them, because `AnsiRenderer` now wipes
   the overlay rectangle before drawing children.
+- *2026-04-27* — Effect-system question closed. `Cmd.FCmd` stays
+  `Future`-typed; `AsyncResult[+A] = Future[Result[A]]` ships in
+  `TuiPrelude` mirroring `llm4s`, and `Cmd.asyncResult` is the one-liner
+  ergonomic bridge for "async work with a typed error". No
+  `termflow-effect-cats` / `termflow-effect-zio` modules will ship — the
+  cost (extra publish, MiMa, docs, expert maintainer per effect system)
+  isn't justified when the escape hatch (`io.unsafeToFuture()`) is two
+  characters of glue at the call site.
 
 ---
 

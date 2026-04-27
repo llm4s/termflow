@@ -84,6 +84,46 @@ debug key sequences and line editing behaviour.
 - Avoid implicit conversions; return explicit `Tui` values (for example, `model.tui`).
 - Keep migration changes behavior-preserving unless a PR states otherwise.
 
+## Async Work
+
+`termflow` stays effect-system-agnostic. Async commands use `scala.concurrent.Future`
+combined with the framework's `Result[A] = Either[TermFlowError, A]`, exposed as a
+type alias that mirrors the [llm4s](https://github.com/llm4s/llm4s) core 1:1 so values
+flow between the two libraries without an adapter:
+
+```scala
+type AsyncResult[+A] = Future[Result[A]]
+```
+
+Lift one onto the command bus with `Cmd.asyncResult`:
+
+```scala
+import termflow.tui.*
+import termflow.tui.TuiPrelude.*
+
+enum Msg:
+  case Loaded(value: User)
+  case Failed(err: TermFlowError)
+
+def fetch(id: UserId): AsyncResult[User] = ...
+
+Cmd.asyncResult(
+  task      = fetch(id),
+  onSuccess = Msg.Loaded.apply,
+  onError   = Msg.Failed.apply,
+  onEnqueue = Some(Msg.LoadingFlash)   // optional
+)
+```
+
+`Future` failures (network drops, JVM exceptions) surface through the runtime's
+standard `Cmd.TermFlowErrorCmd` path automatically; only domain errors need an
+explicit `onError`. `AsyncResult` ships a small companion with `success`,
+`failure`, `fromResult`, and `fromFuture` for lifting at the boundary.
+
+We do **not** ship cats-effect or ZIO adapter modules — apps that use `IO` /
+`ZIO` can bridge to a `Future` at the `Cmd` boundary in a couple of characters
+of glue.
+
 ## Versioning
 
 Versioning is fully driven by git tags via `sbt-dynver`; nothing is hand-edited

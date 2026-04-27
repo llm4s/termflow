@@ -143,6 +143,64 @@ enum Cmd[+Msg]:
    */
   case TermFlowErrorCmd(msg: TermFlowError) extends Cmd[Msg]
 
+object Cmd:
+
+  /**
+   * Lift an [[TuiPrelude.AsyncResult]] onto the command bus.
+   *
+   * This is the idiomatic way to bridge async work that can fail with a
+   * domain error: pass the future, route success values through
+   * `onSuccess`, and route logical failures through `onError`. Future
+   * failures themselves (network drops, JVM exceptions) still surface via
+   * the runtime's standard [[TermFlowErrorCmd]] path — there's no need to
+   * recover them here.
+   *
+   * Equivalent to:
+   *
+   * {{{
+   * Cmd.FCmd[Result[A], Msg](
+   *   task = asyncResult,
+   *   toCmd = {
+   *     case Right(a)  => Cmd.GCmd(onSuccess(a))
+   *     case Left(err) => Cmd.GCmd(onError(err))
+   *   },
+   *   onEnqueue = onEnqueue
+   * )
+   * }}}
+   *
+   * but reads as one expression at the call site:
+   *
+   * {{{
+   * Cmd.asyncResult(
+   *   task = client.fetch(id),
+   *   onSuccess = Msg.Loaded.apply,
+   *   onError   = Msg.Failed.apply
+   * )
+   * }}}
+   *
+   * @param task      Async work returning `Result[A]` — typically an
+   *                  [[TuiPrelude.AsyncResult]] alias.
+   * @param onSuccess Maps a successful value to the follow-up message.
+   * @param onError   Maps a logical failure to the follow-up message.
+   * @param onEnqueue Optional message dispatched immediately on enqueue —
+   *                  useful for flipping a "loading" flag before the
+   *                  future resolves.
+   */
+  def asyncResult[A, Msg](
+    task: TuiPrelude.AsyncResult[A],
+    onSuccess: A => Msg,
+    onError: TermFlowError => Msg,
+    onEnqueue: Option[Msg] = None
+  ): Cmd[Msg] =
+    Cmd.FCmd[TuiPrelude.Result[A], Msg](
+      task = task,
+      toCmd = {
+        case Right(a)  => Cmd.GCmd(onSuccess(a))
+        case Left(err) => Cmd.GCmd(onError(err))
+      },
+      onEnqueue = onEnqueue
+    )
+
 /**
  * The Elm-style application contract: a model, an update function, a view,
  * and a way to turn prompt input into messages.

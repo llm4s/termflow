@@ -195,7 +195,7 @@ object Layout:
       val width = segments.foldLeft(0)((acc, seg) => acc + seg.txt.length)
       (width, 1)
 
-    case BoxNode(_, _, w, h, _, _) =>
+    case BoxNode(_, _, w, h, _, _, _) =>
       (math.max(0, w), math.max(0, h))
 
     case InputNode(_, _, prompt, _, _, lineWidth, _) =>

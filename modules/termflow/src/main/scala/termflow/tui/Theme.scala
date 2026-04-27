@@ -93,10 +93,11 @@ final case class Theme(
   info: Color,
   border: Color,
   background: Color,
-  foreground: Color
+  foreground: Color,
+  chars: BorderChars = BorderChars.sharp
 ):
 
-  /** All slots as an ordered list. Convenient for tests and debugging. */
+  /** All colour slots as an ordered list. Convenient for tests and debugging. */
   def slots: List[(String, Color)] =
     List(
       "primary"    -> primary,
@@ -171,6 +172,17 @@ object Theme:
   )
 
   /**
+   * Dark palette using rounded box-drawing corners.
+   *
+   * Identical colour slots to [[dark]]; differs only in `chars =
+   * BorderChars.rounded`, so any [[VNode.BoxNode]] built from this theme
+   * draws with `╭╮╰╯` instead of `┌┐└┘`. Demonstrates the
+   * [[Theme.chars]] seam — apps can swap visual personality without
+   * forking the renderer.
+   */
+  val rounded: Theme = dark.copy(chars = BorderChars.rounded)
+
+  /**
    * Return the `Theme` from implicit scope.
    *
    * Shorthand for `summon[Theme]`, useful when you want to pass the ambient
@@ -211,3 +223,30 @@ object Theme:
   extension (txt: String)
     def themed(select: Theme => Color)(using t: Theme): Text =
       Text(txt, Style(fg = select(t)))
+
+  /**
+   * Build a [[VNode.BoxNode]] using the ambient theme's [[chars]] and
+   * [[border]] slot.
+   *
+   * This is the idiomatic way to draw a themed bordered container — apps
+   * stay free of any direct reference to `BorderChars`, and the visual
+   * style follows whichever theme is currently in scope.
+   *
+   * {{{
+   * given Theme = Theme.rounded
+   * Theme.box(2.x, 2.y, 40, 6, children = Nil)
+   *   // → BoxNode(..., style = Style(fg = theme.border, border = true), chars = ╭╮╰╯)
+   * }}}
+   */
+  def box(
+    x: XCoord,
+    y: YCoord,
+    width: Int,
+    height: Int,
+    children: List[VNode] = Nil,
+    style: Style = Style(border = true)
+  )(using t: Theme): VNode =
+    val finalStyle =
+      if style.fg == Color.Default then style.copy(fg = t.border)
+      else style
+    VNode.BoxNode(x, y, width, height, children, finalStyle, t.chars)

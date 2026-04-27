@@ -157,6 +157,23 @@ class AnsiRendererSpec extends AnyFunSuite:
     val out = captureAnsiRendererOut(root)
     assert(out.contains("┌"))
     assert(out.contains("└"))
+    assert(!out.contains("╭"), "default chars should be sharp, not rounded")
+
+    // BoxNode.chars drives the glyph set on emission.
+    val rounded = root.copy(children = root.children.collect { case b @ BoxNode(_, _, _, _, _, _, _) =>
+      b.copy(chars = BorderChars.rounded)
+    })
+    val outR = captureAnsiRendererOut(rounded)
+    assert(outR.contains("╭"))
+    assert(outR.contains("╯"))
+    assert(!outR.contains("┌"), "rounded chars should not produce sharp corners")
+
+    // buildFrame path also honours BoxNode.chars.
+    val frame  = AnsiRenderer.buildFrame(rounded)
+    val topRow = frame.cells(0).map(_.ch).mkString
+    val botRow = frame.cells(2).map(_.ch).mkString
+    assert(topRow.contains('╭') && topRow.contains('╮'), s"top row should have rounded corners: $topRow")
+    assert(botRow.contains('╰') && botRow.contains('╯'), s"bottom row should have rounded corners: $botRow")
     assert(out.contains("\u001b[1m")) // bold style for text
     assert(!out.contains(ANSI.hideCursor))
     assert(out.contains("\u001b[2K"))                               // clear current line

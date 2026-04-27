@@ -143,3 +143,4 @@ addCommandAlias("taskDemo",     "termflowSample/runMain termflow.apps.task.Task"
 addCommandAlias("stressDemo",   "termflowSample/runMain termflow.apps.stress.RenderStressApp")
 addCommandAlias("sineDemo",     "termflowSample/runMain termflow.apps.stress.SineWaveApp")
 addCommandAlias("inputDemo",    "termflowSample/runMain termflow.apps.input.InputLineReproApp")
+addCommandAlias("themeDemo",    "termflowSample/runMain termflow.apps.themes.ThemeDemoApp")

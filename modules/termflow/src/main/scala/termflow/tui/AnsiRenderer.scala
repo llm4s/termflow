@@ -205,8 +205,8 @@ object AnsiRenderer:
         out.append(styleToAnsi(style, depth)).append(str).append(reset)
       }
 
-    case BoxNode(x, y, w, h, children, style) =>
-      if style.border then drawBorder(x, y, w, h, style.fg, out, depth)
+    case BoxNode(x, y, w, h, children, style, chars) =>
+      if style.border then drawBorder(x, y, w, h, style.fg, chars, out, depth)
       children.foreach(renderNode(_, out, depth))
 
     case _: InputNode => () // handled separately
@@ -217,14 +217,19 @@ object AnsiRenderer:
     w: Int,
     h: Int,
     color: Color,
+    chars: BorderChars,
     out: StringBuilder,
     depth: ColorDepth
   ): Unit =
     val inner      = math.max(0, w - 2)
-    val horizontal = "─" * inner
-    out.append(moveTo(x, y)).append(colorToAnsi(color, isBg = false, depth)).append(s"┌$horizontal┐")
-    (1 until (h - 1)).foreach(row => out.append(moveTo(x, y + row)).append(s"│${" " * inner}│"))
-    out.append(moveTo(x, y + (h - 1))).append(s"└$horizontal┘")
+    val horizontal = chars.horizontal.toString * inner
+    val v          = chars.vertical
+    out
+      .append(moveTo(x, y))
+      .append(colorToAnsi(color, isBg = false, depth))
+      .append(s"${chars.topLeft}$horizontal${chars.topRight}")
+    (1 until (h - 1)).foreach(row => out.append(moveTo(x, y + row)).append(s"$v${" " * inner}$v"))
+    out.append(moveTo(x, y + (h - 1))).append(s"${chars.bottomLeft}$horizontal${chars.bottomRight}")
     out.append(reset)
 
   private def visibleInput(inp: InputNode, rootWidth: Int): VisibleInput =
@@ -291,7 +296,7 @@ object AnsiRenderer:
         val right     = x.value + math.max(0, textWidth - 1)
         (right, y.value)
 
-      case BoxNode(x, y, w, h, children, _) =>
+      case BoxNode(x, y, w, h, children, _, _) =>
         val boxRight = x.value + math.max(0, w - 1)
         val boxBot   = y.value + math.max(0, h - 1)
         children.foldLeft((boxRight, boxBot)) { case ((mx, my), child) =>
@@ -336,24 +341,24 @@ object AnsiRenderer:
         col += 1
       }
 
-    def drawBorder(x: Int, y: Int, w: Int, h: Int, style: Style): Unit =
+    def drawBorder(x: Int, y: Int, w: Int, h: Int, style: Style, chars: BorderChars): Unit =
       if w > 0 && h > 0 then
         var dx = 0
         while dx < w do
-          putCell(x + dx, y, RenderCell('─', style))
-          if h > 1 then putCell(x + dx, y + h - 1, RenderCell('─', style))
+          putCell(x + dx, y, RenderCell(chars.horizontal, style))
+          if h > 1 then putCell(x + dx, y + h - 1, RenderCell(chars.horizontal, style))
           dx += 1
 
         var dy = 0
         while dy < h do
-          putCell(x, y + dy, RenderCell('│', style))
-          if w > 1 then putCell(x + w - 1, y + dy, RenderCell('│', style))
+          putCell(x, y + dy, RenderCell(chars.vertical, style))
+          if w > 1 then putCell(x + w - 1, y + dy, RenderCell(chars.vertical, style))
           dy += 1
 
-        putCell(x, y, RenderCell('┌', style))
-        if w > 1 then putCell(x + w - 1, y, RenderCell('┐', style))
-        if h > 1 then putCell(x, y + h - 1, RenderCell('└', style))
-        if w > 1 && h > 1 then putCell(x + w - 1, y + h - 1, RenderCell('┘', style))
+        putCell(x, y, RenderCell(chars.topLeft, style))
+        if w > 1 then putCell(x + w - 1, y, RenderCell(chars.topRight, style))
+        if h > 1 then putCell(x, y + h - 1, RenderCell(chars.bottomLeft, style))
+        if w > 1 && h > 1 then putCell(x + w - 1, y + h - 1, RenderCell(chars.bottomRight, style))
 
     def drawNode(node: VNode): Unit = node match
       case TextNode(x, y, segments) =>
@@ -363,8 +368,8 @@ object AnsiRenderer:
           col += str.length
         }
 
-      case BoxNode(x, y, w, h, children, style) =>
-        if style.border then drawBorder(x.value, y.value, w, h, Style(fg = style.fg))
+      case BoxNode(x, y, w, h, children, style, chars) =>
+        if style.border then drawBorder(x.value, y.value, w, h, Style(fg = style.fg), chars)
         children.foreach(drawNode)
 
       case _: InputNode =>

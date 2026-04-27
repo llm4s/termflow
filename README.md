@@ -35,7 +35,10 @@ We intend to regularly port applicable fixes and critical updates from `main` to
 
 ## Modules
 
-- `modules/termflow`: the library
+- `modules/termflow`: the library (`org.llm4s:termflow_3`)
+- `modules/termflow-testkit`: deterministic test harness — `TuiTestDriver`,
+  golden-snapshot support, `TestRuntimeCtx` (`org.llm4s:termflow-testkit_3`,
+  depend on as `% Test`)
 - `modules/termflow-sample`: demo apps (not published)
 
 ## Quick Start

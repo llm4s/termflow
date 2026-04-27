@@ -3,6 +3,7 @@
 
 ## Structure
 - Library code lives in `modules/termflow`.
+- The deterministic test harness (`TuiTestDriver`, golden support, `TestRuntimeCtx`) lives in `modules/termflow-testkit` and is published separately as `org.llm4s:termflow-testkit_3` for downstream consumers to depend on as `% Test`.
 - Demo apps live in `modules/termflow-sample` and are not published.
 
 ## Style

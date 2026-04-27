@@ -197,3 +197,108 @@ class TuiRuntimeSpec extends AnyFunSuite:
     val printed = backend.out.toString
     assert(printed.contains(ANSI.showCursor))
     assert(printed.contains(ANSI.exitAltBuffer))
+
+  test("runtime enables and disables bracketed paste when the backend supports it"):
+    final class StopRuntime extends RuntimeException("stop-runtime")
+
+    final class PasteCapableBackend extends TerminalBackend:
+      val out                     = new StringWriter()
+      override def reader: Reader = new StringReader("")
+      override def writer         = out
+      override def width: Int     = 80
+      override def height: Int    = 24
+      override def close(): Unit  = ()
+      override def capabilities: Capabilities =
+        Capabilities.default.copy(bracketedPaste = true)
+
+    val renderer = new TuiRenderer:
+      override def render(
+        textNode: RootNode,
+        err: Option[TermFlowError],
+        terminal: TerminalBackend,
+        renderMetrics: RenderMetrics
+      ): Unit = throw new StopRuntime
+
+    object App extends TuiApp[Int, Unit]:
+      override def init(ctx: RuntimeCtx[Unit]): Tui[Int, Unit] = Tui(model = 0, cmd = Cmd.NoCmd)
+      override def update(model: Int, msg: Unit, ctx: RuntimeCtx[Unit]): Tui[Int, Unit] = Tui(model)
+      override def view(model: Int): RootNode             = RootNode(80, 24, children = List.empty, input = None)
+      override def toMsg(input: PromptLine): Result[Unit] = Right(())
+
+    val backend = new PasteCapableBackend
+    intercept[StopRuntime]:
+      TuiRuntime.run(app = App, renderer = renderer, terminalBackend = backend, config = TestConfig)
+
+    val printed = backend.out.toString
+    assert(printed.contains(ANSI.enableBracketedPaste))
+    assert(printed.contains(ANSI.disableBracketedPaste))
+
+  test("runtime enables and disables mouse mode when the backend supports it"):
+    final class StopRuntime extends RuntimeException("stop-runtime")
+
+    final class MouseCapableBackend extends TerminalBackend:
+      val out                     = new StringWriter()
+      override def reader: Reader = new StringReader("")
+      override def writer         = out
+      override def width: Int     = 80
+      override def height: Int    = 24
+      override def close(): Unit  = ()
+      override def capabilities: Capabilities =
+        Capabilities.default.copy(mouse = true)
+
+    val renderer = new TuiRenderer:
+      override def render(
+        textNode: RootNode,
+        err: Option[TermFlowError],
+        terminal: TerminalBackend,
+        renderMetrics: RenderMetrics
+      ): Unit = throw new StopRuntime
+
+    object App extends TuiApp[Int, Unit]:
+      override def init(ctx: RuntimeCtx[Unit]): Tui[Int, Unit] = Tui(model = 0, cmd = Cmd.NoCmd)
+      override def update(model: Int, msg: Unit, ctx: RuntimeCtx[Unit]): Tui[Int, Unit] = Tui(model)
+      override def view(model: Int): RootNode             = RootNode(80, 24, children = List.empty, input = None)
+      override def toMsg(input: PromptLine): Result[Unit] = Right(())
+
+    val backend = new MouseCapableBackend
+    intercept[StopRuntime]:
+      TuiRuntime.run(app = App, renderer = renderer, terminalBackend = backend, config = TestConfig)
+
+    val printed = backend.out.toString
+    assert(printed.contains(ANSI.enableMouse))
+    assert(printed.contains(ANSI.disableMouse))
+
+  test("runtime omits bracketed-paste setup when backend does not support it"):
+    final class StopRuntime extends RuntimeException("stop-runtime")
+
+    final class NoPasteBackend extends TerminalBackend:
+      val out                     = new StringWriter()
+      override def reader: Reader = new StringReader("")
+      override def writer         = out
+      override def width: Int     = 80
+      override def height: Int    = 24
+      override def close(): Unit  = ()
+      override def capabilities: Capabilities =
+        Capabilities.default.copy(bracketedPaste = false)
+
+    val renderer = new TuiRenderer:
+      override def render(
+        textNode: RootNode,
+        err: Option[TermFlowError],
+        terminal: TerminalBackend,
+        renderMetrics: RenderMetrics
+      ): Unit = throw new StopRuntime
+
+    object App extends TuiApp[Int, Unit]:
+      override def init(ctx: RuntimeCtx[Unit]): Tui[Int, Unit] = Tui(model = 0, cmd = Cmd.NoCmd)
+      override def update(model: Int, msg: Unit, ctx: RuntimeCtx[Unit]): Tui[Int, Unit] = Tui(model)
+      override def view(model: Int): RootNode             = RootNode(80, 24, children = List.empty, input = None)
+      override def toMsg(input: PromptLine): Result[Unit] = Right(())
+
+    val backend = new NoPasteBackend
+    intercept[StopRuntime]:
+      TuiRuntime.run(app = App, renderer = renderer, terminalBackend = backend, config = TestConfig)
+
+    val printed = backend.out.toString
+    assert(!printed.contains(ANSI.enableBracketedPaste))
+    assert(!printed.contains(ANSI.disableBracketedPaste))

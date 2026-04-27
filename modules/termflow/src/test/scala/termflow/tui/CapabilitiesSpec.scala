@@ -92,9 +92,35 @@ class CapabilitiesSpec extends AnyFunSuite:
     assert(!ColorDepth.Ansi16.supports(ColorDepth.Indexed256))
   }
 
-  test("default capabilities are Ansi8 + Unicode + no mouse") {
+  test("default capabilities are Ansi8 + Unicode + no mouse + extended styles on") {
     val d = Capabilities.default
     assert(d.colorDepth == ColorDepth.Ansi8)
     assert(d.unicode)
     assert(!d.mouse)
+    assert(d.extendedStyles)
+  }
+
+  test("xterm-family TERM advertises extendedStyles") {
+    assert(Capabilities.detect(Map("TERM" -> "xterm")).extendedStyles)
+    assert(Capabilities.detect(Map("TERM" -> "xterm-256color")).extendedStyles)
+    assert(Capabilities.detect(Map("TERM" -> "tmux")).extendedStyles)
+    assert(Capabilities.detect(Map("TERM" -> "alacritty")).extendedStyles)
+  }
+
+  test("vt-family / ansi advertise extendedStyles") {
+    assert(Capabilities.detect(Map("TERM" -> "vt100")).extendedStyles)
+    assert(Capabilities.detect(Map("TERM" -> "ansi")).extendedStyles)
+  }
+
+  test("dumb / empty TERM disables extendedStyles") {
+    assert(!Capabilities.detect(Map("TERM" -> "dumb")).extendedStyles)
+    assert(!Capabilities.detect(Map.empty).extendedStyles)
+  }
+
+  test("xterm-family advertises bracketedPaste; dumb / unknown does not") {
+    assert(Capabilities.detect(Map("TERM" -> "xterm-256color")).bracketedPaste)
+    assert(Capabilities.detect(Map("TERM" -> "tmux")).bracketedPaste)
+    assert(!Capabilities.detect(Map("TERM" -> "dumb")).bracketedPaste)
+    assert(!Capabilities.detect(Map("TERM" -> "vt100")).bracketedPaste)
+    assert(!Capabilities.detect(Map.empty).bracketedPaste)
   }

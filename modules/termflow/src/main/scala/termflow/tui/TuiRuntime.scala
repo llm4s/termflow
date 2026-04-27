@@ -191,8 +191,13 @@ object TuiRuntime:
     val frameworkLog     = FrameworkLog(config.logging)
     val renderMetrics    = new RenderMetrics(config.metrics, frameworkLog)
 
+    val pasteCapable = terminalBackend.capabilities.bracketedPaste
+    val mouseCapable = terminalBackend.capabilities.mouse
+
     def restoreTerminalState(): Unit =
       if restored.compareAndSet(false, true) then
+        if mouseCapable then terminalBackend.write(ANSI.disableMouse)
+        if pasteCapable then terminalBackend.write(ANSI.disableBracketedPaste)
         terminalBackend.write(ANSI.showCursor)
         terminalBackend.write(ANSI.exitAltBuffer)
         terminalBackend.flush()
@@ -208,6 +213,8 @@ object TuiRuntime:
     terminalBackend.write(ANSI.enterAltBuffer)
     terminalBackend.write(ANSI.clearScreen)
     terminalBackend.write(ANSI.showCursor)
+    if pasteCapable then terminalBackend.write(ANSI.enableBracketedPaste)
+    if mouseCapable then terminalBackend.write(ANSI.enableMouse)
     terminalBackend.flush()
     Runtime.getRuntime.addShutdownHook(shutdownHook)
 

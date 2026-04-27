@@ -60,9 +60,47 @@ object ANSI:
   val hideCursor     = "\u001b[?25l"
   val showCursor     = "\u001b[?25h"
 
+  /**
+   * xterm bracketed-paste mode on. Pasted text arrives as
+   *  `ESC [ 200 ~ ... ESC [ 201 ~`, decoded into a single
+   *  [[KeyDecoder.InputKey.Paste]].
+   */
+  val enableBracketedPaste  = "\u001b[?2004h"
+  val disableBracketedPaste = "\u001b[?2004l"
+
+  /**
+   * Enable button-event mouse tracking (`?1002`) plus SGR coordinate
+   * encoding (`?1006`). With this combo the terminal sends
+   * `CSI < button ; col ; row M/m` for every press, release, drag, and
+   * scroll-wheel event, decoded into [[KeyDecoder.InputKey.Mouse]].
+   *
+   * `?1003` (any-event tracking — bare `Move` events) is intentionally
+   * left off. It floods the input stream with motion bytes that are
+   * rarely useful for TUIs and that cost real CPU on the decode path.
+   */
+  val enableMouse  = "\u001b[?1006h\u001b[?1002h"
+  val disableMouse = "\u001b[?1002l\u001b[?1006l"
+
 object AnsiRenderer:
   private val reset = "\u001b[0m"
-  final case class RenderCell(ch: Char, style: Style)
+
+  /**
+   * One cell on the rendered terminal grid.
+   *
+   * @param ch    The glyph to emit. For surrogate pairs / multi-cell
+   *              graphemes, only the leading code unit is stored here;
+   *              richer grapheme support is a future stage.
+   * @param style Foreground / background / SGR attributes.
+   * @param width Display width in cells: `1` for the typical narrow cell,
+   *              `2` for an East Asian Wide / Fullwidth glyph (the next
+   *              cell is a continuation), or `0` for a continuation cell
+   *              that exists only to absorb the second column of a wide
+   *              glyph emitted in the previous cell. The diff loop honours
+   *              `width = 0` cells by *not* emitting their `ch`, since the
+   *              terminal already advanced past that column when the wide
+   *              char was written.
+   */
+  final case class RenderCell(ch: Char, style: Style, width: Int = 1)
   final case class RenderFrame(
     width: Int,
     height: Int,
@@ -71,7 +109,7 @@ object AnsiRenderer:
   )
   final case class DiffResult(ansi: String, changedCells: Int, changedRows: Int)
   final private case class VisibleInput(text: String, cursorIndex: Int, width: Int)
-  private val blankCell = RenderCell(' ', Style())
+  private val blankCell = RenderCell(' ', Style(), 1)
 
   def moveTo(x: XCoord, y: YCoord): String =
     s"\u001b[${y.value};${x.value}H"
@@ -165,10 +203,21 @@ object AnsiRenderer:
     case Color.BrightWhite   => 7
     case _                   => 0
 
-  private def styleToAnsi(s: Style, depth: ColorDepth): String =
+  private[tui] def styleToAnsi(s: Style, depth: ColorDepth): String =
+    styleToAnsi(s, depth, extendedStyles = true)
+
+  private[tui] def styleToAnsi(s: Style, depth: ColorDepth, extendedStyles: Boolean): String =
     val b = new StringBuilder
     if s.bold then b.append("\u001b[1m")
     if s.underline then b.append("\u001b[4m")
+    if extendedStyles then
+      // SGR ordering follows the canonical xterm sequence so terminals that
+      // only honour a subset still see the supported codes contiguously.
+      if s.dim then b.append("\u001b[2m")
+      if s.italic then b.append("\u001b[3m")
+      if s.blink then b.append("\u001b[5m")
+      if s.reverse then b.append("\u001b[7m")
+      if s.strikethrough then b.append("\u001b[9m")
     b.append(colorToAnsi(s.fg, isBg = false, depth))
     b.append(colorToAnsi(s.bg, isBg = true, depth))
     b.toString
@@ -180,12 +229,15 @@ object AnsiRenderer:
     terminal.write(clearPatch)
 
   def renderPatch(root: RootNode, depth: ColorDepth = ColorDepth.Ansi8): String =
+    renderPatch(root, depth, extendedStyles = true)
+
+  def renderPatch(root: RootNode, depth: ColorDepth, extendedStyles: Boolean): String =
     val out = new StringBuilder
-    root.children.foreach(renderNode(_, out, depth))
-    layoutChildren(root).foreach(renderNode(_, out, depth))
-    if !hasModalOverlay(root) then root.input.foreach(renderInput(_, root.width, out, depth))
-    root.overlays.foreach(renderOverlay(_, root.width, root.height, out, depth))
-    activeOverlayInput(root).foreach(renderInput(_, root.width, out, depth))
+    root.children.foreach(renderNode(_, out, depth, extendedStyles))
+    layoutChildren(root).foreach(renderNode(_, out, depth, extendedStyles))
+    if !hasModalOverlay(root) then root.input.foreach(renderInput(_, root.width, out, depth, extendedStyles))
+    root.overlays.foreach(renderOverlay(_, root.width, root.height, out, depth, extendedStyles))
+    activeOverlayInput(root).foreach(renderInput(_, root.width, out, depth, extendedStyles))
     out.toString
 
   /**
@@ -206,17 +258,21 @@ object AnsiRenderer:
       case None => Nil
 
   def render(root: RootNode)(using terminal: TerminalBackend): Unit =
-    terminal.write(renderPatch(root, terminal.capabilities.colorDepth))
+    terminal.write(renderPatch(root, terminal.capabilities.colorDepth, terminal.capabilities.extendedStyles))
 
   /** Re-render only the input, leaving existing children intact. */
   def renderInputOnly(root: RootNode)(using terminal: TerminalBackend): Unit =
-    terminal.write(inputPatch(root, terminal.capabilities.colorDepth))
+    terminal.write(inputPatch(root, terminal.capabilities.colorDepth, terminal.capabilities.extendedStyles))
 
   /** Build ANSI patch for input-only repaint. */
   def inputPatch(root: RootNode, depth: ColorDepth = ColorDepth.Ansi8): String =
+    inputPatch(root, depth, extendedStyles = true)
+
+  def inputPatch(root: RootNode, depth: ColorDepth, extendedStyles: Boolean): String =
     val out = new StringBuilder
-    if hasModalOverlay(root) then activeOverlayInput(root).foreach(renderInput(_, root.width, out, depth))
-    else root.input.foreach(renderInput(_, root.width, out, depth))
+    if hasModalOverlay(root) then
+      activeOverlayInput(root).foreach(renderInput(_, root.width, out, depth, extendedStyles))
+    else root.input.foreach(renderInput(_, root.width, out, depth, extendedStyles))
     out.toString
 
   /** True if any overlay in the root captures base-view input. */
@@ -247,25 +303,34 @@ object AnsiRenderer:
     rootWidth: Int,
     rootHeight: Int,
     out: StringBuilder,
-    depth: ColorDepth
+    depth: ColorDepth,
+    extendedStyles: Boolean
   ): Unit =
     val (ox, oy) = OverlayPosition.resolve(o.position, o.width, o.height, rootWidth, rootHeight)
     val dx       = ox.value - 1
     val dy       = oy.value - 1
-    o.children.foreach(child => renderNode(Layout.translate(child, dx, dy), out, depth))
+    // Wipe the overlay rectangle with spaces so the dialog interior is
+    // opaque and panels behind don't bleed through.
+    val blankRow = " " * o.width
+    var row      = 0
+    while row < o.height do
+      out.append(moveTo(XCoord(ox.value), YCoord(oy.value + row))).append(blankRow)
+      row += 1
+    o.children.foreach(child => renderNode(Layout.translate(child, dx, dy), out, depth, extendedStyles))
 
-  private def renderNode(v: VNode, out: StringBuilder, depth: ColorDepth): Unit = v match
-    case TextNode(x, y, l) =>
-      out.append(moveTo(x, y))
-      l.foreach { case Text(str, style) =>
-        out.append(styleToAnsi(style, depth)).append(str).append(reset)
-      }
+  private def renderNode(v: VNode, out: StringBuilder, depth: ColorDepth, extendedStyles: Boolean): Unit =
+    v match
+      case TextNode(x, y, l) =>
+        out.append(moveTo(x, y))
+        l.foreach { case Text(str, style) =>
+          out.append(styleToAnsi(style, depth, extendedStyles)).append(str).append(reset)
+        }
 
-    case BoxNode(x, y, w, h, children, style, chars) =>
-      if style.border then drawBorder(x, y, w, h, style.fg, chars, out, depth)
-      children.foreach(renderNode(_, out, depth))
+      case BoxNode(x, y, w, h, children, style, chars) =>
+        if style.border then drawBorder(x, y, w, h, style.fg, chars, out, depth)
+        children.foreach(renderNode(_, out, depth, extendedStyles))
 
-    case _: InputNode => () // handled separately
+      case _: InputNode => () // handled separately
 
   private def drawBorder(
     x: XCoord,
@@ -327,7 +392,13 @@ object AnsiRenderer:
     val cursorIndex = math.max(0, math.min(cursorLimit, unclampedCursorIndex))
     VisibleInput(visibleText, cursorIndex, width)
 
-  private def renderInput(inp: InputNode, rootWidth: Int, out: StringBuilder, depth: ColorDepth): Unit =
+  private def renderInput(
+    inp: InputNode,
+    rootWidth: Int,
+    out: StringBuilder,
+    depth: ColorDepth,
+    extendedStyles: Boolean
+  ): Unit =
     val visible = visibleInput(inp, rootWidth)
 
     // Clear full terminal row from column 1, then position to input x.
@@ -337,7 +408,7 @@ object AnsiRenderer:
     out.append(moveTo(inp.x, inp.y))
 
     val baseStyle = inp.style
-    val baseAnsi  = styleToAnsi(baseStyle, depth)
+    val baseAnsi  = styleToAnsi(baseStyle, depth, extendedStyles)
     // Draw the bounded single-line viewport only; never rely on terminal soft-wrap.
     out.append(baseAnsi).append(visible.text).append(reset)
 
@@ -348,7 +419,7 @@ object AnsiRenderer:
   def buildFrame(root: RootNode): RenderFrame =
     def nodeExtents(node: VNode): (Int, Int) = node match
       case TextNode(x, y, segments) =>
-        val textWidth = segments.foldLeft(0)((acc, seg) => acc + seg.txt.length)
+        val textWidth = segments.foldLeft(0)((acc, seg) => acc + WCWidth.stringWidth(seg.txt))
         val right     = x.value + math.max(0, textWidth - 1)
         (right, y.value)
 
@@ -392,10 +463,22 @@ object AnsiRenderer:
 
     def drawString(x: Int, y: Int, str: String, style: Style): Unit =
       var col = x
-      str.foreach { ch =>
-        putCell(col, y, RenderCell(ch, style))
-        col += 1
-      }
+      var i   = 0
+      while i < str.length do
+        val cp = str.codePointAt(i)
+        val w  = WCWidth.codePointWidth(cp)
+        val ch = str.charAt(i)
+        if w == 2 then
+          putCell(col, y, RenderCell(ch, style, 2))
+          putCell(col + 1, y, RenderCell(' ', style, 0))
+          col += 2
+        else if w == 1 then
+          putCell(col, y, RenderCell(ch, style, 1))
+          col += 1
+        // Combining marks / control / zero-width: skip silently. They would
+        // ideally attach to the previous cell, but the cell model doesn't
+        // carry composing-glyph slots yet — punting to a future iteration.
+        i += java.lang.Character.charCount(cp)
 
     def drawBorder(x: Int, y: Int, w: Int, h: Int, style: Style, chars: BorderChars): Unit =
       if w > 0 && h > 0 then
@@ -421,7 +504,7 @@ object AnsiRenderer:
         var col = x.value
         segments.foreach { case Text(str, style) =>
           drawString(col, y.value, str, style)
-          col += str.length
+          col += WCWidth.stringWidth(str)
         }
 
       case BoxNode(x, y, w, h, children, style, chars) =>
@@ -450,10 +533,21 @@ object AnsiRenderer:
     // Composite overlays bottom-to-top. Each overlay's children are
     // translated by the resolved position so callers author them in
     // overlay-local coordinates (1.x / 1.y is the overlay's top-left).
+    //
+    // Before drawing the children we wipe the overlay's rectangle with
+    // blank cells so anything beneath is opaquely occluded — without this,
+    // the box border draws but the interior leaks the panels behind it.
     root.overlays.foreach { o =>
       val (ox, oy) = OverlayPosition.resolve(o.position, o.width, o.height, root.width, root.height)
       val dx       = ox.value - 1
       val dy       = oy.value - 1
+      var fy       = 0
+      while fy < o.height do
+        var fx = 0
+        while fx < o.width do
+          putCell(ox.value + fx, oy.value + fy, blankCell)
+          fx += 1
+        fy += 1
       o.children.foreach(child => drawNode(Layout.translate(child, dx, dy)))
       o.input.foreach { in =>
         val translated: InputNode = in.copy(x = in.x + dx, y = in.y + dy)
@@ -467,10 +561,19 @@ object AnsiRenderer:
 
   /** Diff two frames and emit only changed runs plus cursor movement. */
   def diff(prev: Option[RenderFrame], current: RenderFrame): DiffResult =
-    diff(prev, current, ColorDepth.Ansi8)
+    diff(prev, current, ColorDepth.Ansi8, extendedStyles = true)
 
   /** Diff two frames at the given color depth. */
   def diff(prev: Option[RenderFrame], current: RenderFrame, depth: ColorDepth): DiffResult =
+    diff(prev, current, depth, extendedStyles = true)
+
+  /** Diff two frames honouring color depth and extended SGR capability. */
+  def diff(
+    prev: Option[RenderFrame],
+    current: RenderFrame,
+    depth: ColorDepth,
+    extendedStyles: Boolean
+  ): DiffResult =
     def cellAt(frame: Option[RenderFrame], row: Int, col: Int): RenderCell =
       frame match
         case Some(f) if row < f.height && col < f.width => f.cells(row)(col)
@@ -494,13 +597,17 @@ object AnsiRenderer:
           var cursor = col
           while cursor < current.width && cellAt(Some(current), row, cursor) != blankCell do
             val style = cellAt(Some(current), row, cursor).style
-            out.append(reset).append(styleToAnsi(style, depth))
+            out.append(reset).append(styleToAnsi(style, depth, extendedStyles))
             var j = cursor
             while j < current.width &&
               cellAt(Some(current), row, j) != blankCell &&
               cellAt(Some(current), row, j).style == style
             do
-              out.append(cellAt(Some(current), row, j).ch)
+              // Wide-char continuation cells (width = 0) carry the same
+              // style as their leading wide cell but no glyph of their own
+              // — the terminal already advanced its cursor past that
+              // column when the wide glyph was emitted.
+              if cellAt(Some(current), row, j).width != 0 then out.append(cellAt(Some(current), row, j).ch)
               j += 1
             cursor = j
           col = cursor
@@ -528,10 +635,18 @@ object AnsiRenderer:
     DiffResult(out.toString, changedCellsCount, changedRowsCount)
 
   def renderDiff(prev: Option[RenderFrame], current: RenderFrame): String =
-    diff(prev, current, ColorDepth.Ansi8).ansi
+    diff(prev, current, ColorDepth.Ansi8, extendedStyles = true).ansi
 
   def renderDiff(prev: Option[RenderFrame], current: RenderFrame, depth: ColorDepth): String =
-    diff(prev, current, depth).ansi
+    diff(prev, current, depth, extendedStyles = true).ansi
+
+  def renderDiff(
+    prev: Option[RenderFrame],
+    current: RenderFrame,
+    depth: ColorDepth,
+    extendedStyles: Boolean
+  ): String =
+    diff(prev, current, depth, extendedStyles).ansi
 
 final case class SimpleANSIRenderer() extends TuiRenderer:
   private var lastFrame: Option[AnsiRenderer.RenderFrame] = None
@@ -546,13 +661,14 @@ final case class SimpleANSIRenderer() extends TuiRenderer:
     val currentFrame = AnsiRenderer.buildFrame(textNode)
     val resized      = lastFrame.exists(prev => prev.width != currentFrame.width || prev.height != currentFrame.height)
     val depth        = terminal.capabilities.colorDepth
+    val ext          = terminal.capabilities.extendedStyles
     val initialDiff =
-      if resized then AnsiRenderer.diff(None, currentFrame, depth)
-      else AnsiRenderer.diff(lastFrame, currentFrame, depth)
+      if resized then AnsiRenderer.diff(None, currentFrame, depth, ext)
+      else AnsiRenderer.diff(lastFrame, currentFrame, depth, ext)
     val shouldFullRepaint =
       resized || initialDiff.changedRows >= math.min(currentFrame.height, FullRepaintRowThreshold)
     val diffResult =
-      if shouldFullRepaint then AnsiRenderer.diff(None, currentFrame, depth)
+      if shouldFullRepaint then AnsiRenderer.diff(None, currentFrame, depth, ext)
       else initialDiff
     val ansi =
       if shouldFullRepaint then ANSI.clearScreen + ANSI.homeCursor + diffResult.ansi

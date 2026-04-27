@@ -528,3 +528,80 @@ class AnsiRendererSpec extends AnyFunSuite:
     val secondOut = captureRendererOut(renderer, second)
     assert(secondOut.contains(ANSI.clearScreen))
     assert(secondOut.contains(ANSI.homeCursor))
+
+  // ---- Extended style attributes (Stage 2 §5.5) ----
+
+  private def styleSgr(s: Style, extendedStyles: Boolean = true): String =
+    val root = RootNode(
+      width = 10,
+      height = 1,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("x", s)))),
+      input = None
+    )
+    AnsiRenderer.renderPatch(root, ColorDepth.Ansi8, extendedStyles)
+
+  test("italic, dim, reverse, blink, strikethrough emit their SGR codes when supported"):
+    val out = styleSgr(
+      Style(italic = true, dim = true, reverse = true, blink = true, strikethrough = true)
+    )
+    assert(out.contains("[2m"), s"dim missing: $out")
+    assert(out.contains("[3m"), s"italic missing: $out")
+    assert(out.contains("[5m"), s"blink missing: $out")
+    assert(out.contains("[7m"), s"reverse missing: $out")
+    assert(out.contains("[9m"), s"strikethrough missing: $out")
+
+  test("extended style codes are stripped when capability is disabled, bold/underline still emit"):
+    val out =
+      styleSgr(Style(bold = true, underline = true, italic = true, reverse = true), extendedStyles = false)
+    assert(out.contains("[1m"), s"bold should still emit: $out")
+    assert(out.contains("[4m"), s"underline should still emit: $out")
+    assert(!out.contains("[3m"), s"italic should be stripped: $out")
+    assert(!out.contains("[7m"), s"reverse should be stripped: $out")
+
+  test("Style defaults leave all extended attributes off"):
+    val s = Style()
+    assert(!s.italic && !s.dim && !s.reverse && !s.strikethrough && !s.blink)
+    val out = styleSgr(s)
+    Seq("[2m", "[3m", "[5m", "[7m", "[9m").foreach { code =>
+      assert(!out.contains(code), s"unexpected code $code in: $out")
+    }
+
+  // ---- Unicode display width (Stage 2 §5.3) ----
+
+  test("buildFrame places a wide CJK glyph in one cell + a width=0 continuation"):
+    val root = RootNode(
+      width = 6,
+      height = 1,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("中A", Style())))),
+      input = None
+    )
+    val frame = AnsiRenderer.buildFrame(root)
+    assert(frame.cells(0)(0).ch == '中')
+    assert(frame.cells(0)(0).width == 2)
+    assert(frame.cells(0)(1).width == 0, "continuation cell after wide glyph")
+    assert(frame.cells(0)(2).ch == 'A')
+    assert(frame.cells(0)(2).width == 1)
+
+  test("renderDiff emits the wide glyph once and skips its continuation cell"):
+    val root = RootNode(
+      width = 4,
+      height = 1,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("中A", Style())))),
+      input = None
+    )
+    val ansi    = AnsiRenderer.renderDiff(None, AnsiRenderer.buildFrame(root))
+    val zhCount = ansi.count(_ == '中')
+    val aCount  = ansi.count(_ == 'A')
+    assert(zhCount == 1, s"wide glyph should appear exactly once in: $ansi")
+    assert(aCount == 1, s"narrow glyph should appear exactly once in: $ansi")
+
+  test("nodeExtents accounts for wide-char display width"):
+    // Three CJK glyphs at column 1 occupy columns 1..6 — frame must size to fit.
+    val root = RootNode(
+      width = 1,
+      height = 1,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("中日韓", Style())))),
+      input = None
+    )
+    val frame = AnsiRenderer.buildFrame(root)
+    assert(frame.width >= 6, s"expected frame width >= 6, got ${frame.width}")

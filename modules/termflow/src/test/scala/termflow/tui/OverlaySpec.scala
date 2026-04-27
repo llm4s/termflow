@@ -145,3 +145,52 @@ class OverlaySpec extends AnyFunSuite:
     assert(baseIdx >= 0 && overlayIdx >= 0)
     assert(overlayIdx > baseIdx, "overlay text must come after base text in the render order")
   }
+
+  test("buildFrame: overlay rectangle wipes cells beneath it (no background leakage)") {
+    // Base frame with a long line of `panel-content` across the middle row.
+    val crowdedBase = RootNode(
+      width = 30,
+      height = 5,
+      children = List(TextNode(XCoord(1), YCoord(2), List(Text("XXXXXXXXXXXXXXXXXXXXXXXXXXXX", Style())))),
+      input = None
+    )
+    // Overlay covers cols 5..14 on row 2 with a single TextNode + a 1×3 box.
+    val overlay = Overlay(
+      position = OverlayPosition.At(XCoord(5), YCoord(2)),
+      width = 10,
+      height = 3,
+      children = List(VNode.BoxNode(XCoord(1), YCoord(1), 10, 3, Nil, Style(border = true)))
+    )
+    val frame = AnsiRenderer.buildFrame(crowdedBase.copy(overlays = List(overlay)))
+
+    // Cells inside the overlay rectangle but outside the border (col 6..13 on row 2)
+    // must be blank — no `X` from the underlying panel should leak through.
+    val rowText  = frame.cells(1).map(_.ch).mkString
+    val interior = rowText.substring(5, 13) // 0-based slice of the overlay interior
+    assert(!interior.contains('X'), s"overlay interior leaked underlying X chars: '$interior'")
+
+    // Cells outside the overlay rectangle still hold the panel content.
+    assert(rowText.charAt(0) == 'X' && rowText.charAt(15) == 'X', s"non-overlay cells should remain: '$rowText'")
+  }
+
+  test("renderPatch: overlay clears its rectangle before drawing children") {
+    val crowdedBase = RootNode(
+      width = 30,
+      height = 5,
+      children = List(TextNode(XCoord(1), YCoord(2), List(Text("LEAK-LEAK-LEAK-LEAK", Style())))),
+      input = None
+    )
+    val overlay = Overlay(
+      position = OverlayPosition.At(XCoord(5), YCoord(2)),
+      width = 10,
+      height = 1,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("DLG", Style()))))
+    )
+    val out      = AnsiRenderer.renderPatch(crowdedBase.copy(overlays = List(overlay)))
+    val leakIdx  = out.indexOf("LEAK")
+    val blankIdx = out.indexOf("          ", leakIdx) // 10 spaces written by the wipe
+    val dlgIdx   = out.indexOf("DLG")
+    assert(leakIdx >= 0, "base text should still appear in patch")
+    assert(blankIdx > leakIdx, "wipe blanks must come after the base content")
+    assert(dlgIdx > blankIdx, "overlay glyphs must come after the wipe")
+  }

@@ -5,8 +5,12 @@ import termflow.tui.KeyDecoder.InputKey
 
 class KeyDecoderSpec extends AnyFunSuite:
 
-  test("decode Enter key"):
+  test("decode Enter key — both LF (10) and CR (13)"):
+    // Cooked terminals deliver Enter as LF (10); JLine raw mode disables
+    // CR-to-LF translation and delivers CR (13). Both must decode to Enter
+    // so dialogs/Prompt/History don't have to special-case Ctrl('M').
     assert(KeyDecoder.decode(10) == InputKey.Enter)
+    assert(KeyDecoder.decode(13) == InputKey.Enter)
 
   test("decode Backspace key"):
     assert(KeyDecoder.decode(127) == InputKey.Backspace)

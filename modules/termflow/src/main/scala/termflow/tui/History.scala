@@ -92,7 +92,7 @@ object PromptHistory:
         (cleared, Some(Cmd.Exit))
 
       // Enter: commit line to history and parse
-      case KeyDecoder.InputKey.Ctrl('M') | KeyDecoder.InputKey.Enter =>
+      case KeyDecoder.InputKey.Enter =>
         val line                     = Prompt.render(state.prompt)
         val (nextHistory, nextStore) = addToHistory(state.history, state.store, line)
         val result                   = toMsg(PromptLine(line))

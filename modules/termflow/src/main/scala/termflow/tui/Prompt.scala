@@ -32,7 +32,7 @@ object Prompt:
       case KeyDecoder.InputKey.Ctrl('C') | KeyDecoder.InputKey.Ctrl('D') =>
         (State(Vector.empty, 0), Some(Cmd.Exit))
 
-      case KeyDecoder.InputKey.Ctrl('M') | KeyDecoder.InputKey.Enter =>
+      case KeyDecoder.InputKey.Enter =>
         val raw = render(state)
         val cmd = toMsg(PromptLine(raw)).fold(err => Cmd.TermFlowErrorCmd(err), g => Cmd.GCmd(g))
         (State(Vector.empty, 0), Some(cmd))

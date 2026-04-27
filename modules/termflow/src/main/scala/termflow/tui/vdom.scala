@@ -328,14 +328,20 @@ val InputNode = VNode.InputNode
  * of the drawing surface and are used by `AnsiRenderer.buildFrame` to size
  * the cell matrix.
  *
- * @param width Frame width in cells.
- * @param height Frame height in cells.
+ * @param width    Frame width in cells.
+ * @param height   Frame height in cells.
  * @param children Static nodes to draw, in document order.
- * @param input Optional focused [[InputNode]] rendered last, with cursor placement.
+ * @param input    Optional focused [[InputNode]] rendered last, with cursor placement.
+ * @param overlays Optional stack of [[Overlay]]s composited on top of the base
+ *                 view, in document order (bottom-to-top z-order). When any
+ *                 overlay sets `inputCapture = InputCapture.Modal`, the base
+ *                 view's `input` is suppressed and the topmost modal overlay's
+ *                 `input` (if any) takes over the hardware cursor.
  */
 final case class RootNode(
   width: Int,
   height: Int,
   children: List[VNode],
-  input: Option[InputNode]
+  input: Option[InputNode],
+  overlays: List[Overlay] = Nil
 )

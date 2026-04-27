@@ -221,6 +221,29 @@ class SubSpec extends AnyFunSuite:
     override def height: Int    = currentHeight
     override def close(): Unit  = ()
 
+  /**
+   * Test backend that supports onResize. Captures the listener so the test
+   * can fire it manually, and records unregister calls.
+   */
+  final private class SignalingTerminal(var currentWidth: Int, var currentHeight: Int) extends TerminalBackend:
+    private val out                                      = new StringWriter()
+    @volatile var registeredListener: Option[() => Unit] = None
+    val unregisterCalls                                  = new java.util.concurrent.atomic.AtomicInteger(0)
+    override def reader: Reader                          = new StringReader("")
+    override def writer: Writer                          = out
+    override def width: Int                              = currentWidth
+    override def height: Int                             = currentHeight
+    override def close(): Unit                           = ()
+    override def onResize(listener: () => Unit): Option[() => Unit] =
+      registeredListener = Some(listener)
+      Some(() =>
+        unregisterCalls.incrementAndGet(): Unit
+        registeredListener = None
+      )
+
+    /** Simulate a SIGWINCH-equivalent delivery from the OS. */
+    def fireResize(): Unit = registeredListener.foreach(_.apply())
+
   test("Sub.Every does not tick when registered into a RuntimeCtx that omits start()"):
     val ctx = new CapturingCtx[String]
     val sub = Sub.Every(20, () => "tick", ctx)
@@ -410,4 +433,45 @@ class SubSpec extends AnyFunSuite:
       val deadline = System.currentTimeMillis() + 1000
       while ctx.messages.isEmpty && System.currentTimeMillis() < deadline do Thread.sleep(10)
       assert(ctx.messages.contains(Cmd.GCmd("82:24")), s"expected resize tick after start; saw ${ctx.messages}")
+    finally sub.cancel()
+
+  test("Sub.TerminalResize uses backend.onResize when supported (no polling)"):
+    val terminal = new SignalingTerminal(80, 24)
+    val ctx      = new CapturingCtx[String](terminal)
+    val sub      = Sub.TerminalResize[String](20, (w, h) => s"$w:$h", ctx)
+
+    sub.start()
+    try
+      assert(terminal.registeredListener.isDefined, "expected backend listener to be registered after start()")
+
+      // Mutate dimensions, fire the signal — should publish exactly once.
+      terminal.currentWidth = 100
+      terminal.fireResize()
+      assert(ctx.messages == List(Cmd.GCmd("100:24")))
+
+      // Identical-size signal should be a no-op (no spurious message).
+      terminal.fireResize()
+      assert(ctx.messages == List(Cmd.GCmd("100:24")))
+
+      // Another change still publishes.
+      terminal.currentHeight = 30
+      terminal.fireResize()
+      assert(ctx.messages == List(Cmd.GCmd("100:24"), Cmd.GCmd("100:30")))
+    finally sub.cancel()
+
+    assert(terminal.unregisterCalls.get() == 1, "cancel() must invoke the unregister hook exactly once")
+    assert(terminal.registeredListener.isEmpty, "listener should be cleared after cancel()")
+
+  test("Sub.TerminalResize does not start a polling scheduler when signal path is taken"):
+    // Indirectly observed: with the signal path active, no message is published
+    // by polling alone (we never fire the signal). Wait long enough that the
+    // polling would have ticked under the fallback path.
+    val terminal = new SignalingTerminal(80, 24)
+    val ctx      = new CapturingCtx[String](terminal)
+    val sub      = Sub.TerminalResize[String](20, (w, h) => s"$w:$h", ctx)
+    sub.start()
+    try
+      terminal.currentWidth = 90
+      Thread.sleep(150)
+      assert(ctx.messages.isEmpty, s"expected no polling-driven publish on signal-capable backend; saw ${ctx.messages}")
     finally sub.cancel()

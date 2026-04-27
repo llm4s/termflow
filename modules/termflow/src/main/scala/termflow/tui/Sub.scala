@@ -233,15 +233,18 @@ object Sub:
     )
 
   /**
-   * Poll terminal dimensions at a fixed interval and publish a message when
-   * they change.
+   * Publish a message when the terminal is resized.
    *
-   * Useful for apps that need to re-flow their view when the window is
-   * resized. The subscription publishes through `ctx.publish` and
-   * auto-registers for cleanup on exit.
+   * Prefers the backend's [[TerminalBackend.onResize]] signal when available
+   * (e.g. SIGWINCH on Unix); falls back to polling at `millis` for backends
+   * without signal support (notably the test virtual backend).
    *
-   * @param millis Polling interval, in milliseconds.
-   * @param mkMsg Function producing the resize message from `(width, height)`.
+   * The subscription publishes through `ctx.publish` and auto-registers for
+   * cleanup on exit.
+   *
+   * @param millis Polling interval used only when the backend cannot deliver
+   *               resize signals.
+   * @param mkMsg  Function producing the resize message from `(width, height)`.
    */
   def TerminalResize[Msg](
     millis: Long,
@@ -253,29 +256,36 @@ object Sub:
       @volatile private var active                                                   = true
       @volatile private var scheduler: java.util.concurrent.ScheduledExecutorService = null
       @volatile private var handle: java.util.concurrent.ScheduledFuture[?]          = null
+      @volatile private var unregister: () => Unit                                   = null
       @volatile private var w0                                                       = 0
       @volatile private var h0                                                       = 0
 
+      private def maybePublish(): Unit =
+        if active then
+          val w = ctx.terminal.width
+          val h = ctx.terminal.height
+          if w != w0 || h != h0 then
+            w0 = w
+            h0 = h
+            ctx.publish(Cmd.GCmd(mkMsg(w, h)))
+
       override def start(): Unit =
         lock.synchronized {
-          if scheduler == null && active then
+          if (scheduler == null && unregister == null) && active then
             w0 = ctx.terminal.width
             h0 = ctx.terminal.height
-            val s = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
-            scheduler = s
-            handle = s.scheduleAtFixedRate(
-              () =>
-                if active then
-                  val w = ctx.terminal.width
-                  val h = ctx.terminal.height
-                  if w != w0 || h != h0 then
-                    w0 = w
-                    h0 = h
-                    ctx.publish(Cmd.GCmd(mkMsg(w, h))),
-              0L,
-              millis,
-              TimeUnit.MILLISECONDS
-            )
+            ctx.terminal.onResize(() => maybePublish()) match
+              case Some(unreg) =>
+                unregister = unreg
+              case None =>
+                val s = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
+                scheduler = s
+                handle = s.scheduleAtFixedRate(
+                  () => maybePublish(),
+                  0L,
+                  millis,
+                  TimeUnit.MILLISECONDS
+                )
         }
 
       override def isActive: Boolean = active
@@ -283,6 +293,10 @@ object Sub:
       override def cancel(): Unit =
         lock.synchronized {
           active = false
+          if unregister != null then
+            try unregister()
+            catch { case _: Throwable => () }
+            unregister = null
           if handle != null then handle.cancel(true): Unit
           if scheduler != null then
             scheduler.shutdownNow(): Unit

@@ -25,9 +25,25 @@ trait TerminalBackend extends TerminalInfo:
    * Best-effort terminal capabilities. Defaults to a conservative
    * `Capabilities.default` (Ansi8 + Unicode on, mouse off); production
    * backends should override with a richer detection (see
-   * [[Capabilities.detectFromEnv]]).
+   * [[Capabilities.detect]]).
    */
   def capabilities: Capabilities = Capabilities.default
+
+  /**
+   * Register a listener to be invoked when the terminal is resized.
+   *
+   * Returns `Some(unregister)` if the backend supports event-based resize
+   * notifications (e.g. SIGWINCH on a Unix tty); the caller must invoke
+   * `unregister()` to remove the listener.
+   *
+   * Returns `None` if the backend has no signal mechanism — callers should
+   * fall back to polling [[width]] / [[height]]. The default trait
+   * implementation returns `None`.
+   *
+   * The listener is invoked from a backend-internal thread (e.g. the JVM
+   * signal-dispatch thread) and should be cheap and non-blocking.
+   */
+  def onResize(listener: () => Unit): Option[() => Unit] = None
 
 /** Default JLine-backed terminal implementation. */
 final class JLineTerminalBackend extends TerminalBackend:
@@ -54,6 +70,23 @@ final class JLineTerminalBackend extends TerminalBackend:
 
   override val capabilities: Capabilities =
     Capabilities.detect(System.getenv().asScala.toMap)
+
+  /**
+   * Hook into JLine's SIGWINCH delivery. JLine raises [[Terminal.Signal.WINCH]]
+   * when the underlying tty resizes (or, on Windows, when its emulator reports
+   * a console-buffer change). The listener is invoked on JLine's signal
+   * dispatch path; we adapt it through a Java [[Terminal.SignalHandler]] and
+   * return the previous handler so callers can restore it on unregister.
+   */
+  override def onResize(listener: () => Unit): Option[() => Unit] =
+    val handler = new Terminal.SignalHandler:
+      override def handle(signal: Terminal.Signal): Unit =
+        try listener()
+        catch { case _: Throwable => () }
+    val previous = terminal.handle(Terminal.Signal.WINCH, handler)
+    Some { () =>
+      terminal.handle(Terminal.Signal.WINCH, previous); ()
+    }
 
   override def close(): Unit =
     terminal.close()

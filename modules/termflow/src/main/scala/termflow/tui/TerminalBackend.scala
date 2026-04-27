@@ -6,6 +6,7 @@ import org.jline.terminal.TerminalBuilder
 import java.io.InputStreamReader
 import java.io.Reader
 import java.io.Writer
+import scala.jdk.CollectionConverters.*
 
 /** Basic read-only terminal information. */
 trait TerminalInfo:
@@ -19,6 +20,14 @@ trait TerminalBackend extends TerminalInfo:
   def write(text: String): Unit = writer.write(text)
   def flush(): Unit             = writer.flush()
   def close(): Unit
+
+  /**
+   * Best-effort terminal capabilities. Defaults to a conservative
+   * `Capabilities.default` (Ansi8 + Unicode on, mouse off); production
+   * backends should override with a richer detection (see
+   * [[Capabilities.detectFromEnv]]).
+   */
+  def capabilities: Capabilities = Capabilities.default
 
 /** Default JLine-backed terminal implementation. */
 final class JLineTerminalBackend extends TerminalBackend:
@@ -42,6 +51,9 @@ final class JLineTerminalBackend extends TerminalBackend:
 
   override def width: Int  = terminal.getWidth
   override def height: Int = terminal.getHeight
+
+  override val capabilities: Capabilities =
+    Capabilities.detect(System.getenv().asScala.toMap)
 
   override def close(): Unit =
     terminal.close()

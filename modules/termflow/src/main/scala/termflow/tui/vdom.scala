@@ -1,14 +1,152 @@
 package termflow.tui
 
 /**
- * Basic colour palette for text and borders.
+ * Color used for text and borders.
  *
- * `Default` leaves the terminal's current foreground/background untouched
- * and is the idiomatic way to say "no explicit colour" — it is not emitted
- * as an ANSI escape at render time.
+ * Three families are available:
+ *   - the legacy 8-color palette ([[Color.Default]] through [[Color.White]])
+ *     plus the bright variants ([[Color.BrightBlack]] through
+ *     [[Color.BrightWhite]]) for terminals advertising `Ansi16` or higher;
+ *   - [[Color.Indexed]] for the xterm 256-color cube;
+ *   - [[Color.Rgb]] for 24-bit truecolor.
+ *
+ * The renderer downgrades higher-depth colors to whatever the active
+ * [[Capabilities.colorDepth]] supports — `Color.Rgb(255, 100, 100)` is
+ * rendered as a near-equivalent indexed color on a 256-color terminal and
+ * as the closest of the 8 standard colors on a basic ANSI terminal.
+ *
+ * [[Color.Default]] leaves the terminal's current foreground/background
+ * untouched and emits no escape sequence.
  */
 enum Color:
-  case Default, Black, Red, Green, Yellow, Blue, Magenta, Cyan, White
+  case Default
+  case Black, Red, Green, Yellow, Blue, Magenta, Cyan, White
+  case BrightBlack, BrightRed, BrightGreen, BrightYellow,
+    BrightBlue, BrightMagenta, BrightCyan, BrightWhite
+
+  /**
+   * 256-color palette index, 0..255. Values outside the range are clamped
+   * at render time. Indices 0..15 mirror the 16-color palette; 16..231 form
+   * a 6×6×6 RGB cube; 232..255 are a 24-step grayscale ramp.
+   */
+  case Indexed(n: Int)
+
+  /**
+   * 24-bit truecolor. Components outside 0..255 are clamped at render time.
+   */
+  case Rgb(r: Int, g: Int, b: Int)
+
+object Color:
+
+  /**
+   * Approximate sRGB representation of each named color. Used only for
+   * downgrade math (truecolor → 8/16). The exact rendered color is up to
+   * the terminal's palette settings.
+   */
+  private[tui] val namedRgb: Map[Color, (Int, Int, Int)] = Map(
+    Color.Black         -> (0, 0, 0),
+    Color.Red           -> (170, 0, 0),
+    Color.Green         -> (0, 170, 0),
+    Color.Yellow        -> (170, 85, 0),
+    Color.Blue          -> (0, 0, 170),
+    Color.Magenta       -> (170, 0, 170),
+    Color.Cyan          -> (0, 170, 170),
+    Color.White         -> (170, 170, 170),
+    Color.BrightBlack   -> (85, 85, 85),
+    Color.BrightRed     -> (255, 85, 85),
+    Color.BrightGreen   -> (85, 255, 85),
+    Color.BrightYellow  -> (255, 255, 85),
+    Color.BrightBlue    -> (85, 85, 255),
+    Color.BrightMagenta -> (255, 85, 255),
+    Color.BrightCyan    -> (85, 255, 255),
+    Color.BrightWhite   -> (255, 255, 255)
+  )
+
+  /**
+   * Resolve any non-`Default` color to an approximate `(r, g, b)`. Used by
+   * the renderer when downgrading to a lower color depth.
+   *
+   * Returns `None` for [[Color.Default]] — Default is not a color, it is
+   * "leave whatever the terminal already has".
+   */
+  private[tui] def toRgb(c: Color): Option[(Int, Int, Int)] = c match
+    case Color.Default                     => None
+    case named if namedRgb.contains(named) => namedRgb.get(named)
+    case Color.Indexed(n)                  => Some(indexedToRgb(clamp(n, 0, 255)))
+    case Color.Rgb(r, g, b)                => Some((clamp(r, 0, 255), clamp(g, 0, 255), clamp(b, 0, 255)))
+    case _                                 => None
+
+  /**
+   * Map a 256-color index to its approximate RGB triple, mirroring the
+   * standard xterm palette layout.
+   */
+  private[tui] def indexedToRgb(n: Int): (Int, Int, Int) =
+    if n < 16 then
+      val named = Color.fromOrdinal(n + 1) // skip Default at ordinal 0
+      namedRgb.getOrElse(named, (0, 0, 0))
+    else if n < 232 then
+      val nn                = n - 16
+      val r                 = nn / 36
+      val g                 = (nn % 36) / 6
+      val b                 = nn  % 6
+      def step(c: Int): Int = if c == 0 then 0 else 55 + c * 40
+      (step(r), step(g), step(b))
+    else
+      val v = 8 + (n - 232) * 10
+      (v, v, v)
+
+  /**
+   * Find the nearest color in the 6×6×6 cube + grayscale ramp (16..255).
+   * Considers both the cube and the grayscale ramp and returns whichever
+   * is closer in straight RGB space.
+   */
+  private[tui] def nearestIndexed(r: Int, g: Int, b: Int): Int =
+    val cubeIdx      = nearestCube(r, g, b)
+    val (cr, cg, cb) = indexedToRgb(cubeIdx)
+    val cubeDist     = squaredDistance((r, g, b), (cr, cg, cb))
+
+    val grayIdx      = nearestGray(r, g, b)
+    val (gr, gg, gb) = indexedToRgb(grayIdx)
+    val grayDist     = squaredDistance((r, g, b), (gr, gg, gb))
+
+    if grayDist < cubeDist then grayIdx else cubeIdx
+
+  private def nearestCube(r: Int, g: Int, b: Int): Int =
+    def quantize(c: Int): Int =
+      // xterm cube steps: 0, 95, 135, 175, 215, 255
+      val steps = Array(0, 95, 135, 175, 215, 255)
+      var best  = 0
+      var bestD = Int.MaxValue
+      var i     = 0
+      while i < steps.length do
+        val d = math.abs(c - steps(i))
+        if d < bestD then { bestD = d; best = i }
+        i += 1
+      best
+    16 + 36 * quantize(r) + 6 * quantize(g) + quantize(b)
+
+  private def nearestGray(r: Int, g: Int, b: Int): Int =
+    val avg  = (r + g + b) / 3
+    val gray = clamp(((avg - 8) + 5) / 10, 0, 23)
+    232 + gray
+
+  /** Find the nearest of the 8 base colors (Black..White). */
+  private[tui] def nearestAnsi8(r: Int, g: Int, b: Int): Color =
+    val candidates: Seq[Color] =
+      Seq(Color.Black, Color.Red, Color.Green, Color.Yellow, Color.Blue, Color.Magenta, Color.Cyan, Color.White)
+    candidates.minBy(c => squaredDistance((r, g, b), namedRgb(c)))
+
+  /** Find the nearest of the 16 standard colors (8 base + 8 bright). */
+  private[tui] def nearestAnsi16(r: Int, g: Int, b: Int): Color =
+    namedRgb.keys.toSeq.minBy(c => squaredDistance((r, g, b), namedRgb(c)))
+
+  private def squaredDistance(a: (Int, Int, Int), b: (Int, Int, Int)): Int =
+    val dr = a._1 - b._1
+    val dg = a._2 - b._2
+    val db = a._3 - b._3
+    dr * dr + dg * dg + db * db
+
+  private def clamp(v: Int, lo: Int, hi: Int): Int = math.max(lo, math.min(hi, v))
 
 /**
  * Styling applied to a cell or run of cells.

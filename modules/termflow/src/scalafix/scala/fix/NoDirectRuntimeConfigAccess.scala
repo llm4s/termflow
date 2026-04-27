@@ -21,9 +21,10 @@ class NoDirectRuntimeConfigAccess extends SyntacticRule("NoDirectRuntimeConfigAc
       case _                          => false
 
   private def isAllowedConfigFile(doc: SyntacticDocument): Boolean =
+    val allowed = Set("TermFlowConfig.scala", "TerminalBackend.scala")
     doc.input match
-      case Input.File(path, _)        => path.toString.endsWith("TermFlowConfig.scala")
-      case Input.VirtualFile(path, _) => path.endsWith("TermFlowConfig.scala")
+      case Input.File(path, _)        => allowed.exists(path.toString.endsWith)
+      case Input.VirtualFile(path, _) => allowed.exists(path.endsWith)
       case _                          => false
 
   private def lint(pos: Position, target: String): Patch =

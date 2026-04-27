@@ -91,9 +91,16 @@ object Stage1ShowcaseApp:
     def contains(c: Int, r: Int): Boolean =
       c >= col && c < col + width && r >= row && r < row + height
 
+  /** Sample list-select items used by the `l` dialog binding. */
+  private val listSelectItems: Vector[String] =
+    Vector("apple", "banana", "cherry", "date", "elderberry", "fig", "grape", "honeydew")
+
   enum Dialog:
     case None
     case ConfirmQuit(yesFocused: Boolean)
+    case TextInput(state: Prompt.State, okFocused: Boolean)
+    case ListSelect(selectedIndex: Int)
+    case Waiting(openedAtTick: Long, autoCloseAtTick: Long)
 
   final case class Model(
     width: Int,
@@ -105,8 +112,15 @@ object Stage1ShowcaseApp:
     termName: String,
     /** Most recent input event, formatted for display in the live panel. */
     lastEvent: Option[String],
+    /** Last value submitted from a textInput dialog (rendered in Live input). */
+    lastTextInput: Option[String],
+    /** Last item picked from a listSelect dialog. */
+    lastListPick: Option[String],
+    /** Tick counter incremented by `tickSub`; drives the waiting spinner. */
+    tick: Long,
     input: Sub[Msg],
-    resize: Sub[Msg]
+    resize: Sub[Msg],
+    tickSub: Sub[Msg]
   ):
     def borderName: String = borderStyles(borderIdx)._1
     def chars: BorderChars = borderStyles(borderIdx)._2
@@ -118,13 +132,20 @@ object Stage1ShowcaseApp:
 
   enum Msg:
     case Resize(w: Int, h: Int)
+    case Tick
     case CycleBorder
     case CycleTheme
     case SelectThemeIdx(i: Int)
     case SelectBorderIdx(i: Int)
+    case SelectListIdx(i: Int)
     case OpenDialog
+    case OpenTextInput
+    case OpenListSelect
+    case OpenWaiting
     case CloseDialog
     case ToggleDialogFocus
+    case TextInputAccept(value: String)
+    case ListSelectAccept(index: Int)
     case Quit
     case Key(k: KeyDecoder.InputKey)
     case KeyError(t: Throwable)
@@ -132,6 +153,12 @@ object Stage1ShowcaseApp:
   import Msg._
 
   object App extends TuiApp[Model, Msg]:
+
+    /** Spinner runs at 10 fps; cheap, makes the waiting overlay actually animate. */
+    private val tickPeriodMs = 100L
+
+    /** Auto-close the waiting dialog 30 ticks (~3s) after it opens. */
+    private val waitingDurationTicks = 30L
 
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Model(
@@ -143,28 +170,71 @@ object Stage1ShowcaseApp:
         capabilities = ctx.terminal.capabilities,
         termName = sys.env.getOrElse("TERM", "?"),
         lastEvent = None,
+        lastTextInput = None,
+        lastListPick = None,
+        tick = 0L,
         input = Sub.InputKey(k => Key(k), e => KeyError(e), ctx),
-        resize = Sub.TerminalResize[Msg](200, (w, h) => Resize(w, h), ctx)
+        resize = Sub.TerminalResize[Msg](200, (w, h) => Resize(w, h), ctx),
+        tickSub = Sub.Every(tickPeriodMs, () => Tick, ctx)
       ).tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       msg match
         case Resize(w, h)       => m.copy(width = w, height = h).tui
+        case Tick               => onTick(m)
         case CycleBorder        => m.copy(borderIdx = (m.borderIdx + 1) % borderStyles.size).tui
         case CycleTheme         => m.copy(themeIdx = (m.themeIdx + 1) % themePresets.size).tui
         case SelectThemeIdx(i)  => m.copy(themeIdx = clampIdx(i, themePresets.size)).tui
         case SelectBorderIdx(i) => m.copy(borderIdx = clampIdx(i, borderStyles.size)).tui
         case OpenDialog         => m.copy(dialog = Dialog.ConfirmQuit(yesFocused = false)).tui
-        case CloseDialog        => m.copy(dialog = Dialog.None).tui
+        case OpenTextInput =>
+          m.copy(dialog = Dialog.TextInput(state = Prompt.State(), okFocused = true)).tui
+        case OpenListSelect =>
+          m.copy(dialog = Dialog.ListSelect(selectedIndex = 0)).tui
+        case OpenWaiting =>
+          m.copy(dialog = Dialog.Waiting(openedAtTick = m.tick, autoCloseAtTick = m.tick + waitingDurationTicks)).tui
+        case CloseDialog => m.copy(dialog = Dialog.None).tui
         case ToggleDialogFocus =>
           m.dialog match
-            case Dialog.ConfirmQuit(yes) => m.copy(dialog = Dialog.ConfirmQuit(!yes)).tui
-            case Dialog.None             => m.tui
+            case Dialog.ConfirmQuit(yes)        => m.copy(dialog = Dialog.ConfirmQuit(!yes)).tui
+            case Dialog.TextInput(state, focus) => m.copy(dialog = Dialog.TextInput(state, !focus)).tui
+            case _                              => m.tui
+        case TextInputAccept(value) =>
+          m.copy(lastTextInput = Some(value), dialog = Dialog.None).tui
+        case ListSelectAccept(idx) =>
+          m.copy(lastListPick = Some(listSelectItems(clampIdx(idx, listSelectItems.size))), dialog = Dialog.None).tui
+        case SelectListIdx(i) =>
+          m.dialog match
+            case Dialog.ListSelect(_) =>
+              m.copy(dialog = Dialog.ListSelect(clampIdx(i, listSelectItems.size))).tui
+            case _ => m.tui
         case Quit        => Tui(m, Cmd.Exit)
         case KeyError(_) => m.tui
-        case Key(k) =>
+        case Key(k)      =>
+          // Dialog.TextInput edits its prompt state through Prompt.handleKey
+          // before dispatch. Other dialogs / the base view route through dispatch.
           val withEvent = m.copy(lastEvent = Some(formatEvent(k)))
-          Tui(withEvent, dispatch(withEvent, k))
+          withEvent.dialog match
+            case Dialog.TextInput(state, focus) =>
+              val (nextState, maybeCmd) =
+                Prompt.handleKey[Msg](state, k)(line => Right(TextInputAccept(line.value)))
+              val nextDialog = Dialog.TextInput(nextState, focus)
+              val nextModel  = withEvent.copy(dialog = nextDialog)
+              maybeCmd match
+                case Some(cmd) => Tui(nextModel, cmd)
+                case None      => Tui(nextModel, dispatch(nextModel, k))
+            case _ => Tui(withEvent, dispatch(withEvent, k))
+
+    /**
+     * Tick handler: advance the counter, auto-close Waiting when its
+     *  duration elapses, and otherwise leave the model alone.
+     */
+    private def onTick(m: Model): Tui[Model, Msg] =
+      val tickedModel = m.copy(tick = m.tick + 1)
+      tickedModel.dialog match
+        case Dialog.Waiting(_, deadline) if tickedModel.tick >= deadline =>
+          tickedModel.copy(dialog = Dialog.None).tui
+        case _ => tickedModel.tui
 
     private def clampIdx(i: Int, size: Int): Int = math.max(0, math.min(size - 1, i))
 
@@ -178,11 +248,42 @@ object Stage1ShowcaseApp:
             case Escape                 => Cmd.GCmd(CloseDialog)
             case Mouse(_)               => Cmd.NoCmd
             case _                      => Cmd.NoCmd
+
+        case Dialog.TextInput(_, _) =>
+          k match
+            // Esc cancels; Tab moves focus between OK and Cancel.
+            case Escape => Cmd.GCmd(CloseDialog)
+            case CharKey('\t') | KeyDecoder.InputKey.BackTab =>
+              Cmd.GCmd(ToggleDialogFocus)
+            case _ => Cmd.NoCmd
+
+        case Dialog.ListSelect(idx) =>
+          k match
+            case ArrowUp =>
+              val next = math.max(0, idx - 1)
+              Cmd.GCmd(SelectListIdx(next))
+            case ArrowDown =>
+              val next = math.min(listSelectItems.size - 1, idx + 1)
+              Cmd.GCmd(SelectListIdx(next))
+            case Home   => Cmd.GCmd(SelectListIdx(0))
+            case End    => Cmd.GCmd(SelectListIdx(listSelectItems.size - 1))
+            case Enter  => Cmd.GCmd(ListSelectAccept(idx))
+            case Escape => Cmd.GCmd(CloseDialog)
+            case _      => Cmd.NoCmd
+
+        case Dialog.Waiting(_, _) =>
+          k match
+            case Escape => Cmd.GCmd(CloseDialog)
+            case _      => Cmd.NoCmd
+
         case Dialog.None =>
           k match
             case CharKey('b') | CharKey('B') => Cmd.GCmd(CycleBorder)
             case CharKey('t') | CharKey('T') => Cmd.GCmd(CycleTheme)
             case CharKey('d') | CharKey('D') => Cmd.GCmd(OpenDialog)
+            case CharKey('i') | CharKey('I') => Cmd.GCmd(OpenTextInput)
+            case CharKey('l') | CharKey('L') => Cmd.GCmd(OpenListSelect)
+            case CharKey('w') | CharKey('W') => Cmd.GCmd(OpenWaiting)
             case CharKey('q') | CharKey('Q') => Cmd.GCmd(OpenDialog)
             case Escape                      => Cmd.GCmd(OpenDialog)
             case Mouse(ev)                   => mouseDispatch(m, ev)
@@ -346,13 +447,19 @@ object Stage1ShowcaseApp:
         (m.height - 1).y,
         List(
           " click ".themed(_.primary),
-          "/scroll Themes & Borders to change  ".text,
+          "/scroll Themes & Borders  ".text,
           " b ".themed(_.primary),
           "border  ".text,
           " t ".themed(_.primary),
           "theme  ".text,
           " d ".themed(_.primary),
-          "dialog  ".text,
+          "confirm  ".text,
+          " i ".themed(_.primary),
+          "input  ".text,
+          " l ".themed(_.primary),
+          "list  ".text,
+          " w ".themed(_.primary),
+          "wait  ".text,
           " q ".themed(_.primary),
           "quit ".text
         )
@@ -386,6 +493,41 @@ object Stage1ShowcaseApp:
                 title = "Confirm",
                 yesLabel = "Quit",
                 noLabel = "Stay"
+              )
+            )
+          )
+        case Dialog.TextInput(state, okFocused) =>
+          baseRoot.copy(overlays =
+            List(
+              Dialogs.textInput(
+                title = "Text input demo",
+                prompt = "Type a value, Enter to accept:",
+                value = state.buffer.mkString,
+                cursor = state.cursor,
+                okFocused = okFocused
+              )
+            )
+          )
+        case Dialog.ListSelect(idx) =>
+          baseRoot.copy(overlays =
+            List(
+              Dialogs.listSelect(
+                title = "List select demo",
+                items = listSelectItems,
+                selectedIndex = idx,
+                maxVisible = 5
+              )
+            )
+          )
+        case Dialog.Waiting(openedAt, deadline) =>
+          val remaining = math.max(0L, deadline - m.tick)
+          baseRoot.copy(overlays =
+            List(
+              Dialogs.waiting(
+                title = "Working…",
+                body = s"simulated task — ${remaining / 10}.${remaining % 10}s remaining",
+                tick = m.tick - openedAt,
+                cancelLabel = Some("Cancel")
               )
             )
           )
@@ -478,13 +620,20 @@ object Stage1ShowcaseApp:
       val intro    = TextNode(2.x, 3.y, List("Most recent decoded event:".text))
       val event    = m.lastEvent.getOrElse("(press a key, click, or paste)")
       val eventTxt = TextNode(2.x, 5.y, List(event.themed(_.success)))
-      val tips = List(
-        TextNode(2.x, 7.y, List("• Click rows in Themes/Borders".text)),
-        TextNode(2.x, 8.y, List("• Scroll-wheel to cycle".text)),
-        TextNode(2.x, 9.y, List("• Ctrl+Arrow → Modified key".text)),
-        TextNode(2.x, 10.y, List("• ⌘V / Ctrl-V paste → Paste(...)".text))
+      val txt      = m.lastTextInput.map(s => s"\"${truncate(s, 24)}\"").getOrElse("—")
+      val pick     = m.lastListPick.getOrElse("—")
+      val results = List(
+        TextNode(2.x, 7.y, List("Last text input: ".text, txt.themed(_.info))),
+        TextNode(2.x, 8.y, List("Last list pick:  ".text, pick.themed(_.info)))
       )
-      panel(r, theme, List(title, intro, eventTxt) ++ tips)
+      val tips = List(
+        TextNode(2.x, 10.y, List("• i / l / w opens dialog helpers".text)),
+        TextNode(2.x, 11.y, List("• Scroll-wheel cycles Themes/Borders".text))
+      )
+      panel(r, theme, List(title, intro, eventTxt) ++ results ++ tips)
+
+    private def truncate(s: String, max: Int): String =
+      if s.length <= max then s else s.take(max - 1) + "…"
 
     /** Bordered panel positioned at `r` with the theme's border style. */
     private def panel(r: Rect, theme: Theme, children: List[VNode]): VNode =

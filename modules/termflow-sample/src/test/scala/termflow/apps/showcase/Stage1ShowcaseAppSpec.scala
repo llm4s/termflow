@@ -213,6 +213,86 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(d.model.themeName == initialName, "clicks outside Themes should be no-ops")
   }
 
+  // ---- Dialog helper bindings (Stage 3 §6.1) -------------------------------
+
+  test("'i' opens the textInput dialog") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('i')))
+    assert(d.model.dialog.isInstanceOf[Stage1ShowcaseApp.Dialog.TextInput])
+  }
+
+  test("typing characters into the textInput dialog updates its prompt buffer") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('i')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('h')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('i')))
+    d.model.dialog match
+      case Stage1ShowcaseApp.Dialog.TextInput(state, _) =>
+        assert(state.buffer.mkString == "hi", s"expected buffer 'hi', got '${state.buffer.mkString}'")
+      case other => fail(s"expected TextInput dialog, got $other")
+  }
+
+  test("Enter inside textInput accepts the value and stores it on the model") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('i')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('o')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('k')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Enter))
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None)
+    assert(d.model.lastTextInput.contains("ok"))
+  }
+
+  test("Esc inside textInput cancels without storing") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('i')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('x')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Escape))
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None)
+    assert(d.model.lastTextInput.isEmpty, "Esc should not commit the value")
+  }
+
+  test("'l' opens the listSelect dialog at index 0") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('l')))
+    d.model.dialog match
+      case Stage1ShowcaseApp.Dialog.ListSelect(idx) => assert(idx == 0)
+      case other                                    => fail(s"expected ListSelect, got $other")
+  }
+
+  test("ArrowDown advances the listSelect index, Enter accepts") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('l')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.ArrowDown))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.ArrowDown))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Enter))
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None)
+    assert(d.model.lastListPick.contains("cherry"), s"expected cherry, got ${d.model.lastListPick}")
+  }
+
+  test("'w' opens the waiting dialog with a deadline tick") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('w')))
+    d.model.dialog match
+      case Stage1ShowcaseApp.Dialog.Waiting(opened, deadline) =>
+        assert(deadline > opened, "deadline must be in the future")
+      case other => fail(s"expected Waiting, got $other")
+  }
+
+  test("Tick auto-closes the waiting dialog when the deadline elapses") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('w')))
+    // Drive enough ticks to cross the 30-tick auto-close threshold.
+    (1 to 31).foreach(_ => d.send(Stage1ShowcaseApp.Msg.Tick))
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None, "waiting dialog should auto-close after its deadline")
+  }
+
+  test("Esc inside waiting cancels immediately") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('w')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Escape))
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None)
+  }
+
   test("clicking a row in the Borders panel selects that border style") {
     val d            = driver
     val bordersStart = d.model.width - 22 - 22 - 1

@@ -63,6 +63,117 @@ class DialogsSpec extends AnyFunSuite:
     assert(frame.cursor.isEmpty, "modal dialog must take the cursor away from the base view")
   }
 
+  // ---- Dialogs.textInput ---------------------------------------------------
+
+  test("Dialogs.textInput places the value in an InputNode the dialog owns") {
+    val o = Dialogs.textInput(title = "Rename", prompt = "New name:", value = "draft")
+    assert(o.inputCapture == InputCapture.Modal)
+    assert(o.input.isDefined, "textInput must own its own input")
+    val in = o.input.get
+    assert(in.prompt == "draft")
+    assert(in.cursor == 5, s"default cursor should sit at end, got ${in.cursor}")
+  }
+
+  test("Dialogs.textInput pins a fixed prefix at the left of the viewport") {
+    val o  = Dialogs.textInput(title = "Path", prompt = "Path:", value = "src", prefix = "> ")
+    val in = o.input.get
+    assert(in.prompt.startsWith("> "), "prefix should appear in the rendered prompt")
+    assert(in.prefixLength == 2, s"prefixLength should match prefix size, got ${in.prefixLength}")
+    // Cursor accounts for prefix when no explicit cursor is supplied.
+    assert(in.cursor == "> ".length + "src".length)
+  }
+
+  test("Dialogs.textInput renders OK/Cancel and respects okFocused") {
+    val okFocused     = Dialogs.textInput("Edit", "Text:", value = "")
+    val cancelFocused = Dialogs.textInput("Edit", "Text:", value = "", okFocused = false)
+    assert(stringForm(okFocused).contains("[ OK ]"))
+    assert(stringForm(cancelFocused).contains("[ Cancel ]"))
+  }
+
+  test("Dialogs.textInput honours custom labels") {
+    val o = Dialogs.textInput("Save?", "File:", value = "x", okLabel = "Save", cancelLabel = "Discard")
+    val s = stringForm(o)
+    assert(s.contains("Save"))
+    assert(s.contains("Discard"))
+  }
+
+  // ---- Dialogs.listSelect --------------------------------------------------
+
+  test("Dialogs.listSelect highlights the selected row and renders all items when small") {
+    val o = Dialogs.listSelect(
+      title = "Pick a fruit",
+      items = Seq("apple", "banana", "cherry"),
+      selectedIndex = 1
+    )
+    assert(o.inputCapture == InputCapture.Modal)
+    assert(o.input.isEmpty, "listSelect has no live input")
+    val s = stringForm(o)
+    assert(s.contains("apple"))
+    assert(s.contains("banana"))
+    assert(s.contains("cherry"))
+    assert(s.contains("▸ banana"), s"selected row must carry the marker, got: $s")
+  }
+
+  test("Dialogs.listSelect scrolls so the selected row stays visible") {
+    val items = (1 to 30).map(i => s"item-$i")
+    val o     = Dialogs.listSelect(title = "Long list", items = items, selectedIndex = 25, maxVisible = 6)
+    val s     = stringForm(o)
+    assert(s.contains("item-25"), s"selected item must be in the rendered viewport, got: $s")
+    assert(!s.contains("item-1 ") && !s.contains("item-2 "), "items above the scroll position should not appear")
+  }
+
+  test("Dialogs.listSelect with custom render callback formats each row") {
+    final case class User(id: Int, name: String)
+    val users = Seq(User(1, "alice"), User(2, "bob"))
+    val o     = Dialogs.listSelect(title = "User", items = users, selectedIndex = 0, render = u => s"${u.id}:${u.name}")
+    val s     = stringForm(o)
+    assert(s.contains("1:alice"))
+    assert(s.contains("2:bob"))
+  }
+
+  test("Dialogs.listSelect handles an empty item list without exploding") {
+    val o = Dialogs.listSelect(title = "Pick", items = Seq.empty[String], selectedIndex = 0)
+    assert(o.height >= 5)
+    val s = stringForm(o)
+    assert(s.contains("Pick"))
+    assert(s.contains("OK"))
+  }
+
+  // ---- Dialogs.waiting -----------------------------------------------------
+
+  test("Dialogs.waiting picks the spinner frame from the tick (modulo)") {
+    val frames = Vector("A", "B", "C")
+    val o0     = Dialogs.waiting("Loading", "fetching…", tick = 0L, frames = frames)
+    val o1     = Dialogs.waiting("Loading", "fetching…", tick = 1L, frames = frames)
+    val o4     = Dialogs.waiting("Loading", "fetching…", tick = 4L, frames = frames) // wraps to "B"
+    assert(stringForm(o0).contains("A fetching"))
+    assert(stringForm(o1).contains("B fetching"))
+    assert(stringForm(o4).contains("B fetching"))
+  }
+
+  test("Dialogs.waiting falls back to the default spinner when frames is empty") {
+    val o = Dialogs.waiting("Loading", "still working", tick = 0L, frames = Vector.empty)
+    val s = stringForm(o)
+    assert(Dialogs.defaultSpinnerFrames.exists(f => s.contains(s"$f still working")))
+  }
+
+  test("Dialogs.waiting omits the action row by default and renders one when cancelLabel is set") {
+    val plain      = Dialogs.waiting("Working", "saving…", tick = 0L)
+    val cancelable = Dialogs.waiting("Working", "saving…", tick = 0L, cancelLabel = Some("Stop"))
+    assert(plain.height == 5)
+    assert(cancelable.height == 7)
+    assert(stringForm(cancelable).contains("[ Stop ]"))
+  }
+
+  test("Dialogs.waiting with negative tick still picks a valid frame (no exception)") {
+    val o = Dialogs.waiting("…", "going backwards", tick = -1L, frames = Vector("X", "Y", "Z"))
+    val s = stringForm(o)
+    assert(
+      s.contains("Z going backwards") || s.contains("Y going backwards") || s.contains("X going backwards"),
+      s"expected one of X/Y/Z prefixed frames, got: $s"
+    )
+  }
+
   // ---- helper: walk an overlay's tree into a flat string for assertions ---
 
   private def stringForm(o: Overlay): String =

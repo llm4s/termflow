@@ -86,7 +86,7 @@ full notes live at the bottom of the document (§9).
 |---|---|---|---|
 | 1 | 0.3.x | **Foundational refactor**: layout, layers, theme split, capabilities | done (2026-04-27) |
 | 2 | 0.4.x | **Capability expansion**: mouse, 256/truecolor, unicode width, paste | done (2026-04-27) |
-| 3 | 0.5.x | **Breadth**: dialog helpers, more widgets, testkit module | proposed |
+| 3 | 0.5.x | **Breadth**: dialog helpers, more widgets, testkit module | in progress |
 | 4 | 1.0.0 | **Stabilise**: module split, MiMa, docs site, three-layer narrative | proposed |
 | 5 | post-1.0 | **Alternative backends**: Swing emulator, telnet/SSH | speculative |
 
@@ -400,31 +400,29 @@ function keys). Update `KeyDecoder.scala` and `InputKey` enum.
 
 Polishing the catalogue so users don't reinvent common patterns.
 
-### 6.1 Dialog helpers (P1, medium)
+### 6.1 Dialog helpers (P1, medium) — **mostly done**
 
-Layered on §4.2. Each dialog is a `TuiApp` exposed via a constructor that
-returns a `Layer` plus a result type:
+Layered on §4.2. Helpers are pure presentation builders that return an
+`Overlay` ready to drop into `RootNode.overlays`; the dialog state lives
+in the app's own model. (We deliberately did **not** ship the Lanterna-
+style "dialog is a TuiApp returning a Layer" shape — apps drive dialog
+state from their existing `update`/`view` loop, which fits the rest of
+TermFlow's design and removes a per-dialog adapter trait we'd otherwise
+maintain.)
 
-```scala
-object MessageDialog:
-  def show(title: String, body: String, buttons: Seq[Choice]): Layer[?, Choice]
+| Helper | Status | Notes |
+|---|---|---|
+| `Dialogs.message(title, body, choices, …)` | done | Multi-line message + arbitrary action buttons. |
+| `Dialogs.confirm(prompt, yesFocused, …)` | done | Yes/no convenience over `message`. |
+| `Dialogs.textInput(title, prompt, value, cursor?, prefix?, …)` | done | Owns its own `InputNode`; supports a fixed pinned prefix. |
+| `Dialogs.listSelect(title, items, selectedIndex, maxVisible?, render?)` | done | Selection-following viewport scrolling; custom render callback. |
+| `Dialogs.waiting(title, body, tick, frames?, cancelLabel?)` | done | Spinner glyph picked from the tick (modulo); optional cancel button. App drives the tick from a `Sub.Every`. |
+| `Dialogs.actionList` | not started | Trivially expressed as `listSelect` over `Choice` values; deferred until a real use case appears. |
+| `Dialogs.fileDialog` / `directoryDialog` | not started | Need filesystem traversal helpers and async listing for big directories — own PR. |
 
-object TextInputDialog:
-  def show(title: String, prompt: String, initial: String = ""): Layer[?, Option[String]]
-
-object ListSelectDialog[A]:
-  def show(title: String, items: Seq[A], render: A => String): Layer[?, Option[A]]
-
-object ConfirmDialog:
-  def show(prompt: String): Layer[?, Boolean]
-
-object FileDialog:
-  def open(start: Path): Layer[?, Option[Path]]
-```
-
-Mirror Lanterna's `gui2/dialogs/*` set: `MessageDialog`, `TextInputDialog`,
-`ActionListDialog`, `ListSelectDialog`, `WaitingDialog`, `FileDialog`,
-`DirectoryDialog`.
+The five shipped helpers cover the everyday cases. All five are
+exercised by `sbt showcase` (`d` = confirm, `i` = textInput, `l` =
+listSelect, `w` = waiting). Tests live in `DialogsSpec`.
 
 ### 6.2 Additional widgets (P1, medium)
 
@@ -643,8 +641,10 @@ mirror this in module layout (§4.6) and docs (§7.2).
 ### 9.5 Dialog helpers
 
 Lanterna ships `MessageDialog`, `TextInputDialog`, `ActionListDialog`,
-`ListSelectDialog`, `WaitingDialog`, `FileDialog`, `DirectoryDialog`. We
-ship none. Stage 3 §6.1 closes this.
+`ListSelectDialog`, `WaitingDialog`, `FileDialog`, `DirectoryDialog`.
+We now ship `message`, `confirm`, `textInput`, `listSelect`, `waiting`
+(see §6.1). `FileDialog` / `DirectoryDialog` and the standalone
+`actionList` helper remain to land in Stage 3.
 
 ### 9.6 Threading model
 
@@ -742,6 +742,16 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
   cost (extra publish, MiMa, docs, expert maintainer per effect system)
   isn't justified when the escape hatch (`io.unsafeToFuture()`) is two
   characters of glue at the call site.
+- *2026-04-27* — Stage 3 §6.1 dialog helpers shipped as
+  presentation-only `Overlay` builders rather than the Lanterna-style
+  "dialog is a `TuiApp` returning a `Layer`" originally sketched in the
+  roadmap. Reason: Lanterna's shape requires a per-dialog adapter trait
+  and a result-type plumbing layer that doesn't compose with TermFlow's
+  pure `update`/`view` loop. Builders fit the existing architecture, are
+  trivially testable in isolation, and let app code stay one Elm-style
+  loop end-to-end. Five helpers shipped (`message`, `confirm`,
+  `textInput`, `listSelect`, `waiting`); `FileDialog` and the standalone
+  `actionList` deferred to a follow-up PR.
 
 ---
 

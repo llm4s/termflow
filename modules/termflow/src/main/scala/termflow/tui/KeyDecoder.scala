@@ -38,8 +38,12 @@ object KeyDecoder:
 
   def decode(key: Int): InputKey =
     key match
-      case 10  => Enter
-      case 127 => Backspace
+      // Both CR (13, what most terminals send for Enter in raw mode where
+      // CR-to-LF translation is disabled) and LF (10) decode as Enter.
+      // Ctrl+M produces byte 13 too — at this layer we cannot distinguish
+      // it from Enter, so we standardise on the higher-level intent.
+      case 10 | 13 => Enter
+      case 127     => Backspace
       case code if code >= 1 && code <= 26 =>
         Ctrl(('A' + code - 1).toChar)
       case code if code >= 32 && code <= 126 =>

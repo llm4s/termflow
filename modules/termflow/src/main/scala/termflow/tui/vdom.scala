@@ -155,10 +155,23 @@ object Color:
  * `AnsiRenderer` and emitted as SGR escape sequences. A default-constructed
  * `Style` produces no escape sequences at all, so "plain text" stays plain.
  *
+ * The five extended attributes ([[italic]], [[dim]], [[reverse]],
+ * [[strikethrough]], [[blink]]) are gated by
+ * [[Capabilities.extendedStyles]]: on terminals that don't claim support for
+ * them, the renderer silently strips the SGR codes rather than emitting
+ * sequences a primitive terminal would render literally. [[bold]] and
+ * [[underline]] always emit — they are universally supported.
+ *
  * @param fg Foreground colour. [[Color.Default]] leaves it unset.
  * @param bg Background colour. [[Color.Default]] leaves it unset.
- * @param bold Enable the bold attribute.
- * @param underline Enable the underline attribute.
+ * @param bold Enable the bold attribute (SGR 1). Always emitted.
+ * @param underline Enable the underline attribute (SGR 4). Always emitted.
+ * @param italic Enable italics (SGR 3). Capability-gated.
+ * @param dim Enable dim/faint (SGR 2). Capability-gated.
+ * @param reverse Swap foreground and background (SGR 7). Capability-gated.
+ * @param strikethrough Strike through the glyph (SGR 9). Capability-gated.
+ * @param blink Slow-blink the cell (SGR 5). Capability-gated. Most terminals
+ *              ignore or render it as bold; use sparingly.
  * @param border Only meaningful on a [[BoxNode]]: draw a border around the box.
  */
 final case class Style(
@@ -166,6 +179,11 @@ final case class Style(
   bg: Color = Color.Default,
   bold: Boolean = false,
   underline: Boolean = false,
+  italic: Boolean = false,
+  dim: Boolean = false,
+  reverse: Boolean = false,
+  strikethrough: Boolean = false,
+  blink: Boolean = false,
   border: Boolean = false
 )
 

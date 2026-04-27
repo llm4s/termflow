@@ -84,8 +84,8 @@ full notes live at the bottom of the document (§9).
 
 | Stage | Versions | Theme | Status |
 |---|---|---|---|
-| 1 | 0.3.x | **Foundational refactor**: layout, layers, theme split, capabilities | proposed |
-| 2 | 0.4.x | **Capability expansion**: mouse, 256/truecolor, unicode width, paste | proposed |
+| 1 | 0.3.x | **Foundational refactor**: layout, layers, theme split, capabilities | done (2026-04-27) |
+| 2 | 0.4.x | **Capability expansion**: mouse, 256/truecolor, unicode width, paste | done (2026-04-27) |
 | 3 | 0.5.x | **Breadth**: dialog helpers, more widgets, testkit module | proposed |
 | 4 | 1.0.0 | **Stabilise**: module split, MiMa, docs site, three-layer narrative | proposed |
 | 5 | post-1.0 | **Alternative backends**: Swing emulator, telnet/SSH | speculative |
@@ -95,11 +95,29 @@ purpose of staying at 0.x. Stage 4 is the lock-in point.
 
 ---
 
-## 4. Stage 1 — Foundational refactor (target: 0.3.0)
+## 4. Stage 1 — Foundational refactor (target: 0.3.0) — **done 2026-04-27**
 
 **Goal**: fix the architectural debts that would be expensive to repair after
 1.0. Stage 1 is invasive but small in surface area; it is internal plumbing
 plus a few public-API breaks.
+
+**Outcome.** All sub-items landed across PRs #157–#164:
+
+| Sub-item | Lands in | Status |
+|---|---|---|
+| §4.1 Relative-coordinate VDom | `Layout.Fill` + render-time resolution via `RootNode.layout` (#162) | done — `Layout` is the structural API; positioned `VNode` retained as escape hatch |
+| §4.2 Layer / overlay system | `Overlay` primitive + `Dialogs.confirm/message` (#160) | done |
+| §4.3 Theme + WidgetRenderer split | `Theme` + themable `BoxNode.chars` (#159, plus existing `Theme.scala`) | done — `Theme` ships with `BorderChars` slots; per-widget renderers come in Stage 3 with the dialog/widget expansion |
+| §4.4 Color depth + capability detection | `Color.Indexed` / `Color.Rgb` + capability-driven downgrade (#157) | done |
+| §4.5 SIGWINCH | `Sub.TerminalResize` switched to `backend.onResize` signal with polling fallback (#158) | done |
+| §4.6 Module split | `termflow-testkit` promoted to a published artifact (#161) | partial — testkit is its own module; the finer-grained `termflow-terminal/screen/app/widgets` carve-out is deferred to Stage 4 (§7.1), where MiMa will be wired up at the same time |
+| §4.7 Definition of done | Stage 1 showcase demo (`sbt showcase`, #163) exercises layout, overlays, theme, color depth, and resize end-to-end | done |
+
+The §4.6 module split was scoped down deliberately: the user-facing pain of
+"no separate testkit" was real (#147) and is now fixed; the terminal/screen/app
+split is internal plumbing that is cheap to do later, and pairs naturally with
+Stage 4 stabilisation when MiMa filters need to be defined per-module anyway.
+
 
 ### 4.1 Relative-coordinate VDom (P0, large)
 
@@ -270,10 +288,39 @@ just `termflow-app` if they want to roll their own widgets.
 
 ---
 
-## 5. Stage 2 — Capability expansion (target: 0.4.0)
+## 5. Stage 2 — Capability expansion (target: 0.4.0) — **done 2026-04-27**
 
 User-visible features that turn TermFlow from "good for prompts" into "good
 for real apps".
+
+**Sequencing.** The two P0 items (mouse, unicode width) are the most visible
+and the most invasive. We ordered Stage 2 smallest-first so each landing is
+self-contained and the goldens churn least at each step:
+
+| # | Sub-item | Status |
+|---|---|---|
+| 1 | §5.5 Extended style attributes | done — `Style` gains `italic`/`dim`/`reverse`/`strikethrough`/`blink`; capability gate `Capabilities.extendedStyles` decides emission |
+| 2 | §5.6 Extended modifier parsing | done — new `KeyDecoder.Modifiers`, `InputKey.Modified`, `Insert`/`PageUp`/`PageDown`; CSI parser unified to read params then dispatch |
+| 3 | §5.4 Bracketed paste | done — `Capabilities.bracketedPaste`, `ANSI.enableBracketedPaste`/`disableBracketedPaste`, `InputKey.Paste(text)` collapses the whole `200~ … 201~` window into one event |
+| 4 | §5.3 Unicode width handling | initial cut — `WCWidth` helper, `RenderCell.width`, layout / diff respect wide cells. Known gap: `Prompt`/`InputNode` cursor math is still 1-char-per-column; multi-line input + grapheme clusters deferred |
+| 5 | §5.1 Mouse support | done — `MouseEvent` / `MouseButton` / `ScrollDirection` ADTs, `ANSI.enableMouse`/`disableMouse` SGR-1006 + button-event tracking, `InputKey.Mouse(event)` multiplexed onto the key stream so existing `Sub.InputKey` handlers see it. Hit-testing on the layout-pass rect cache is deferred to Stage 3 |
+
+The showcase demo (`sbt showcase`) was extended in the same session to
+exercise every sub-item — Styles panel for §5.5, Live-input panel for
+§5.6/§5.4/§5.1, Unicode panel for §5.3 — so Stage 2 is end-to-end visible
+in one screen. The Themes and Borders panels are click-to-select and
+scroll-to-cycle, which is the first user-driven mouse interaction shipped
+in the codebase.
+
+### 5.x Bug fix landed alongside Stage 2
+
+- **Overlay background opacity** — `BoxNode` only painted the border, so
+  any panel beneath the dialog rectangle bled through the interior.
+  `AnsiRenderer` now wipes the overlay's full rectangle with blank cells
+  (in `buildFrame`) and emits explicit-space rows (in `renderPatch`)
+  before drawing the overlay's children. Two `OverlaySpec` regression
+  tests pin the behaviour.
+
 
 ### 5.1 Mouse support (P0, medium)
 
@@ -660,6 +707,26 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
   (rejected — wrong shape for Scala); (b) freeze 0.2 and call it done
   (rejected — coordinate model and missing layers will become 2.0
   refactors otherwise).
+- *2026-04-27* — Stage 1 marked done; Stage 2 begins. The §4.6 module split
+  was deliberately reduced to "promote `termflow-testkit`" only; the rest of
+  the carve-out (`termflow-terminal/screen/app/widgets`) deferred to Stage 4
+  where it pairs naturally with MiMa setup. Stage 2 sequenced
+  smallest-first (5.5 → 5.6 → 5.4 → 5.3 → 5.1) to keep golden churn local
+  and let each piece ship independently.
+- *2026-04-27* — Stage 2 complete. Mouse landed as a single `InputKey.Mouse`
+  multiplexed onto the existing key stream rather than a parallel
+  `Sub.Mouse` source — this avoids two threads racing for bytes from the
+  reader and lets every existing `Sub.InputKey` consumer handle clicks by
+  pattern-matching. The roadmap's separate `Sub.Mouse` factory is reserved
+  for Stage 3, where it can sit on top of the layout-pass hit-test cache
+  and deliver per-widget click messages instead of raw screen coords.
+- *2026-04-27* — Showcase rewritten to use absolute panel positioning so the
+  Themes / Borders panels can be left-clicked to select and scroll-wheeled
+  to cycle. This is the first user-driven mouse interaction in the
+  codebase and validates the Stage 2 §5.1 wiring end-to-end. While
+  building this we hit and fixed the overlay-opacity bug: dialog interiors
+  no longer leak the panels beneath them, because `AnsiRenderer` now wipes
+  the overlay rectangle before drawing children.
 
 ---
 

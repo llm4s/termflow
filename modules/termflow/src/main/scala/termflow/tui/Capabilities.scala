@@ -21,17 +21,33 @@ enum ColorDepth:
  * Best-effort terminal capabilities, populated either from environment
  * variables (see [[Capabilities.detect]]) or supplied explicitly by tests.
  *
- * @param colorDepth Maximum color depth the renderer should emit. Higher-depth
- *                   colors are downgraded to this depth at render time.
- * @param unicode    True if the terminal claims a UTF-8 locale.
- * @param mouse      True if the terminal advertises mouse support
- *                   (`xterm`-family `$TERM` values, `screen`, `tmux`,
- *                   `alacritty`, `rxvt`, `linux`).
+ * @param colorDepth     Maximum color depth the renderer should emit.
+ *                       Higher-depth colors are downgraded to this depth at
+ *                       render time.
+ * @param unicode        True if the terminal claims a UTF-8 locale.
+ * @param mouse          True if the terminal advertises mouse support
+ *                       (`xterm`-family `$TERM` values, `screen`, `tmux`,
+ *                       `alacritty`, `rxvt`, `linux`).
+ * @param extendedStyles True if the terminal is expected to honour the
+ *                       extended SGR attributes ([[Style.italic]],
+ *                       [[Style.dim]], [[Style.reverse]],
+ *                       [[Style.strikethrough]], [[Style.blink]]). When false,
+ *                       the renderer strips these codes and emits only the
+ *                       universally-supported [[Style.bold]] /
+ *                       [[Style.underline]] attributes.
+ * @param bracketedPaste True if the terminal is expected to honour xterm
+ *                       bracketed-paste mode (`CSI ?2004h`). When false the
+ *                       runtime does not enable the mode at startup and the
+ *                       parser will see the pasted bytes as a stream of
+ *                       individual keypresses, just as if the user had typed
+ *                       them.
  */
 final case class Capabilities(
   colorDepth: ColorDepth,
   unicode: Boolean,
-  mouse: Boolean
+  mouse: Boolean,
+  extendedStyles: Boolean = true,
+  bracketedPaste: Boolean = true
 )
 
 object Capabilities:
@@ -44,7 +60,9 @@ object Capabilities:
   val default: Capabilities = Capabilities(
     colorDepth = ColorDepth.Ansi8,
     unicode = true,
-    mouse = false
+    mouse = false,
+    extendedStyles = true,
+    bracketedPaste = true
   )
 
   /**
@@ -83,7 +101,22 @@ object Capabilities:
 
     val mouse = isXtermFamily(term)
 
-    Capabilities(colorDepth, unicode, mouse)
+    // Extended SGR attributes (italic, dim, reverse, strikethrough, blink) are
+    // safe on the same xterm-family terminals that handle colour and mouse
+    // cleanly, plus VT-derived terminals like `vt100`/`ansi`. Suppressed for
+    // `dumb` and unknown TERMs so primitive backends don't render the SGR
+    // codes literally.
+    val extendedStyles =
+      if term.isEmpty || term == "dumb" then false
+      else if isXtermFamily(term) then true
+      else term.startsWith("vt") || term == "ansi"
+
+    // Bracketed paste support — universally available on the xterm family
+    // and tmux/screen relays. Suppressed for the same dumb/unknown subset
+    // because the start/end markers would otherwise echo as literal text.
+    val bracketedPaste = isXtermFamily(term)
+
+    Capabilities(colorDepth, unicode, mouse, extendedStyles, bracketedPaste)
 
   private def isXtermFamily(term: String): Boolean =
     term.startsWith("xterm")

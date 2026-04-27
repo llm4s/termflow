@@ -182,7 +182,9 @@ object AnsiRenderer:
   def renderPatch(root: RootNode, depth: ColorDepth = ColorDepth.Ansi8): String =
     val out = new StringBuilder
     root.children.foreach(renderNode(_, out, depth))
-    root.input.foreach(renderInput(_, root.width, out, depth))
+    if !hasModalOverlay(root) then root.input.foreach(renderInput(_, root.width, out, depth))
+    root.overlays.foreach(renderOverlay(_, root.width, root.height, out, depth))
+    activeOverlayInput(root).foreach(renderInput(_, root.width, out, depth))
     out.toString
 
   def render(root: RootNode)(using terminal: TerminalBackend): Unit =
@@ -195,8 +197,44 @@ object AnsiRenderer:
   /** Build ANSI patch for input-only repaint. */
   def inputPatch(root: RootNode, depth: ColorDepth = ColorDepth.Ansi8): String =
     val out = new StringBuilder
-    root.input.foreach(renderInput(_, root.width, out, depth))
+    if hasModalOverlay(root) then activeOverlayInput(root).foreach(renderInput(_, root.width, out, depth))
+    else root.input.foreach(renderInput(_, root.width, out, depth))
     out.toString
+
+  /** True if any overlay in the root captures base-view input. */
+  private def hasModalOverlay(root: RootNode): Boolean =
+    root.overlays.exists(_.inputCapture == InputCapture.Modal)
+
+  /**
+   * Resolve which input the live cursor should follow:
+   *   - the topmost modal overlay's input, if any
+   *   - otherwise the topmost non-modal overlay's input, if any
+   *   - otherwise None
+   *
+   * Each overlay-owned input has its coordinates translated into root-frame
+   * absolutes by the time it is returned, so the existing input rendering
+   * code can consume it without overlay awareness.
+   */
+  private def activeOverlayInput(root: RootNode): Option[InputNode] =
+    val modal   = root.overlays.reverse.find(_.inputCapture == InputCapture.Modal)
+    val visible = modal.orElse(root.overlays.reverse.find(_.input.isDefined))
+    visible.flatMap(o => o.input.map(translateInput(o, root.width, root.height, _)))
+
+  private def translateInput(o: Overlay, rootWidth: Int, rootHeight: Int, in: InputNode): InputNode =
+    val (ox, oy) = OverlayPosition.resolve(o.position, o.width, o.height, rootWidth, rootHeight)
+    in.copy(x = in.x + (ox.value - 1), y = in.y + (oy.value - 1))
+
+  private def renderOverlay(
+    o: Overlay,
+    rootWidth: Int,
+    rootHeight: Int,
+    out: StringBuilder,
+    depth: ColorDepth
+  ): Unit =
+    val (ox, oy) = OverlayPosition.resolve(o.position, o.width, o.height, rootWidth, rootHeight)
+    val dx       = ox.value - 1
+    val dy       = oy.value - 1
+    o.children.foreach(child => renderNode(Layout.translate(child, dx, dy), out, depth))
 
   private def renderNode(v: VNode, out: StringBuilder, depth: ColorDepth): Unit = v match
     case TextNode(x, y, l) =>
@@ -377,10 +415,29 @@ object AnsiRenderer:
 
     root.children.foreach(drawNode)
 
-    root.input.foreach { inp =>
-      val visible = visibleInput(inp, root.width)
-      drawString(inp.x.value, inp.y.value, visible.text, inp.style)
-      cursor = Some(Coord(inp.x + visible.cursorIndex, inp.y))
+    val anyModalOverlay = root.overlays.exists(_.inputCapture == InputCapture.Modal)
+
+    if !anyModalOverlay then
+      root.input.foreach { inp =>
+        val visible = visibleInput(inp, root.width)
+        drawString(inp.x.value, inp.y.value, visible.text, inp.style)
+        cursor = Some(Coord(inp.x + visible.cursorIndex, inp.y))
+      }
+
+    // Composite overlays bottom-to-top. Each overlay's children are
+    // translated by the resolved position so callers author them in
+    // overlay-local coordinates (1.x / 1.y is the overlay's top-left).
+    root.overlays.foreach { o =>
+      val (ox, oy) = OverlayPosition.resolve(o.position, o.width, o.height, root.width, root.height)
+      val dx       = ox.value - 1
+      val dy       = oy.value - 1
+      o.children.foreach(child => drawNode(Layout.translate(child, dx, dy)))
+      o.input.foreach { in =>
+        val translated: InputNode = in.copy(x = in.x + dx, y = in.y + dy)
+        val visible               = visibleInput(translated, root.width)
+        drawString(translated.x.value, translated.y.value, visible.text, translated.style)
+        cursor = Some(Coord(translated.x + visible.cursorIndex, translated.y))
+      }
     }
 
     RenderFrame(width, height, cells, cursor)

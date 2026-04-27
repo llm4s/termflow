@@ -642,11 +642,12 @@ object Devtools:
 
     /** Terminal that the inner sees: same dims, real writer, empty reader. */
     private def innerTerminal(real: TerminalBackend): TerminalBackend = new TerminalBackend:
-      override def reader: java.io.Reader = new java.io.StringReader("")
-      override def writer: java.io.Writer = real.writer
-      override def width: Int             = real.width
-      override def height: Int            = real.height
-      override def close(): Unit          = ()
+      override def reader: java.io.Reader                             = new java.io.StringReader("")
+      override def writer: java.io.Writer                             = real.writer
+      override def width: Int                                         = real.width
+      override def height: Int                                        = real.height
+      override def close(): Unit                                      = ()
+      override def onResize(listener: () => Unit): Option[() => Unit] = real.onResize(listener)
 
     /** Lift a Cmd[Ms] from the inner app into Cmd[WrapMsg[Ms]] for the real ctx. */
     private def liftCmd(cmd: Cmd[Ms]): Cmd[WrapMsg[Ms]] = cmd match

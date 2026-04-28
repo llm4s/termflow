@@ -418,11 +418,13 @@ maintain.)
 | `Dialogs.listSelect(title, items, selectedIndex, maxVisible?, render?)` | done | Selection-following viewport scrolling; custom render callback. |
 | `Dialogs.waiting(title, body, tick, frames?, cancelLabel?)` | done | Spinner glyph picked from the tick (modulo); optional cancel button. App drives the tick from a `Sub.Every`. |
 | `Dialogs.actionList` | not started | Trivially expressed as `listSelect` over `Choice` values; deferred until a real use case appears. |
-| `Dialogs.fileDialog` / `directoryDialog` | not started | Need filesystem traversal helpers and async listing for big directories — own PR. |
+| `Dialogs.fileDialog` / `directoryDialog` | done | Path bar + entry list (parent / dir / file) + sized column for files. Companion `FileEntry` ADT, `listEntries(path, showHidden)`, and `fileDialogLayout` for hit-testing. |
 
-The five shipped helpers cover the everyday cases. All five are
-exercised by `sbt showcase` (`d` = confirm, `i` = textInput, `l` =
-listSelect, `w` = waiting). Tests live in `DialogsSpec`.
+The five base helpers cover the everyday cases. All are exercised by
+`sbt showcase` (`d` = confirm, `i` = textInput, `l` = listSelect, `w` =
+waiting). The file pickers ship with a dedicated demo
+(`apps.dialog.FileDialogDemoApp`, runnable as `sbt run file-dialog`)
+since they need filesystem state. Tests live in `DialogsSpec`.
 
 ### 6.2 Additional widgets (P1, medium) — **complete**
 
@@ -676,9 +678,19 @@ mirror this in module layout (§4.6) and docs (§7.2).
 
 Lanterna ships `MessageDialog`, `TextInputDialog`, `ActionListDialog`,
 `ListSelectDialog`, `WaitingDialog`, `FileDialog`, `DirectoryDialog`.
-We now ship `message`, `confirm`, `textInput`, `listSelect`, `waiting`
-(see §6.1). `FileDialog` / `DirectoryDialog` and the standalone
-`actionList` helper remain to land in Stage 3.
+We now ship `message`, `confirm`, `textInput`, `listSelect`, `waiting`,
+`fileDialog`, `directoryDialog` (see §6.1). The standalone `actionList`
+helper is still trivially `listSelect` over `Choice` values and remains
+deferred until a real use case asks for it.
+
+### 9.5b Stage 3 dialog status
+
+All five core helpers (`message`, `confirm`, `textInput`, `listSelect`,
+`waiting`) plus the file pickers (`fileDialog`, `directoryDialog`) now
+ship. The `actionList` helper is a one-line `listSelect` and remains
+deferred. Async listing (paging / cancellation for huge trees) is not
+in scope for the helper itself — apps wrap `Dialogs.listEntries` in a
+`Cmd.asyncResult` when they need it.
 
 ### 9.6 Threading model
 
@@ -795,6 +807,23 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
   loses the prefix/no-match distinction the dispatcher needs. Same PR
   migrates `forms/FormDemoApp` to use the `Form.column` builder
   shipped in #171, completing the Stage 3 DoD on that demo.
+- *2026-04-28* — Stage 3 §6.1 file dialogs completed. `Dialogs.fileDialog`
+  and `Dialogs.directoryDialog` ship as presentation-only `Overlay`
+  builders, matching the rest of the dialog family — apps own the
+  current `Path`, the `Vector[FileEntry]`, and the selected index. A
+  small `FileEntry` enum (`Parent` / `Directory(name)` /
+  `File(name, size)`) plus `Dialogs.listEntries(path, showHidden)`
+  cover the synchronous case; apps wanting non-blocking listings on
+  slow filesystems can call the same helper inside a
+  `Cmd.asyncResult`. `directoryDialog` is a thin delegation onto
+  `fileDialog` with `okLabel = "Select"` and `showSizes = false`,
+  rather than a parallel implementation, because the differences are
+  defaults — not behaviour. `FileDialogLayout` mirrors
+  `ListSelectLayout` for hit-testing. The §9.5 standalone `actionList`
+  helper stays deferred: it remains a one-line composition over
+  `listSelect`. Sample app `apps.dialog.FileDialogDemoApp`
+  (`sbt run file-dialog`) drives both dialogs against the real
+  filesystem.
 - *2026-04-28* — Stage 3 §6.4 testkit completed. `KeySim` and `MouseSim`
   ship as factory objects returning plain `InputKey` values (mouse events
   flow through `InputKey.Mouse(...)` per Stage 2 §5.1). Helpers are

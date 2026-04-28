@@ -2,6 +2,10 @@ package termflow.tui
 
 import org.scalatest.funsuite.AnyFunSuite
 
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+
 class DialogsSpec extends AnyFunSuite:
 
   given Theme = Theme.dark
@@ -195,6 +199,214 @@ class DialogsSpec extends AnyFunSuite:
       s"expected one of X/Y/Z prefixed frames, got: $s"
     )
   }
+
+  // ---- Dialogs.fileDialog / directoryDialog -------------------------------
+
+  test("Dialogs.fileDialog renders the path, entries, and OK/Cancel") {
+    val o = Dialogs.fileDialog(
+      title = "Open file",
+      currentPath = Paths.get("/tmp/example"),
+      entries = Seq(
+        Dialogs.FileEntry.Parent,
+        Dialogs.FileEntry.Directory("docs"),
+        Dialogs.FileEntry.File("README.md", 1234L)
+      ),
+      selectedIndex = 1
+    )
+    assert(o.inputCapture == InputCapture.Modal)
+    assert(o.input.isEmpty)
+    val s = stringForm(o)
+    assert(s.contains("Open file"))
+    assert(s.contains("/tmp/example"))
+    assert(s.contains(".."))
+    assert(s.contains("docs"))
+    assert(s.contains("README.md"))
+    assert(s.contains("[ Open ]"))
+    assert(s.contains("Cancel"))
+  }
+
+  test("Dialogs.fileDialog highlights the selected row with a marker") {
+    val o = Dialogs.fileDialog(
+      title = "Open",
+      currentPath = Paths.get("/x"),
+      entries = Seq(
+        Dialogs.FileEntry.Parent,
+        Dialogs.FileEntry.Directory("a"),
+        Dialogs.FileEntry.Directory("b")
+      ),
+      selectedIndex = 2
+    )
+    val s = stringForm(o)
+    // Selection marker is "▸ " followed by the directory glyph and name.
+    assert(s.contains("▸"), s"expected selection marker, got: $s")
+    // The selected row should hold the "b" name; "a" should not be marked.
+    val bIdx      = s.indexOf("b/")
+    val markerIdx = s.lastIndexOf("▸")
+    assert(bIdx > 0 && markerIdx > 0 && markerIdx < bIdx)
+  }
+
+  test("Dialogs.fileDialog renders sizes for files when showSizes is on (default)") {
+    val o = Dialogs.fileDialog(
+      title = "Pick",
+      currentPath = Paths.get("/x"),
+      entries = Seq(Dialogs.FileEntry.File("big.bin", 5L * 1024 * 1024)),
+      selectedIndex = 0
+    )
+    val s = stringForm(o)
+    assert(s.contains("big.bin"))
+    assert(s.contains("MB"), s"expected size column with MB unit, got: $s")
+  }
+
+  test("Dialogs.fileDialog with showSizes=false omits the size column") {
+    val o = Dialogs.fileDialog(
+      title = "Pick",
+      currentPath = Paths.get("/x"),
+      entries = Seq(Dialogs.FileEntry.File("big.bin", 5L * 1024 * 1024)),
+      selectedIndex = 0,
+      showSizes = false
+    )
+    val s = stringForm(o)
+    assert(s.contains("big.bin"))
+    assert(!s.contains("MB"))
+  }
+
+  test("Dialogs.fileDialog truncates a very long path from the left") {
+    val deep = Paths.get("/a/very/very/very/very/very/very/very/very/long/path/to/somewhere")
+    val o    = Dialogs.fileDialog("Open", deep, entries = Seq.empty, selectedIndex = 0)
+    val s    = stringForm(o)
+    assert(s.contains("…"), s"expected ellipsis on truncated path, got: $s")
+    assert(s.contains("somewhere"), "tail of the path should remain visible")
+  }
+
+  test("Dialogs.fileDialog scrolls so the selected entry stays visible") {
+    val many = (1 to 30).map(i => Dialogs.FileEntry.File(s"file-$i.txt", i.toLong))
+    val o = Dialogs.fileDialog(
+      title = "Pick",
+      currentPath = Paths.get("/x"),
+      entries = many,
+      selectedIndex = 25,
+      maxVisible = 5
+    )
+    val s = stringForm(o)
+    assert(s.contains("file-25.txt"), s"selected file must be visible, got: $s")
+    assert(!s.contains("file-1.txt") && !s.contains("file-2.txt"))
+  }
+
+  test("Dialogs.fileDialog handles an empty entry list without exploding") {
+    val o = Dialogs.fileDialog(
+      title = "Empty",
+      currentPath = Paths.get("/x"),
+      entries = Seq.empty,
+      selectedIndex = 0
+    )
+    val s = stringForm(o)
+    assert(s.contains("Empty"))
+    assert(s.contains("[ Open ]"))
+  }
+
+  test("Dialogs.directoryDialog defaults okLabel to Select and hides sizes") {
+    val o = Dialogs.directoryDialog(
+      title = "Choose dir",
+      currentPath = Paths.get("/x"),
+      entries = Seq(Dialogs.FileEntry.Parent, Dialogs.FileEntry.Directory("docs")),
+      selectedIndex = 1
+    )
+    val s = stringForm(o)
+    assert(s.contains("[ Select ]"))
+    assert(s.contains("docs"))
+  }
+
+  test("Dialogs.fileDialogLayout exposes the same anchor math as fileDialog") {
+    val empty = Dialogs.fileDialogLayout(entriesSize = 0, selectedIndex = 0, maxVisible = 5)
+    assert(empty.anchorIndex == 0)
+    assert(empty.visibleCount == 1)
+
+    val small = Dialogs.fileDialogLayout(entriesSize = 3, selectedIndex = 1, maxVisible = 5)
+    assert(small.anchorIndex == 0)
+    assert(small.visibleCount == 3)
+
+    val long = Dialogs.fileDialogLayout(entriesSize = 30, selectedIndex = 25, maxVisible = 6)
+    assert(long.visibleCount == 6)
+    assert(long.anchorIndex >= 25 - long.visibleCount + 1)
+    assert(long.anchorIndex <= 25)
+    assert(long.firstRowOffset == 4)
+  }
+
+  test("Dialogs.FileEntry.displayName formats directories with a trailing slash") {
+    assert((Dialogs.FileEntry.Parent: Dialogs.FileEntry).displayName == "..")
+    assert((Dialogs.FileEntry.Directory("src"): Dialogs.FileEntry).displayName == "src/")
+    assert((Dialogs.FileEntry.File("README.md", 0L): Dialogs.FileEntry).displayName == "README.md")
+  }
+
+  test("Dialogs.FileEntry.isDirectory distinguishes directories from files") {
+    assert((Dialogs.FileEntry.Parent: Dialogs.FileEntry).isDirectory)
+    assert((Dialogs.FileEntry.Directory("x"): Dialogs.FileEntry).isDirectory)
+    assert(!(Dialogs.FileEntry.File("x", 0L): Dialogs.FileEntry).isDirectory)
+  }
+
+  // ---- Dialogs.listEntries -------------------------------------------------
+
+  test("Dialogs.listEntries lists directories first then files, sorted alphabetically") {
+    val tmp = Files.createTempDirectory("dialogs-spec-")
+    try
+      Files.createDirectory(tmp.resolve("zeta"))
+      Files.createDirectory(tmp.resolve("alpha"))
+      Files.writeString(tmp.resolve("readme.txt"), "hello")
+      Files.writeString(tmp.resolve("aaa.bin"), "x")
+      val res = Dialogs.listEntries(tmp).getOrElse(fail("listEntries failed"))
+      // The first entry is the parent sentinel.
+      assert(res.head == Dialogs.FileEntry.Parent)
+      val names = res.tail.map(_.displayName)
+      // Directories first (alphabetical), then files (alphabetical).
+      assert(names == Vector("alpha/", "zeta/", "aaa.bin", "readme.txt"))
+    finally deleteRecursively(tmp)
+  }
+
+  test("Dialogs.listEntries excludes dotfiles by default and includes them when requested") {
+    val tmp = Files.createTempDirectory("dialogs-spec-")
+    try
+      Files.writeString(tmp.resolve("visible.txt"), "x")
+      Files.writeString(tmp.resolve(".hidden"), "y")
+      val def_ = Dialogs.listEntries(tmp).getOrElse(fail())
+      assert(def_.exists(_.displayName == "visible.txt"))
+      assert(!def_.exists(_.displayName == ".hidden"))
+      val all = Dialogs.listEntries(tmp, showHidden = true).getOrElse(fail())
+      assert(all.exists(_.displayName == ".hidden"))
+    finally deleteRecursively(tmp)
+  }
+
+  test("Dialogs.listEntries surfaces an Unexpected error when the path is not a directory") {
+    val tmp = Files.createTempFile("dialogs-spec-", ".txt")
+    try
+      val res = Dialogs.listEntries(tmp)
+      assert(res.isLeft)
+      res.swap.foreach {
+        case TermFlowError.Unexpected(_, _) => succeed
+        case other                          => fail(s"unexpected error type: $other")
+      }
+    finally
+      val _ = Files.deleteIfExists(tmp)
+      ()
+  }
+
+  test("Dialogs.formatSize renders bytes / KB / MB and stays under five characters of digits") {
+    assert(Dialogs.formatSize(0L) == "0 B")
+    assert(Dialogs.formatSize(512L) == "512 B")
+    val oneKb = Dialogs.formatSize(1024L)
+    assert(oneKb.endsWith("KB") && oneKb.startsWith("1"))
+    val oneMb = Dialogs.formatSize(1024L * 1024L)
+    assert(oneMb.endsWith("MB"))
+    val twoGb = Dialogs.formatSize(2L * 1024 * 1024 * 1024)
+    assert(twoGb.endsWith("GB"))
+  }
+
+  private def deleteRecursively(p: Path): Unit =
+    if Files.isDirectory(p) then
+      val s = Files.newDirectoryStream(p)
+      try s.iterator().forEachRemaining(deleteRecursively)
+      finally s.close()
+    Files.deleteIfExists(p)
+    ()
 
   // ---- helper: walk an overlay's tree into a flat string for assertions ---
 

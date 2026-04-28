@@ -110,13 +110,15 @@ plus a few public-API breaks.
 | §4.3 Theme + WidgetRenderer split | `Theme` + themable `BoxNode.chars` (#159, plus existing `Theme.scala`) | done — `Theme` ships with `BorderChars` slots; per-widget renderers come in Stage 3 with the dialog/widget expansion |
 | §4.4 Color depth + capability detection | `Color.Indexed` / `Color.Rgb` + capability-driven downgrade (#157) | done |
 | §4.5 SIGWINCH | `Sub.TerminalResize` switched to `backend.onResize` signal with polling fallback (#158) | done |
-| §4.6 Module split | `termflow-testkit` promoted to a published artifact (#161) | partial — testkit is its own module; the finer-grained `termflow-terminal/screen/app/widgets` carve-out is deferred to Stage 4 (§7.1), where MiMa will be wired up at the same time |
+| §4.6 Module split | `termflow-testkit` promoted to a published artifact (#161); `termflow-{terminal,screen,app,widgets}` carve-out lands in Stage 4 prep | done — five published framework modules now back the umbrella `termflow` artifact; sources stay in `termflow.tui` so consumer imports don't move |
 | §4.7 Definition of done | Stage 1 showcase demo (`sbt showcase`, #163) exercises layout, overlays, theme, color depth, and resize end-to-end | done |
 
-The §4.6 module split was scoped down deliberately: the user-facing pain of
-"no separate testkit" was real (#147) and is now fixed; the terminal/screen/app
-split is internal plumbing that is cheap to do later, and pairs naturally with
-Stage 4 stabilisation when MiMa filters need to be defined per-module anyway.
+The §4.6 module split was originally scoped down to "promote testkit" only;
+the finer-grained `termflow-{terminal,screen,app,widgets}` carve-out then
+landed early as Stage 4 prep so MiMa filters can be wired per-module from
+day one (§7.1). Sources kept their `termflow.tui` package: every existing
+`import termflow.tui.*` still works unchanged. The umbrella `termflow`
+artifact stays as a thin transitional pom that depends on all four.
 
 
 ### 4.1 Relative-coordinate VDom (P0, large)
@@ -418,11 +420,14 @@ maintain.)
 | `Dialogs.listSelect(title, items, selectedIndex, maxVisible?, render?)` | done | Selection-following viewport scrolling; custom render callback. |
 | `Dialogs.waiting(title, body, tick, frames?, cancelLabel?)` | done | Spinner glyph picked from the tick (modulo); optional cancel button. App drives the tick from a `Sub.Every`. |
 | `Dialogs.actionList` | not started | Trivially expressed as `listSelect` over `Choice` values; deferred until a real use case appears. |
-| `Dialogs.fileDialog` / `directoryDialog` | not started | Need filesystem traversal helpers and async listing for big directories — own PR. |
+| `Dialogs.fileDialog` / `directoryDialog` | done | Path bar + entry list (parent / dir / file) + sized column for files. Companion `FileEntry` ADT, `listEntries(path, showHidden)`, and `fileDialogLayout` for hit-testing. |
 
-The five shipped helpers cover the everyday cases. All five are
-exercised by `sbt showcase` (`d` = confirm, `i` = textInput, `l` =
-listSelect, `w` = waiting). Tests live in `DialogsSpec`.
+All seven helpers are exercised by `sbt showcase` (`d` = confirm, `i` =
+textInput, `l` = listSelect, `w` = waiting, `f` = fileDialog, `g` =
+directoryDialog) on the Showcase tab. The file pickers also ship with
+a dedicated demo (`apps.dialog.FileDialogDemoApp`, runnable as
+`sbt run file-dialog`) for a focused look. Tests live in `DialogsSpec`
+and `Stage1ShowcaseAppSpec`.
 
 ### 6.2 Additional widgets (P1, medium) — **complete**
 
@@ -506,6 +511,12 @@ This is **TermFlow's unique selling point** — no Java TUI library has it.
 The lock-in stage. Goal: produce an API we are willing to keep stable for
 years.
 
+**Module split.** Stage 4's structural prep landed early — the framework
+is now five published modules (`termflow-{terminal,screen,app,widgets}` plus
+the umbrella `termflow`) so each layer can carry its own MiMa baseline.
+Sources stayed in `termflow.tui` so existing consumers don't have to
+rewrite imports.
+
 ### 7.1 MiMa for binary compatibility
 
 Add `sbt-mima-plugin`. Configure to check `termflow-terminal`,
@@ -535,15 +546,28 @@ static site. Sections (mirroring Lanterna's `docs/contents.md`):
 
 ### 7.3 Sample app catalogue expansion
 
-Today: 13 samples. Target: 25, with one app per major feature:
+Target: 25, with one app per major feature.
 
-- `mouse/` — basic mouse interaction.
-- `unicode/` — CJK + emoji rendering.
-- `dialog/` — every dialog helper.
-- `tree/` — file-tree explorer.
+- `mouse/` — basic mouse interaction. *(deferred — covered indirectly by the
+  showcase tab, which already exercises mouse hit-testing on the Themes /
+  Borders panels and the listSelect dialog.)*
+- `unicode/` — CJK + emoji rendering. **shipped** as `apps.unicode.UnicodeDemoApp`.
+- `dialog/` — every dialog helper. **shipped** as `apps.dialog.DialogDemoApp`
+  (confirm / textInput / listSelect / waiting) and `apps.dialog.FileDialogDemoApp`
+  (file & directory pickers).
+- `tree/` — file-tree explorer. *(planned — natural fit on top of the new
+  fileDialog helpers.)*
 - `chat/` — already exists; expand to use streaming + scrollback.
-- `dashboard/` — multi-pane realtime metrics.
-- `wizard/` — multi-step form with back/forward.
+- `dashboard/` — multi-pane realtime metrics. **shipped** as
+  `apps.dashboard.DashboardApp` (`sbt dashboardDemo`); ListView + ProgressBar
+  per service, Spinner + StatusBar in header/footer, `Sub.Every`-driven
+  simulation with pause / restart. Also embedded as the **Dashboard** tab
+  in `sbt showcase`.
+- `wizard/` — multi-step form with back/forward. **shipped** as
+  `apps.wizard.WizardApp` (`sbt wizardDemo`); 3-step Account → Plan →
+  Confirm flow with per-step `FocusManager`, validation feeding into
+  the `Form.column` errors map, and a Submit button on the final step.
+  Also embedded as the **Wizard** tab in `sbt showcase`.
 - `editor/` — minimal text editor (proves the layout/coords refactor).
 - `ssh-shell/` *(if Stage 5 ships)* — telnet/SSH demo.
 
@@ -681,9 +705,19 @@ mirror this in module layout (§4.6) and docs (§7.2).
 
 Lanterna ships `MessageDialog`, `TextInputDialog`, `ActionListDialog`,
 `ListSelectDialog`, `WaitingDialog`, `FileDialog`, `DirectoryDialog`.
-We now ship `message`, `confirm`, `textInput`, `listSelect`, `waiting`
-(see §6.1). `FileDialog` / `DirectoryDialog` and the standalone
-`actionList` helper remain to land in Stage 3.
+We now ship `message`, `confirm`, `textInput`, `listSelect`, `waiting`,
+`fileDialog`, `directoryDialog` (see §6.1). The standalone `actionList`
+helper is still trivially `listSelect` over `Choice` values and remains
+deferred until a real use case asks for it.
+
+### 9.5b Stage 3 dialog status
+
+All five core helpers (`message`, `confirm`, `textInput`, `listSelect`,
+`waiting`) plus the file pickers (`fileDialog`, `directoryDialog`) now
+ship. The `actionList` helper is a one-line `listSelect` and remains
+deferred. Async listing (paging / cancellation for huge trees) is not
+in scope for the helper itself — apps wrap `Dialogs.listEntries` in a
+`Cmd.asyncResult` when they need it.
 
 ### 9.6 Threading model
 
@@ -800,6 +834,24 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
   loses the prefix/no-match distinction the dispatcher needs. Same PR
   migrates `forms/FormDemoApp` to use the `Form.column` builder
   shipped in #171, completing the Stage 3 DoD on that demo.
+- *2026-04-28* — Stage 3 §6.1 file dialogs completed. `Dialogs.fileDialog`
+  and `Dialogs.directoryDialog` ship as presentation-only `Overlay`
+  builders, matching the rest of the dialog family — apps own the
+  current `Path`, the `Vector[FileEntry]`, and the selected index. A
+  small `FileEntry` enum (`Parent` / `Directory(name)` /
+  `File(name, size)`) plus `Dialogs.listEntries(path, showHidden)`
+  cover the synchronous case; apps wanting non-blocking listings on
+  slow filesystems can call the same helper inside a
+  `Cmd.asyncResult`. `directoryDialog` is a thin delegation onto
+  `fileDialog` with `okLabel = "Select"` and `showSizes = false`,
+  rather than a parallel implementation, because the differences are
+  defaults — not behaviour. `FileDialogLayout` mirrors
+  `ListSelectLayout` for hit-testing. The §9.5 standalone `actionList`
+  helper stays deferred: it remains a one-line composition over
+  `listSelect`. Sample app `apps.dialog.FileDialogDemoApp`
+  (`sbt run file-dialog`) drives both dialogs against the real
+  filesystem. The Showcase tab also wires `f` and `g` for the two
+  pickers so `sbt showcase` exercises every dialog helper end-to-end.
 - *2026-04-28* — Stage 3 §6.4 testkit completed. `KeySim` and `MouseSim`
   ship as factory objects returning plain `InputKey` values (mouse events
   flow through `InputKey.Mouse(...)` per Stage 2 §5.1). Helpers are
@@ -809,6 +861,31 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
   collapses to a single `Enter` in `typeString` to match real terminal
   behaviour, and `MouseSim.dragGesture` samples intermediate drag points
   so hit-tests can be validated mid-gesture.
+- *2026-04-28* — Module split (§4.6 / §7.1 prep) completed. The
+  monolithic `termflow` artifact now decomposes into five published
+  modules: `termflow-terminal` (backend, key decoding, capabilities,
+  mouse, unicode width), `termflow-screen` (VNode, layout, overlay,
+  ANSI renderer, theme, border chars), `termflow-app` (TuiApp, Tui,
+  Cmd, Sub, runtime, dialogs, focus, keymap, devtools, prompt history,
+  `SimpleANSIRenderer`, `RenderMetrics`), `termflow-widgets` (the
+  catalogue), and a transitional umbrella `termflow` that depends on
+  all four so existing `org.llm4s:termflow_3` users carry on
+  unchanged. **Source-level shape kept**: every file stays in package
+  `termflow.tui`, so call sites that say `import termflow.tui.*` keep
+  working. The screen-only `ScreenPrelude` carries the `2.x`/`3.y`/
+  `"hi".text` extensions so screen-layer callers can use them without
+  pulling in the rest of the app layer; `TuiPrelude` re-exports them
+  unchanged. Custom scalafix rules moved to a dedicated
+  `termflow-scalafix-rules` sub-project that the four framework
+  modules pull in via `% ScalafixConfig`. Tests sit in the module
+  whose code they cover; `AnsiRendererSpec` (which exercises
+  `SimpleANSIRenderer`) lives in `termflow-app`. The umbrella `termflow`
+  is intentionally skinny so a follow-up can wire MiMa per-module
+  (§7.1) without re-arranging files. Alternative considered:
+  rename packages too (`termflow.terminal.*` etc) — rejected for now
+  because the consumer-side cost is enormous and the layering benefit
+  is mostly already realised by the build-level enforcement (each
+  module only sees its declared deps).
 - *2026-04-28* — Stage 5 backends pruned. The original speculative list
   named four post-1.0 backends (Swing/AWT, Telnet, SSH, Web). After
   weighing each against expected user reach versus ongoing maintenance

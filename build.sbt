@@ -83,25 +83,89 @@ lazy val scalafixRuleDependencies = Def.setting {
      else Nil)
 }
 
-lazy val root = (project in file("."))
-  .aggregate(termflow, termflowTestkit, termflowSample)
+// Internal-only project hosting the custom scalafix rules
+// (NoDirectRuntimeConfigAccess, NoDirectTerminalIO). Compiled against
+// scalafix-core 2.13 (since scalafix runs on Scala 2.13 internally) and
+// pulled into each framework module's scalafix classpath via
+// `dependsOn(... % ScalafixConfig)` below.
+lazy val termflowScalafixRules = (project in file("modules/termflow-scalafix-rules"))
   .settings(
-    name          := "termflow",
+    name           := "termflow-scalafix-rules",
+    scalaVersion   := scala3,
+    publish / skip := true,
+    scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked", "-Wunused:imports"),
+    libraryDependencies ++= Seq(
+      ("ch.epfl.scala" %% "scalafix-core" % ScalafixBuildInfo.scalafixVersion)
+        .cross(CrossVersion.for3Use2_13)
+    )
+  )
+
+// Settings shared by every framework module — scalafix custom rules
+// configuration. Each framework module adds `termflowScalafixRules` as a
+// `% ScalafixConfig` dependency at the project definition site so the
+// rule JAR is on the scalafix classpath when running on that module.
+lazy val frameworkScalafixSettings = Seq(
+  scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix-termflow.conf"),
+  libraryDependencies ++= scalafixRuleDependencies.value
+)
+
+lazy val root = (project in file("."))
+  .aggregate(
+    termflowScalafixRules,
+    termflowTerminal,
+    termflowScreen,
+    termflowApp,
+    termflowWidgets,
+    termflow,
+    termflowTestkit,
+    termflowSample
+  )
+  .settings(
+    name           := "termflow",
     publish / skip := true
   )
 
-lazy val termflow = (project in file("modules/termflow"))
-  // No dep on termflowTestkit here. The few tests that genuinely needed
-  // the testkit (DevtoolsWrapSpec) live in termflowTestkit's own test
-  // sources, which avoids a build-level cycle (testkit -> termflow ->
-  // testkit). Sample apps depend on testkit at test scope as a regular
-  // downstream consumer.
+// ---- Layered framework modules -------------------------------------------
+// terminal -> screen -> app -> widgets. Each carries its share of the
+// `termflow.tui` package; they end up on the same classpath via the
+// transitive deps but stay separately publishable so apps can depend on a
+// thin slice when rolling their own widgets.
+
+lazy val termflowTerminal = (project in file("modules/termflow-terminal"))
+  .dependsOn(termflowScalafixRules % ScalafixConfig)
   .settings(
-    name := "termflow",
-    description := "A small, functional terminal UI (TUI) framework for Scala",
+    name := "termflow-terminal",
+    description :=
+      "Terminal layer: backend trait + JLine impl, key decoding, capabilities, mouse, unicode width.",
     commonSettings,
-    scalafixConfig := Some((ThisBuild / baseDirectory).value / ".scalafix-termflow.conf"),
-    libraryDependencies ++= scalafixRuleDependencies.value,
+    frameworkScalafixSettings,
+    libraryDependencies ++= Seq(
+      Deps.jline,
+      Deps.scalatest % Test
+    )
+  )
+
+lazy val termflowScreen = (project in file("modules/termflow-screen"))
+  .dependsOn(termflowTerminal, termflowScalafixRules % ScalafixConfig)
+  .settings(
+    name := "termflow-screen",
+    description :=
+      "Screen layer: VNode / Layout / Overlay, ANSI renderer, RenderFrame, themes, border chars.",
+    commonSettings,
+    frameworkScalafixSettings,
+    libraryDependencies ++= Seq(
+      Deps.scalatest % Test
+    )
+  )
+
+lazy val termflowApp = (project in file("modules/termflow-app"))
+  .dependsOn(termflowTerminal, termflowScreen, termflowScalafixRules % ScalafixConfig)
+  .settings(
+    name := "termflow-app",
+    description :=
+      "Application layer: TuiApp, Tui, Cmd, Sub, runtime, Dialogs, focus, keymap, devtools, prompt history.",
+    commonSettings,
+    frameworkScalafixSettings,
     libraryDependencies ++= Seq(
       Deps.jline,
       Deps.pureconfigCore,
@@ -110,8 +174,42 @@ lazy val termflow = (project in file("modules/termflow"))
     )
   )
 
+lazy val termflowWidgets = (project in file("modules/termflow-widgets"))
+  .dependsOn(termflowApp, termflowScalafixRules % ScalafixConfig)
+  .settings(
+    name := "termflow-widgets",
+    description :=
+      "Widget catalogue: Button, TextField, ListView, Table, Select, Autocomplete, MenuBar, Form, SplitPane, Tabs, Tree, etc.",
+    commonSettings,
+    frameworkScalafixSettings,
+    libraryDependencies ++= Seq(
+      Deps.scalatest % Test
+    )
+  )
+
+// Umbrella artifact `termflow` — pre-1.0 transitional shim so existing
+// `org.llm4s:termflow_3` deps still resolve to the full set of framework
+// modules. The directory carries no Scala sources of its own; it only
+// hosts the custom scalafix rules consumed by the four framework modules
+// above (under `src/scalafix/scala`). The published JAR is empty; the POM
+// lists the four modules as transitive deps so users get the same surface.
+//
+// `frameworkScalafixSettings` is repeated here so the scalafix rule
+// sources under `src/scalafix/scala` compile against scalafix-core when
+// sbt-scalafix invokes them — without it, scalafix invocations on the
+// dependent modules fail with "Could not find package scala from compiler
+// core libraries" because the custom-rules project never resolves the
+// Scala stdlib for its scalafix classpath.
+lazy val termflow = (project in file("modules/termflow"))
+  .dependsOn(termflowTerminal, termflowScreen, termflowApp, termflowWidgets)
+  .settings(
+    name        := "termflow",
+    description := "A small, functional terminal UI (TUI) framework for Scala (umbrella artifact).",
+    commonSettings
+  )
+
 lazy val termflowTestkit = (project in file("modules/termflow-testkit"))
-  .dependsOn(termflow)
+  .dependsOn(termflowApp, termflowWidgets)
   .settings(
     name := "termflow-testkit",
     description :=
@@ -125,7 +223,10 @@ lazy val termflowTestkit = (project in file("modules/termflow-testkit"))
   )
 
 lazy val termflowSample = (project in file("modules/termflow-sample"))
-  .dependsOn(termflow % "compile->compile;test->test", termflowTestkit % Test)
+  .dependsOn(
+    termflow                          % "compile->compile;test->test",
+    termflowTestkit                   % Test
+  )
   .settings(
     name := "termflow-sample",
     commonSettings,
@@ -134,11 +235,24 @@ lazy val termflowSample = (project in file("modules/termflow-sample"))
       Deps.scalatest % Test
     ),
     coverageEnabled := false,
-    publish / skip := true
+    publish / skip  := true
   )
 
 addCommandAlias("ciCheck", ";scalafmtCheckAll;scalafixAll --check;test")
-addCommandAlias("coverageLib", ";project termflow;coverage;test;coverageReport")
+// `coverage`/`coverageReport` are sbt-scoverage *commands* — they
+// can't be invoked with the `project/key` selector syntax. The pattern
+// below switches into each framework module in turn, enables coverage,
+// runs its tests, and emits the per-module scoverage report. CI picks
+// up the resulting `modules/termflow-*/target/scala-*/scoverage-report/`
+// directories.
+addCommandAlias(
+  "coverageLib",
+  ";project termflowTerminal;coverage;test;coverageReport" +
+    ";project termflowScreen;coverage;test;coverageReport" +
+    ";project termflowApp;coverage;test;coverageReport" +
+    ";project termflowWidgets;coverage;test;coverageReport" +
+    ";project root"
+)
 addCommandAlias("prePR", ";ciCheck;coverageLib;termflowSample/runMain termflow.run.SampleSmoke")
 addCommandAlias(
   "publishLocalFixed",
@@ -166,3 +280,5 @@ addCommandAlias("themeDemo",    "termflowSample/runMain termflow.apps.themes.The
 addCommandAlias("dialogDemo",   "termflowSample/runMain termflow.apps.dialog.DialogDemoApp")
 addCommandAlias("showcase",     "termflowSample/runMain termflow.apps.showcase.Stage1ShowcaseApp")
 addCommandAlias("unicodeDemo",  "termflowSample/runMain termflow.apps.unicode.UnicodeDemoApp")
+addCommandAlias("dashboardDemo","termflowSample/runMain termflow.apps.dashboard.DashboardApp")
+addCommandAlias("wizardDemo",   "termflowSample/runMain termflow.apps.wizard.WizardApp")

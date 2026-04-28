@@ -1,5 +1,6 @@
 .bsp/
 .bloop/
+.claude/
 .metals/
 .idea/
 target/

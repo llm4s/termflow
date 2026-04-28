@@ -476,13 +476,16 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(rendered.contains("focus"), "focused CheckBox label should appear in the frame")
   }
 
-  test("the Tabs bar appears on row 2 with showcase / widgets / help labels") {
+  test("the Tabs bar appears on row 2 with all six tab labels") {
     val d        = driver
     val frame    = d.frame
     val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
     assert(rendered.contains("1 Showcase"), "Tabs widget should render Showcase tab")
     assert(rendered.contains("2 Widgets"), "Tabs widget should render Widgets tab")
-    assert(rendered.contains("3 Help"), "Tabs widget should render Help tab")
+    assert(rendered.contains("3 Inputs"), "Tabs widget should render Inputs tab")
+    assert(rendered.contains("4 Data"), "Tabs widget should render Data tab")
+    assert(rendered.contains("5 Layout"), "Tabs widget should render Layout tab")
+    assert(rendered.contains("6 Help"), "Tabs widget should render Help tab")
     // Default active tab (0) should be bracketed by the Tabs widget.
     assert(rendered.contains("[ 1 Showcase ]"), s"default active tab should be bracketed; rendered:\n$rendered")
   }
@@ -542,7 +545,7 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
 
   test("Help tab renders keybinding reference") {
     val d = driver
-    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('3')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('6')))
     val frame    = d.frame
     val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
     assert(rendered.contains("Keybindings"), s"Help tab title missing in:\n$rendered")
@@ -551,10 +554,10 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
 
   test("clicking a tab cell from inside the Help tab still switches tabs") {
     // Regression: helpTabKey originally had no Mouse handler, trapping
-    // the user on tab 3.
+    // the user on Help.
     val d = driver
-    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('3')))
-    assert(d.model.activeTab == 2)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('6')))
+    assert(d.model.activeTab == 5)
     d.send(
       Stage1ShowcaseApp.Msg.Key(
         InputKey.Mouse(
@@ -574,21 +577,23 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     val d = driver
     d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('2')))
     assert(d.model.activeTab == 1)
-    // Tab cells (separator " ", padding 4):
-    //   "1 Showcase" cols 2..15, sep 16, "2 Widgets" 17..29, sep 30, "3 Help" 31..40.
+    // Tab cells (separator " ", padding 4 = "[ Label ]"):
+    //   "1 Showcase" (10) cols 2..15, sep 16
+    //   "2 Widgets" (9)  cols 17..29, sep 30
+    //   "3 Inputs" (8)   cols 31..42
     d.send(
       Stage1ShowcaseApp.Msg.Key(
         InputKey.Mouse(
           termflow.tui.MouseEvent.Press(
             termflow.tui.MouseButton.Left,
-            35, // mid-"3 Help" cell
+            35, // mid-"3 Inputs" cell
             2,
             termflow.tui.KeyDecoder.Modifiers()
           )
         )
       )
     )
-    assert(d.model.activeTab == 2, "click on tab 3 from Widgets tab should switch to Help")
+    assert(d.model.activeTab == 2, "click on tab 3 from Widgets tab should switch to Inputs")
   }
 
   test("Widgets / Help tab body keeps a 1-cell right margin") {

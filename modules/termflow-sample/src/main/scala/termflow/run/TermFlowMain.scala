@@ -27,6 +27,7 @@ object TermFlowMain:
           termflow.apps.diagnostics.LoggingMetricsDemoApp.Config
         )
       case Some("input-line") | Some("input") => TuiRuntime.run(termflow.apps.input.InputLineReproApp.App)
+      case Some("dashboard") | Some("dash")   => TuiRuntime.run(termflow.apps.dashboard.DashboardApp.App)
       case Some(_)                            => SampleHubMain.main(Array.empty)
 
   def syncCounterMain(args: Array[String]): Unit =

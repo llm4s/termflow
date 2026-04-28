@@ -535,14 +535,22 @@ static site. Sections (mirroring Lanterna's `docs/contents.md`):
 
 ### 7.3 Sample app catalogue expansion
 
-Today: 13 samples. Target: 25, with one app per major feature:
+Target: 25, with one app per major feature.
 
-- `mouse/` — basic mouse interaction.
-- `unicode/` — CJK + emoji rendering.
-- `dialog/` — every dialog helper.
-- `tree/` — file-tree explorer.
+- `mouse/` — basic mouse interaction. *(deferred — covered indirectly by the
+  showcase tab, which already exercises mouse hit-testing on the Themes /
+  Borders panels and the listSelect dialog.)*
+- `unicode/` — CJK + emoji rendering. **shipped** as `apps.unicode.UnicodeDemoApp`.
+- `dialog/` — every dialog helper. **shipped** as `apps.dialog.DialogDemoApp`
+  (confirm / textInput / listSelect / waiting) and `apps.dialog.FileDialogDemoApp`
+  (file & directory pickers).
+- `tree/` — file-tree explorer. *(planned — natural fit on top of the new
+  fileDialog helpers.)*
 - `chat/` — already exists; expand to use streaming + scrollback.
-- `dashboard/` — multi-pane realtime metrics.
+- `dashboard/` — multi-pane realtime metrics. **shipped** as
+  `apps.dashboard.DashboardApp` (`sbt dashboardDemo`); ListView + ProgressBar
+  per service, Spinner + StatusBar in header/footer, `Sub.Every`-driven
+  simulation with pause / restart.
 - `wizard/` — multi-step form with back/forward.
 - `editor/` — minimal text editor (proves the layout/coords refactor).
 - `ssh-shell/` *(if Stage 5 ships)* — telnet/SSH demo.

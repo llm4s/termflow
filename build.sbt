@@ -166,3 +166,4 @@ addCommandAlias("themeDemo",    "termflowSample/runMain termflow.apps.themes.The
 addCommandAlias("dialogDemo",   "termflowSample/runMain termflow.apps.dialog.DialogDemoApp")
 addCommandAlias("showcase",     "termflowSample/runMain termflow.apps.showcase.Stage1ShowcaseApp")
 addCommandAlias("unicodeDemo",  "termflowSample/runMain termflow.apps.unicode.UnicodeDemoApp")
+addCommandAlias("dashboardDemo","termflowSample/runMain termflow.apps.dashboard.DashboardApp")

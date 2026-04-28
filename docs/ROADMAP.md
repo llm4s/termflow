@@ -467,21 +467,29 @@ pieces:
 The single-key `Keymap` API is unchanged, and `ChordKeymap.fromKeymap`
 promotes it for free, so existing apps don't need to migrate.
 
-### 6.4 Testkit module (P1, small)
+### 6.4 Testkit module (P1, small) — **complete**
 
-Promote `termflow.testkit.*` to a published artifact `termflow-testkit`.
+Promoted `termflow.testkit.*` to a published artifact `termflow-testkit`.
 Public API:
 
 - `TuiTestDriver[Model, Msg]` — drives an app deterministically, captures
   frames.
-- `Golden` — `assertGolden(driver, "name.golden")`, with
-  `-Dtermflow.update-goldens=true`.
-- `VirtualTerminalBackend` — first-class.
-- `KeySim` — `KeySim.type("hello\n")` → seq of `KeyEvent`s.
-- `MouseSim` — `MouseSim.click(2, 3)`, `MouseSim.scrollUp(10, 10, 3)`.
+- `GoldenSupport` — `assertGoldenFrame(frame, "name")`, with
+  `-Dtermflow.update-goldens=true` (or `UPDATE_GOLDENS=1`).
+- `TestRuntimeCtx` + `TestTerminalBackend` — virtual backend wired up by
+  default; subscriptions stay dormant for determinism.
+- `KeySim` — `KeySim.typeString("hi\n")`, `KeySim.f(5)`,
+  `KeySim.ctrlShift(KeySim.ArrowLeft)`, `KeySim.paste(text)`.
+- `MouseSim` — `MouseSim.click(2, 3)`, `MouseSim.scrollDown(10, 10, ticks = 3)`,
+  `MouseSim.dragGesture(2, 2, 8, 4)`, `MouseSim.clickPair(c, r)`.
+
+Helpers return plain `InputKey` values so apps wrap them in their own
+`Msg.Key(...)` envelope before feeding through `TuiTestDriver.send`. CRLF
+in `typeString` collapses into a single `Enter`; `dragGesture` samples a
+straight Bresenham-ish path so hit-tests can validate intermediate
+coordinates.
 
 This is **TermFlow's unique selling point** — no Java TUI library has it.
-Make it discoverable.
 
 ### 6.5 Definition of done for Stage 3
 
@@ -787,6 +795,15 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
   loses the prefix/no-match distinction the dispatcher needs. Same PR
   migrates `forms/FormDemoApp` to use the `Form.column` builder
   shipped in #171, completing the Stage 3 DoD on that demo.
+- *2026-04-28* — Stage 3 §6.4 testkit completed. `KeySim` and `MouseSim`
+  ship as factory objects returning plain `InputKey` values (mouse events
+  flow through `InputKey.Mouse(...)` per Stage 2 §5.1). Helpers are
+  deliberately stateless — apps wrap them in their app-specific `Msg`
+  before `driver.send` — so the same test code works for any app shape
+  without requiring the testkit to know the message envelope. CRLF
+  collapses to a single `Enter` in `typeString` to match real terminal
+  behaviour, and `MouseSim.dragGesture` samples intermediate drag points
+  so hit-tests can be validated mid-gesture.
 
 ---
 

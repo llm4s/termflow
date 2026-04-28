@@ -448,7 +448,10 @@ object Stage1ShowcaseApp:
       k match
         case CharKey('q') | CharKey('Q') => Cmd.GCmd(OpenDialog)
         case Escape                      => Cmd.GCmd(OpenDialog)
-        case _                           => Cmd.NoCmd
+        // Route mouse so clicks on the Tabs bar still switch tabs from
+        // here — without this, the Help tab traps the user.
+        case Mouse(ev) => tabBarMouseDispatch(ev)
+        case _         => Cmd.NoCmd
 
     /**
      * Mouse handling reduced to just the tabs bar — for the non-Showcase
@@ -940,11 +943,17 @@ object Stage1ShowcaseApp:
       )
       List(panel(r, theme, title :: rows))
 
-    /** Rect that fills the area below the Tabs bar to the help footer. */
+    /**
+     * Rect that fills the area below the Tabs bar to the help footer.
+     *  Leaves a 1-cell margin on the right (matching the Showcase tab's
+     *  rightmost panel layout) so the box's right border doesn't get
+     *  clipped or scroll the terminal.
+     */
     private def widgetsTabRect(m: Model): Rect =
       val top    = topRowY
       val bottom = math.max(top + 5, m.height - 2) // leave row m.height-1 for footer
-      Rect(col = 1, row = top, width = math.max(60, m.width), height = bottom - top + 1)
+      val width  = math.max(60, m.width) - 1
+      Rect(col = 1, row = top, width = width, height = bottom - top + 1)
 
     /** Bordered panel positioned at `r` with the theme's border style. */
     private def panel(r: Rect, theme: Theme, children: List[VNode]): VNode =

@@ -549,6 +549,67 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(rendered.contains("switch tab"), "Help should document tab switching")
   }
 
+  test("clicking a tab cell from inside the Help tab still switches tabs") {
+    // Regression: helpTabKey originally had no Mouse handler, trapping
+    // the user on tab 3.
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('3')))
+    assert(d.model.activeTab == 2)
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Press(
+            termflow.tui.MouseButton.Left,
+            6, // anywhere inside the first tab cell
+            2,
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    assert(d.model.activeTab == 0, "click on tab 1 from Help tab should switch to Showcase")
+  }
+
+  test("clicking a tab cell from inside the Widgets tab still switches tabs") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('2')))
+    assert(d.model.activeTab == 1)
+    // Tab cells (separator " ", padding 4):
+    //   "1 Showcase" cols 2..15, sep 16, "2 Widgets" 17..29, sep 30, "3 Help" 31..40.
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Press(
+            termflow.tui.MouseButton.Left,
+            35, // mid-"3 Help" cell
+            2,
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    assert(d.model.activeTab == 2, "click on tab 3 from Widgets tab should switch to Help")
+  }
+
+  test("Widgets / Help tab body keeps a 1-cell right margin") {
+    // Regression: widgetsTabRect originally extended to col m.width, so
+    // the right border landed on the very last column and got clipped on
+    // narrower terminals.
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('2')))
+    val frame    = d.frame
+    val rightCol = d.model.width
+    // The last column should NOT contain a vertical border glyph from the
+    // Widgets-tab box (some renderers may also pad with spaces; either is
+    // fine — the assertion is "no border at the screen edge").
+    val borderChars  = Set('│', '┃', '║', '|')
+    val lastColCells = (0 until frame.height).map(r => frame.cells(r)(rightCol - 1).ch).filter(borderChars.contains)
+    assert(
+      lastColCells.isEmpty,
+      s"expected no panel border in the rightmost column ($rightCol); found: ${lastColCells.mkString(",")}"
+    )
+  }
+
   test("eventHistory grows on each key, capped at the configured maximum") {
     val d = driver
     assert(d.model.eventHistory.isEmpty)

@@ -6,8 +6,18 @@ import termflow.tui.Tui.*
 import termflow.tui.TuiPrelude.*
 
 /**
- * One-screen showcase of every Stage 1 capability *plus* the user-visible
- * Stage 2 additions:
+ * Three-tab showcase of every shipped TermFlow feature.
+ *
+ * Tabs (switch with `1` / `2` / `3` or click the cell in the bar at row 2):
+ *
+ *   - **Showcase** — the Stage 1 + Stage 2 demo: capabilities, palette,
+ *     themes, borders, styles, unicode width, live input + dialogs.
+ *   - **Widgets** — the Tree widget over a sample file tree (arrow keys
+ *     navigate, Space / Enter toggles).
+ *   - **Help** — keybinding reference + about.
+ *
+ * Showcase tab features (every feature lands here unless it grows its own
+ * tab):
  *
  * **Stage 1**
  *   - **Color depth + capability detection** (PR #157 / issue #148): the
@@ -110,6 +120,65 @@ object Stage1ShowcaseApp:
   /** Max events kept in `Model.eventHistory` for the LogView in the live panel. */
   private val EventHistoryCap: Int = 50
 
+  /**
+   * Tab labels — each cell switches the body to a different demo. Order
+   * is the source of truth for the `1` / `2` / `3` keyboard shortcuts and
+   * for the `activeTab` indices in the model.
+   */
+  private val showcaseTabs: Vector[String] =
+    Vector("1 Showcase", "2 Widgets", "3 Help")
+
+  /**
+   * 0-based row of the Tabs bar inside the root frame. Used by both the
+   *  view (to render) and the mouse hit-test (to map clicks).
+   */
+  private val tabsRow: Int = 2
+
+  /** 0-based column of the first tab cell. Tabs is rendered at (2.x, 2.y). */
+  private val tabsCol: Int = 2
+
+  /**
+   * Tab index for the file-tree demo so the view function and the
+   *  dispatch agree on what `1` selects.
+   */
+  private val ShowcaseTabIdx: Int = 0
+  private val WidgetsTabIdx: Int  = 1
+  private val HelpTabIdx: Int     = 2
+
+  /**
+   * Sample file-tree used by the Widgets tab to demo the Tree widget.
+   * Plain ADT — the widget's `Children` instance traverses it.
+   */
+  sealed trait DemoNode:
+    def name: String
+  final case class DemoDir(name: String, kids: Vector[DemoNode]) extends DemoNode
+  final case class DemoFile(name: String)                        extends DemoNode
+
+  given widgets.Tree.Children[DemoNode, String] with
+    def id(n: DemoNode): String = n.name
+    def kids(n: DemoNode): Vector[DemoNode] = n match
+      case DemoDir(_, k) => k
+      case _: DemoFile   => Vector.empty
+
+  private val demoTree: Vector[DemoNode] = Vector(
+    DemoDir(
+      "termflow",
+      Vector(
+        DemoDir(
+          "tui",
+          Vector(
+            DemoFile("AnsiRenderer.scala"),
+            DemoFile("Layout.scala"),
+            DemoFile("Theme.scala"),
+            DemoDir("widgets", Vector(DemoFile("Tabs.scala"), DemoFile("LogView.scala"), DemoFile("Tree.scala")))
+          )
+        ),
+        DemoFile("README.md")
+      )
+    ),
+    DemoFile("build.sbt")
+  )
+
   enum Dialog:
     case None
     case ConfirmQuit(yesFocused: Boolean)
@@ -138,6 +207,12 @@ object Stage1ShowcaseApp:
     lastListPick: Option[String],
     /** Tick counter incremented by `tickSub`; drives the waiting spinner. */
     tick: Long,
+    /** 0-based index of the currently selected tab. See `showcaseTabs`. */
+    activeTab: Int,
+    /** Expanded ids in the Widgets tab's Tree. */
+    treeExpanded: Set[String],
+    /** Highlighted row index in the Widgets tab's Tree. */
+    treeSelected: Int,
     input: Sub[Msg],
     resize: Sub[Msg],
     tickSub: Sub[Msg]
@@ -158,6 +233,10 @@ object Stage1ShowcaseApp:
     case SelectThemeIdx(i: Int)
     case SelectBorderIdx(i: Int)
     case SelectListIdx(i: Int)
+    case SelectTab(idx: Int)
+    case ToggleTreeNode
+    case TreeUp
+    case TreeDown
     case OpenDialog
     case OpenTextInput
     case OpenListSelect
@@ -194,6 +273,9 @@ object Stage1ShowcaseApp:
         lastTextInput = None,
         lastListPick = None,
         tick = 0L,
+        activeTab = ShowcaseTabIdx,
+        treeExpanded = Set("termflow", "tui"),
+        treeSelected = 0,
         input = Sub.InputKey(k => Key(k), e => KeyError(e), ctx),
         resize = Sub.TerminalResize[Msg](200, (w, h) => Resize(w, h), ctx),
         tickSub = Sub.Every(tickPeriodMs, () => Tick, ctx)
@@ -229,6 +311,24 @@ object Stage1ShowcaseApp:
             case Dialog.ListSelect(_) =>
               m.copy(dialog = Dialog.ListSelect(clampIdx(i, listSelectItems.size))).tui
             case _ => m.tui
+        case SelectTab(idx) =>
+          m.copy(activeTab = clampIdx(idx, showcaseTabs.size)).tui
+        case ToggleTreeNode =>
+          val rows = widgets.Tree.visibleRows(demoTree, m.treeExpanded)
+          if rows.isEmpty then m.tui
+          else
+            val row = rows(clampIdx(m.treeSelected, rows.size))
+            if !row.hasChildren then m.tui
+            else
+              val next =
+                if row.expanded then m.treeExpanded - row.id
+                else m.treeExpanded + row.id
+              m.copy(treeExpanded = next).tui
+        case TreeUp =>
+          m.copy(treeSelected = math.max(0, m.treeSelected - 1)).tui
+        case TreeDown =>
+          val rows = widgets.Tree.visibleRows(demoTree, m.treeExpanded)
+          m.copy(treeSelected = math.min(math.max(0, rows.size - 1), m.treeSelected + 1)).tui
         case Quit        => Tui(m, Cmd.Exit)
         case KeyError(_) => m.tui
         case Key(k)      =>
@@ -303,17 +403,62 @@ object Stage1ShowcaseApp:
             case _      => Cmd.NoCmd
 
         case Dialog.None =>
+          // Tab-switch shortcuts work on every tab.
           k match
-            case CharKey('b') | CharKey('B') => Cmd.GCmd(CycleBorder)
-            case CharKey('t') | CharKey('T') => Cmd.GCmd(CycleTheme)
-            case CharKey('d') | CharKey('D') => Cmd.GCmd(OpenDialog)
-            case CharKey('i') | CharKey('I') => Cmd.GCmd(OpenTextInput)
-            case CharKey('l') | CharKey('L') => Cmd.GCmd(OpenListSelect)
-            case CharKey('w') | CharKey('W') => Cmd.GCmd(OpenWaiting)
-            case CharKey('q') | CharKey('Q') => Cmd.GCmd(OpenDialog)
-            case Escape                      => Cmd.GCmd(OpenDialog)
-            case Mouse(ev)                   => mouseDispatch(m, ev)
-            case _                           => Cmd.NoCmd
+            case CharKey('1') => Cmd.GCmd(SelectTab(0))
+            case CharKey('2') => Cmd.GCmd(SelectTab(1))
+            case CharKey('3') => Cmd.GCmd(SelectTab(2))
+            case _            =>
+              // Per-tab key bindings.
+              m.activeTab match
+                case WidgetsTabIdx => widgetsTabKey(k, m)
+                case HelpTabIdx    => helpTabKey(k)
+                case _             => showcaseTabKey(k, m)
+
+    /** Key bindings for the main "Showcase" tab — the original Stage 1+2 demo. */
+    private def showcaseTabKey(k: KeyDecoder.InputKey, m: Model): Cmd[Msg] =
+      import KeyDecoder.InputKey.*
+      k match
+        case CharKey('b') | CharKey('B') => Cmd.GCmd(CycleBorder)
+        case CharKey('t') | CharKey('T') => Cmd.GCmd(CycleTheme)
+        case CharKey('d') | CharKey('D') => Cmd.GCmd(OpenDialog)
+        case CharKey('i') | CharKey('I') => Cmd.GCmd(OpenTextInput)
+        case CharKey('l') | CharKey('L') => Cmd.GCmd(OpenListSelect)
+        case CharKey('w') | CharKey('W') => Cmd.GCmd(OpenWaiting)
+        case CharKey('q') | CharKey('Q') => Cmd.GCmd(OpenDialog)
+        case Escape                      => Cmd.GCmd(OpenDialog)
+        case Mouse(ev)                   => mouseDispatch(m, ev)
+        case _                           => Cmd.NoCmd
+
+    /** Key bindings for the Widgets tab — tree navigation. */
+    private def widgetsTabKey(k: KeyDecoder.InputKey, m: Model): Cmd[Msg] =
+      import KeyDecoder.InputKey.*
+      k match
+        case ArrowUp                     => Cmd.GCmd(TreeUp)
+        case ArrowDown                   => Cmd.GCmd(TreeDown)
+        case Enter | CharKey(' ')        => Cmd.GCmd(ToggleTreeNode)
+        case CharKey('q') | CharKey('Q') => Cmd.GCmd(OpenDialog)
+        case Escape                      => Cmd.GCmd(OpenDialog)
+        case Mouse(ev)                   => tabBarMouseDispatch(ev)
+        case _                           => Cmd.NoCmd
+
+    /** Key bindings for the Help tab. */
+    private def helpTabKey(k: KeyDecoder.InputKey): Cmd[Msg] =
+      import KeyDecoder.InputKey.*
+      k match
+        case CharKey('q') | CharKey('Q') => Cmd.GCmd(OpenDialog)
+        case Escape                      => Cmd.GCmd(OpenDialog)
+        case _                           => Cmd.NoCmd
+
+    /**
+     * Mouse handling reduced to just the tabs bar — for the non-Showcase
+     *  tabs that don't have any mouse-targetable panels of their own.
+     */
+    private def tabBarMouseDispatch(ev: MouseEvent): Cmd[Msg] =
+      ev match
+        case MouseEvent.Press(MouseButton.Left, col, row, _) =>
+          tabHitTest(col, row).map(idx => Cmd.GCmd[Msg](SelectTab(idx))).getOrElse(Cmd.NoCmd)
+        case _ => Cmd.NoCmd
 
     /**
      * Map a [[MouseEvent]] to a model command using static panel rects.
@@ -332,11 +477,16 @@ object Stage1ShowcaseApp:
 
       ev match
         case MouseEvent.Press(MouseButton.Left, _, _, _) =>
-          if themesR.contains(col, row) then
-            themeIndexAtRow(themesR, row).map(i => Cmd.GCmd[Msg](SelectThemeIdx(i))).getOrElse(Cmd.NoCmd)
-          else if bordersR.contains(col, row) then
-            borderIndexAtRow(bordersR, row).map(i => Cmd.GCmd[Msg](SelectBorderIdx(i))).getOrElse(Cmd.NoCmd)
-          else Cmd.NoCmd
+          // Tab bar takes priority — clicks on a tab cell switch tabs
+          // regardless of which content tab is currently shown.
+          tabHitTest(col, row) match
+            case Some(idx) => Cmd.GCmd(SelectTab(idx))
+            case None =>
+              if themesR.contains(col, row) then
+                themeIndexAtRow(themesR, row).map(i => Cmd.GCmd[Msg](SelectThemeIdx(i))).getOrElse(Cmd.NoCmd)
+              else if bordersR.contains(col, row) then
+                borderIndexAtRow(bordersR, row).map(i => Cmd.GCmd[Msg](SelectBorderIdx(i))).getOrElse(Cmd.NoCmd)
+              else Cmd.NoCmd
 
         case MouseEvent.Scroll(dir, _, _, _) =>
           if themesR.contains(col, row) then
@@ -420,6 +570,15 @@ object Stage1ShowcaseApp:
     private def borderIndexAtRow(panel: Rect, row: Int): Option[Int] =
       val offset = row - (panel.row + 2)
       if offset >= 0 && offset < borderStyles.size then Some(offset) else None
+
+    /**
+     * Map a click `(col, row)` to a tab index when it lands on the Tabs
+     * bar at row 2. Returns `None` when the click is on a separator,
+     * outside the bar, or on a different row.
+     */
+    private def tabHitTest(col: Int, row: Int): Option[Int] =
+      if row != tabsRow then None
+      else widgets.Tabs.hitTest(showcaseTabs, colOffset = col - tabsCol)
 
     private def themesRect(m: Model): Rect =
       Rect(col = m.width - themesPanelWidth, row = topRowY, width = themesPanelWidth, height = topPanelHeight)
@@ -521,53 +680,60 @@ object Stage1ShowcaseApp:
         )
       )
 
-      val helpNode = TextNode(
-        2.x,
-        (m.height - 1).y,
-        List(
-          " click ".themed(_.primary),
-          "/scroll Themes & Borders  ".text,
-          " b ".themed(_.primary),
-          "border  ".text,
-          " t ".themed(_.primary),
-          "theme  ".text,
-          " d ".themed(_.primary),
-          "confirm  ".text,
-          " i ".themed(_.primary),
-          "input  ".text,
-          " l ".themed(_.primary),
-          "list  ".text,
-          " w ".themed(_.primary),
-          "wait  ".text,
-          " q ".themed(_.primary),
-          "quit ".text
-        )
+      // Tab-aware help footer — common bindings on the left, then per-tab
+      // hints on the right.
+      val tabSwitch = List[Text](
+        " 1/2/3 ".themed(_.primary),
+        "switch tab  ".text,
+        " click tab ".themed(_.primary),
+        "  ".text
       )
+      val perTab: List[Text] = m.activeTab match
+        case WidgetsTabIdx =>
+          List(
+            " ↑/↓ ".themed(_.primary),
+            "move  ".text,
+            " Space ".themed(_.primary),
+            "toggle  ".text
+          )
+        case HelpTabIdx =>
+          List(" press 1 / 2 to leave Help ".themed(_.info), "  ".text)
+        case _ =>
+          List(
+            " b ".themed(_.primary),
+            "border  ".text,
+            " t ".themed(_.primary),
+            "theme  ".text,
+            " d ".themed(_.primary),
+            "confirm  ".text,
+            " i ".themed(_.primary),
+            "input  ".text,
+            " l ".themed(_.primary),
+            "list  ".text,
+            " w ".themed(_.primary),
+            "wait  ".text
+          )
+      val tail     = List[Text](" q ".themed(_.primary), "quit ".text)
+      val helpNode = TextNode(2.x, (m.height - 1).y, tabSwitch ++ perTab ++ tail)
 
-      // Static stage Tabs bar — sits on row 2, between the title row and
-      // the panels (which start at topRowY = 3). The active tab marks the
-      // current development stage. Renders the real Tabs widget so the
-      // showcase exercises every shipped widget end-to-end.
+      // Interactive Tabs bar at row 2 — click a cell or press 1/2/3 to
+      // switch the body. The hit-test in mouseDispatch / tabBarMouseDispatch
+      // routes clicks against the same `showcaseTabs` labels.
       val tabsNode = widgets.Tabs(
-        labels = showcaseStageTabs,
-        activeIndex = showcaseStageTabs.size - 1
+        labels = showcaseTabs,
+        activeIndex = m.activeTab,
+        at = Coord(tabsCol.x, tabsRow.y)
       )
-      val stageTabs = Layout.translate(tabsNode, dx = 1, dy = 1) // anchor at (2, 2)
 
-      val panels: List[VNode] = List(
-        capabilitiesPanel(m, capsRect),
-        palettePanel(m, paletteRect(m)),
-        themesPanel(m, themesRect(m)),
-        bordersPanel(m, bordersRect(m)),
-        stylesPanel(stylesRect),
-        unicodePanel(unicodeRect(m)),
-        liveInputPanel(m, liveInputRect(m))
-      )
+      val body: List[VNode] = m.activeTab match
+        case WidgetsTabIdx => widgetsTabBody(m)
+        case HelpTabIdx    => helpTabBody(m)
+        case _             => showcaseTabBody(m)
 
       val baseRoot = RootNode(
         width = math.max(60, m.width),
         height = math.max(20, m.height),
-        children = (titleNode :: stageTabs :: panels) ++ List(helpNode),
+        children = (titleNode :: tabsNode :: body) ++ List(helpNode),
         input = None
       )
 
@@ -719,6 +885,66 @@ object Stage1ShowcaseApp:
 
     private def truncate(s: String, max: Int): String =
       if s.length <= max then s else s.take(max - 1) + "…"
+
+    /**
+     * Body content for the main "Showcase" tab — the original 7-panel
+     *  Stage 1 + 2 demo.
+     */
+    private def showcaseTabBody(m: Model)(using theme: Theme): List[VNode] = List(
+      capabilitiesPanel(m, capsRect),
+      palettePanel(m, paletteRect(m)),
+      themesPanel(m, themesRect(m)),
+      bordersPanel(m, bordersRect(m)),
+      stylesPanel(stylesRect),
+      unicodePanel(unicodeRect(m)),
+      liveInputPanel(m, liveInputRect(m))
+    )
+
+    /**
+     * Body content for the "Widgets" tab — a single full-width panel
+     *  showing the Tree widget over a sample file tree, with arrow-key
+     *  navigation and Space/Enter to expand/collapse.
+     */
+    private def widgetsTabBody(m: Model)(using theme: Theme): List[VNode] =
+      val r     = widgetsTabRect(m)
+      val title = TextNode(2.x, 1.y, List(" Tree widget demo ".themed(_.primary)))
+      val intro = TextNode(2.x, 3.y, List("Arrow keys move; Space/Enter toggles a node.".text))
+      val treeRows = widgets.Tree(
+        roots = demoTree,
+        expanded = m.treeExpanded,
+        selectedIndex = m.treeSelected,
+        render = (_: DemoNode).name,
+        at = Coord(2.x, 5.y)
+      )
+      List(panel(r, theme, title :: intro :: treeRows))
+
+    /** Body content for the "Help" tab — keybinding reference + about info. */
+    private def helpTabBody(m: Model)(using theme: Theme): List[VNode] =
+      val r     = widgetsTabRect(m)
+      val title = TextNode(2.x, 1.y, List(" Keybindings & help ".themed(_.primary)))
+      val rows = List(
+        TextNode(2.x, 3.y, List(" 1 / 2 / 3 ".themed(_.primary), "  switch tab".text)),
+        TextNode(2.x, 5.y, List(" Showcase tab".themed(_.success))),
+        TextNode(2.x, 6.y, List("   b  cycle border style".text)),
+        TextNode(2.x, 7.y, List("   t  cycle theme".text)),
+        TextNode(2.x, 8.y, List("   d  open confirm dialog".text)),
+        TextNode(2.x, 9.y, List("   i  open text-input dialog".text)),
+        TextNode(2.x, 10.y, List("   l  open list-select dialog".text)),
+        TextNode(2.x, 11.y, List("   w  open waiting dialog".text)),
+        TextNode(2.x, 13.y, List(" Widgets tab".themed(_.success))),
+        TextNode(2.x, 14.y, List("   ↑/↓  move tree selection".text)),
+        TextNode(2.x, 15.y, List("   Space/Enter  toggle node".text)),
+        TextNode(2.x, 17.y, List(" Anywhere".themed(_.success))),
+        TextNode(2.x, 18.y, List("   q / Esc  open quit confirmation".text)),
+        TextNode(2.x, 19.y, List("   click on Tabs bar  switch tab".text))
+      )
+      List(panel(r, theme, title :: rows))
+
+    /** Rect that fills the area below the Tabs bar to the help footer. */
+    private def widgetsTabRect(m: Model): Rect =
+      val top    = topRowY
+      val bottom = math.max(top + 5, m.height - 2) // leave row m.height-1 for footer
+      Rect(col = 1, row = top, width = math.max(60, m.width), height = bottom - top + 1)
 
     /** Bordered panel positioned at `r` with the theme's border style. */
     private def panel(r: Rect, theme: Theme, children: List[VNode]): VNode =

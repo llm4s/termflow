@@ -459,6 +459,23 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(d.model.themeName == "dark", "click on the top item row must select index 0")
   }
 
+  test("Themes panel renders RadioGroup markers (◉ for selected, ○ for unselected)") {
+    val d        = driver
+    val frame    = d.frame
+    val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
+    assert(rendered.contains("◉"), "selected RadioGroup marker should appear in the frame")
+    assert(rendered.contains("○"), "unselected RadioGroup marker should appear in the frame")
+  }
+
+  test("Styles panel renders CheckBox demo (☐ off and ☒ on)") {
+    val d        = driver
+    val frame    = d.frame
+    val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
+    assert(rendered.contains("☐"), "unchecked CheckBox glyph should appear in the frame")
+    assert(rendered.contains("☒"), "checked CheckBox glyph should appear in the frame")
+    assert(rendered.contains("focus"), "focused CheckBox label should appear in the frame")
+  }
+
   // Silence unused-import lint warning for AnsiRenderer (it's referenced
   // implicitly through TuiTestDriver, but the file would warn otherwise).
   private val _ = AnsiRenderer.getClass

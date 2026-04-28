@@ -170,6 +170,33 @@ class ConsoleKeyPressSourceSpec extends AnyFunSuite:
       case InputKey.Unknown(_) => ()
       case other               => fail(s"expected Unknown, got $other")
 
+  test("scroll release byte (`m`) is silently dropped — no double-fire") {
+    // Some terminals emit M *and* m for each wheel detent; the m must not
+    // surface as a duplicate Scroll event. Source emits only the press.
+    val source = ConsoleKeyPressSource(new StringReader("\u001b[<64;3;3M\u001b[<64;3;3m"))
+    try
+      val first = source.next()
+      assert(first == Key(InputKey.Mouse(MouseEvent.Scroll(ScrollDirection.Up, 3, 3, KeyDecoder.Modifiers()))))
+      val second = source.next()
+      assert(
+        second == InputRead.End,
+        s"release byte should be filtered; expected End after one event, got $second"
+      )
+    finally
+      assert(source.close().isSuccess)
+      ()
+  }
+
+  test("standalone scroll-release (no preceding press) is also dropped") {
+    val source = ConsoleKeyPressSource(new StringReader("\u001b[<64;3;3m"))
+    try
+      val read = source.next()
+      assert(read == InputRead.End, s"orphan release should be filtered, got $read")
+    finally
+      assert(source.close().isSuccess)
+      ()
+  }
+
   test("Modifiers.fromXtermCode encodes the xterm bitmap"):
     import KeyDecoder.Modifiers
     assert(Modifiers.fromXtermCode(2) == Modifiers(shift = true))

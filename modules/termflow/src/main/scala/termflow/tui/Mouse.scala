@@ -83,13 +83,19 @@ object MouseEvent:
       else None
 
     if isScroll then
-      val dir = button & 0x03 match
-        case 0 => Some(ScrollDirection.Up)
-        case 1 => Some(ScrollDirection.Down)
-        case 2 => Some(ScrollDirection.Left)
-        case 3 => Some(ScrollDirection.Right)
-        case _ => None
-      dir.map(d => Scroll(d, col, row, mods))
+      // Some terminals (gnome-terminal, modern xterms) emit BOTH `M` (press)
+      // and `m` (release) for a single wheel tick. xterm CTLSEQS only
+      // mandates the press form. We treat the release as a duplicate and
+      // drop it so apps see one Scroll event per physical wheel detent.
+      if releaseFinal then None
+      else
+        val dir = button & 0x03 match
+          case 0 => Some(ScrollDirection.Up)
+          case 1 => Some(ScrollDirection.Down)
+          case 2 => Some(ScrollDirection.Left)
+          case 3 => Some(ScrollDirection.Right)
+          case _ => None
+        dir.map(d => Scroll(d, col, row, mods))
     else
       val btn = (button & 0x80) match
         case 0 =>

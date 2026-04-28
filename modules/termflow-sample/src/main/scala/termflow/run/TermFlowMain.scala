@@ -29,6 +29,7 @@ object TermFlowMain:
       case Some("input-line") | Some("input")    => TuiRuntime.run(termflow.apps.input.InputLineReproApp.App)
       case Some("dialog") | Some("dialog-demo")  => TuiRuntime.run(termflow.apps.dialog.DialogDemoApp.App)
       case Some("file-dialog") | Some("filedlg") => TuiRuntime.run(termflow.apps.dialog.FileDialogDemoApp.App)
+      case Some("dashboard") | Some("dash")      => TuiRuntime.run(termflow.apps.dashboard.DashboardApp.App)
       case Some(_)                               => SampleHubMain.main(Array.empty)
 
   def syncCounterMain(args: Array[String]): Unit =

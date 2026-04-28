@@ -439,11 +439,33 @@ listSelect, `w` = waiting). Tests live in `DialogsSpec`.
 | `Form` builder | done (PR #171) — declarative `Vector[Form.Row]` of (id, label, widget render fn); pairs with `FocusManager` for navigation; per-row `errors: Map[FocusId, String]` annotations. |
 | `SplitPane` | done (PR #171) — horizontal / vertical two-pane layout at a configurable ratio; renderer callbacks receive resolved `(at, w, h)`. Drag-to-resize deferred to the mouse hit-test cache follow-up; companion `dividerRect` exposes the drag region for apps that want to wire it manually now. |
 
-### 6.3 Keymap framework (P1, small)
+### 6.3 Keymap framework (P1, small) — **done**
 
-Today apps wire keys ad-hoc. A `Keymap` module that registers chord
-sequences (`Ctrl+X Ctrl+C`), supports modes (insert / normal / visual à la
-modal editors), and exposes a help popup.
+Single-key `Keymap` was already shipped earlier with the focus / quit /
+editing helpers. Stage 3 extended the module with three additional
+pieces:
+
+- **`ChordKeymap[Msg]`** — multi-key sequences keyed by
+  `Vector[InputKey]`. The companion `step(state, key)` returns one of
+  three `ChordResult` outcomes — `Pending` (the user typed a strict
+  prefix and should keep going), `Resolved` (the chord completed and
+  the bound message should fire), or `NoMatch` (the partial-or-empty
+  sequence couldn't lead to a binding, so it resets and the unmatched
+  key falls through). Apps hold a single `ChordState` in their model
+  and feed each keystroke through `step`.
+
+- **`ModalKeymap[Mode, Msg]`** — different chord keymaps per mode,
+  driving the modal-editor metaphor (Vim's normal/insert/visual).
+  `step(mode, state, key)` dispatches into the active mode's chord
+  table; mode transitions are themselves messages.
+
+- **`KeymapHelp.overlay`** — drop-in modal `Overlay` listing the
+  bindings in a `ChordKeymap` as `<chord>  <description>` rows.
+  Pairs with `Keymap.renderChord` for human-readable chord rendering
+  (`"C-x C-c"`, `"S-Tab"`, `"Up"`, etc.).
+
+The single-key `Keymap` API is unchanged, and `ChordKeymap.fromKeymap`
+promotes it for free, so existing apps don't need to migrate.
 
 ### 6.4 Testkit module (P1, small)
 
@@ -756,6 +778,15 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
   loop end-to-end. Five helpers shipped (`message`, `confirm`,
   `textInput`, `listSelect`, `waiting`); `FileDialog` and the standalone
   `actionList` deferred to a follow-up PR.
+- *2026-04-28* — Stage 3 §6.3 keymap framework completed. Single-key
+  `Keymap` left untouched; `ChordKeymap[Msg]`, `ModalKeymap[Mode, Msg]`,
+  and `KeymapHelp.overlay` added alongside it. Chord dispatch returns
+  one of three explicit outcomes (`Pending`/`Resolved`/`NoMatch`) so
+  apps can interleave fall-through to other handlers when a key isn't
+  part of a chord — the alternative (a single `Option[Msg]` return)
+  loses the prefix/no-match distinction the dispatcher needs. Same PR
+  migrates `forms/FormDemoApp` to use the `Form.column` builder
+  shipped in #171, completing the Stage 3 DoD on that demo.
 
 ---
 

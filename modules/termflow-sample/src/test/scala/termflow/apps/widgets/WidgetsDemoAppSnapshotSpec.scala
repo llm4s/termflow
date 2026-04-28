@@ -94,7 +94,7 @@ class WidgetsDemoAppSnapshotSpec extends AnyFunSuite with GoldenSupport:
 
   test("ConsoleInputKey dispatches via the Keymap — Tab cycles focus"):
     val d = driver()
-    d.send(Msg.ConsoleInputKey(KeyDecoder.InputKey.Ctrl('I')))
+    d.send(Msg.ConsoleInputKey(KeyDecoder.InputKey.Tab))
     assert(d.model.fm.isFocused(CancelFocus))
 
   test("ConsoleInputKey dispatches via the Keymap — q quits"):
@@ -107,7 +107,7 @@ class WidgetsDemoAppSnapshotSpec extends AnyFunSuite with GoldenSupport:
     // dropped without breaking this test.
     val k = WidgetsDemoApp.Keys
     import KeyDecoder.InputKey.*
-    assert(k.lookup(Ctrl('I')).contains(Msg.NextFocus))
+    assert(k.lookup(Tab).contains(Msg.NextFocus))
     assert(k.lookup(Enter).contains(Msg.Activate))
     assert(k.lookup(CharKey(' ')).contains(Msg.Activate))
     assert(k.lookup(CharKey('t')).contains(Msg.ToggleTheme))

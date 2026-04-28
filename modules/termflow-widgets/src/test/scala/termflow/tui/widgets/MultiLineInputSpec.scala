@@ -85,6 +85,13 @@ class MultiLineInputSpec extends AnyFunSuite:
     val (s, _)  = MultiLineInput.handleKey[String](initial, InputKey.ArrowLeft)
     assert(s.cursorCol == 1, "should jump back over the surrogate pair")
 
+  // ---- Tab ---------------------------------------------------------------
+
+  test("Tab inserts a literal '\\t' into the cursor row"):
+    val (s, _) = MultiLineInput.handleKey[String](MultiLineInput.State.empty, InputKey.Tab)
+    assert(s.lines == Vector("\t"))
+    assert(s.cursorCol == 1)
+
   // ---- Home / End ---------------------------------------------------------
 
   test("Home moves to col 0; End moves to end of line"):

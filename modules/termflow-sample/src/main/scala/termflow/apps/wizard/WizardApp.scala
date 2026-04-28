@@ -200,9 +200,9 @@ object WizardApp:
     if isQuitKey then m // runtime handles Quit at the App layer
     else
       k match
-        case CharKey('\t') => step(m, NextFocus)
-        case BackTab       => step(m, PrevFocus)
-        case _             => stepKeyForStep(m, k)
+        case Tab     => step(m, NextFocus)
+        case BackTab => step(m, PrevFocus)
+        case _       => stepKeyForStep(m, k)
 
   private def stepKeyForStep(m: Model, k: KeyDecoder.InputKey): Model =
     import KeyDecoder.InputKey.*

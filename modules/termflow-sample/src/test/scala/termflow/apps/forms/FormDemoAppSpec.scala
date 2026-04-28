@@ -124,7 +124,7 @@ class FormDemoAppSpec extends AnyFunSuite with GoldenSupport:
   test("Tab inside a TextField advances focus and keeps the buffer"):
     val d = driver()
     typeKeys(d, "alice")
-    d.send(Msg.ConsoleInputKey(InputKey.Ctrl('I'))) // Tab
+    d.send(Msg.ConsoleInputKey(InputKey.Tab)) // Tab
     assert(d.model.fm.isFocused(EmailId))
     assert(d.model.name.buffer == "alice")
 
@@ -224,8 +224,8 @@ class FormDemoAppSpec extends AnyFunSuite with GoldenSupport:
 
   test("Globals bind only truly-global keys — no printable letters"):
     val g = FormDemoApp.Globals
-    assert(g.lookup(InputKey.Ctrl('I')).contains(Msg.NextFocus)) // Tab
-    assert(g.lookup(InputKey.BackTab).contains(Msg.PrevFocus))   // Shift+Tab
+    assert(g.lookup(InputKey.Tab).contains(Msg.NextFocus))     // Tab
+    assert(g.lookup(InputKey.BackTab).contains(Msg.PrevFocus)) // Shift+Tab
     assert(g.lookup(InputKey.Ctrl('C')).contains(Msg.Quit))
     assert(g.lookup(InputKey.Escape).contains(Msg.Quit))
     assert(g.lookup(InputKey.Ctrl('T')).contains(Msg.ToggleTheme))
@@ -294,7 +294,7 @@ class FormDemoAppSpec extends AnyFunSuite with GoldenSupport:
   test("after typing into Name + Tab to Email"):
     val d = driver()
     typeKeys(d, "alice")
-    d.send(Msg.ConsoleInputKey(InputKey.Ctrl('I'))) // Tab
+    d.send(Msg.ConsoleInputKey(InputKey.Tab)) // Tab
     assertGoldenFrame(d.frame, "name-typed-email-focused")
 
   test("after submitting a complete form"):

@@ -32,6 +32,12 @@ class KeyDecoderSpec extends AnyFunSuite:
     assert(KeyDecoder.decode(4) == InputKey.Ctrl('D'))
     assert(KeyDecoder.decode(26) == InputKey.Ctrl('Z'))
 
+  test("decode Tab as InputKey.Tab — not Ctrl('I')"):
+    // ASCII 9 (HT) is the byte produced by both Tab and Ctrl+I; we
+    // surface it as Tab so focus dispatchers don't have to know the
+    // encoding detail.
+    assert(KeyDecoder.decode(9) == InputKey.Tab)
+
   test("decode unknown codes"):
     assert(KeyDecoder.decode(0) == InputKey.Unknown("0"))
     assert(KeyDecoder.decode(200) == InputKey.Unknown("200"))

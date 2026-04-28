@@ -82,12 +82,12 @@ class WizardAppSpec extends AnyFunSuite:
   test("Tab cycles focus inside the Account step") {
     val d = driver
     assert(d.model.currentFocus.current.contains(WizardApp.NameId))
-    d.send(WizardApp.Msg.Key(InputKey.CharKey('\t')))
+    d.send(WizardApp.Msg.Key(InputKey.Tab))
     assert(d.model.currentFocus.current.contains(WizardApp.EmailId))
-    d.send(WizardApp.Msg.Key(InputKey.CharKey('\t')))
+    d.send(WizardApp.Msg.Key(InputKey.Tab))
     assert(d.model.currentFocus.current.contains(WizardApp.NextAccountId))
     // Wraps around.
-    d.send(WizardApp.Msg.Key(InputKey.CharKey('\t')))
+    d.send(WizardApp.Msg.Key(InputKey.Tab))
     assert(d.model.currentFocus.current.contains(WizardApp.NameId))
   }
 

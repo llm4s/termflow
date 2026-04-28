@@ -699,8 +699,8 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     val d = driver
     d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('6')))
     // Tab past Name and Email so focus is on the Next button (no TextField).
-    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('\t')))
-    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('\t')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Tab))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Tab))
     d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('q')))
     assert(d.model.dialog.isInstanceOf[Stage1ShowcaseApp.Dialog.ConfirmQuit])
   }

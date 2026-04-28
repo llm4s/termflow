@@ -99,7 +99,7 @@ object Keymap:
   /**
    * Conventional focus bindings: `Tab` advances, `Shift+Tab` retreats.
    *
-   * `Tab` arrives as `Ctrl+I` from the ASCII decoder; `Shift+Tab` arrives
+   * `Tab` is a distinct [[InputKey.Tab]] (decoded from ASCII 9); `Shift+Tab` arrives
    * as `InputKey.BackTab` (decoded from the `[Z` escape sequence).
    *
    * @param next     Message dispatched on `Tab`.
@@ -107,8 +107,8 @@ object Keymap:
    */
   def focus[Msg](next: Msg, previous: Msg): Keymap[Msg] =
     Keymap(
-      InputKey.Ctrl('I') -> next,
-      InputKey.BackTab   -> previous
+      InputKey.Tab     -> next,
+      InputKey.BackTab -> previous
     )
 
   /**
@@ -205,6 +205,7 @@ object Keymap:
     case InputKey.ArrowDown              => "Down"
     case InputKey.ArrowLeft              => "Left"
     case InputKey.ArrowRight             => "Right"
+    case InputKey.Tab                    => "Tab"
     case InputKey.BackTab                => "S-Tab"
     case InputKey.F1                     => "F1"
     case InputKey.F2                     => "F2"

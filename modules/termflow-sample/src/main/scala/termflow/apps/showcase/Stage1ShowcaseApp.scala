@@ -778,7 +778,7 @@ object Stage1ShowcaseApp:
           k match
             // Esc cancels; Tab moves focus between OK and Cancel.
             case Escape => Cmd.GCmd(CloseDialog)
-            case CharKey('\t') | KeyDecoder.InputKey.BackTab =>
+            case Tab | BackTab =>
               Cmd.GCmd(ToggleDialogFocus)
             case _ => Cmd.NoCmd
 
@@ -915,7 +915,7 @@ object Stage1ShowcaseApp:
       // text focus so typing letters into a TextField stays unaffected;
       // digits collide with showcase tab shortcuts and are reserved.
       val pre: Option[Tui[Model, Msg]] = k match
-        case CharKey('\t')                               => Some(m.copy(inputsFocus = m.inputsFocus.next).tui)
+        case Tab                                         => Some(m.copy(inputsFocus = m.inputsFocus.next).tui)
         case BackTab                                     => Some(m.copy(inputsFocus = m.inputsFocus.previous).tui)
         case Escape                                      => Some(Tui(m, Cmd.GCmd(OpenDialog)))
         case CharKey('q') | CharKey('Q') if !textFocused => Some(Tui(m, Cmd.GCmd(OpenDialog)))
@@ -971,7 +971,7 @@ object Stage1ShowcaseApp:
       val _ = ctx
       import KeyDecoder.InputKey.*
       val pre: Option[Tui[Model, Msg]] = k match
-        case CharKey('\t')               => Some(m.copy(dataFocus = m.dataFocus.next).tui)
+        case Tab                         => Some(m.copy(dataFocus = m.dataFocus.next).tui)
         case BackTab                     => Some(m.copy(dataFocus = m.dataFocus.previous).tui)
         case Escape                      => Some(Tui(m, Cmd.GCmd(OpenDialog)))
         case CharKey('q') | CharKey('Q') => Some(Tui(m, Cmd.GCmd(OpenDialog)))

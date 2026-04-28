@@ -174,6 +174,16 @@ object MultiLineInput:
       case InputKey.End =>
         (clamp(s.copy(cursorCol = s.currentLine.length)), None)
 
+      case InputKey.Tab =>
+        // Insert a literal `\t` so Tab in a text editor does what users
+        // typing into one expect. Apps that want focus traversal across
+        // multiple widgets should intercept Tab before feeding the key
+        // into [[handleKey]].
+        val line   = s.currentLine
+        val newCol = s.cursorCol + 1
+        val newLn  = line.substring(0, s.cursorCol) + '\t' + line.substring(s.cursorCol)
+        (clamp(s.copy(lines = s.lines.updated(s.cursorRow, newLn), cursorCol = newCol)), None)
+
       case _ => (s, None)
 
   /**

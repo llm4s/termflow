@@ -159,7 +159,7 @@ class CatalogDemoAppSpec extends AnyFunSuite with GoldenSupport:
 
   test("Globals bind Tab / Shift+Tab / Ctrl+T / Ctrl+C / Esc but NOT vertical arrows"):
     val g = CatalogDemoApp.Globals
-    assert(g.lookup(InputKey.Ctrl('I')).contains(Msg.NextFocus))
+    assert(g.lookup(InputKey.Tab).contains(Msg.NextFocus))
     assert(g.lookup(InputKey.BackTab).contains(Msg.PrevFocus))
     assert(g.lookup(InputKey.Ctrl('T')).contains(Msg.ToggleTheme))
     assert(g.lookup(InputKey.Ctrl('C')).contains(Msg.Quit))

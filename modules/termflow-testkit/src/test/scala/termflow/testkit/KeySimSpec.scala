@@ -29,7 +29,7 @@ class KeySimSpec extends AnyFunSuite:
     assert(KeySim.ArrowLeft == InputKey.ArrowLeft)
     assert(KeySim.ArrowRight == InputKey.ArrowRight)
     assert(KeySim.BackTab == InputKey.BackTab)
-    assert(KeySim.Tab == InputKey.CharKey('\t'))
+    assert(KeySim.Tab == InputKey.Tab)
   }
 
   test("f produces F1..F12 cases") {
@@ -94,9 +94,9 @@ class KeySimSpec extends AnyFunSuite:
     assert(keys == Vector(InputKey.CharKey('h'), InputKey.CharKey('i')))
   }
 
-  test("typeString returns a CharKey for tab") {
+  test("typeString turns tab into InputKey.Tab") {
     val keys = KeySim.typeString("a\tb")
-    assert(keys == Vector(InputKey.CharKey('a'), InputKey.CharKey('\t'), InputKey.CharKey('b')))
+    assert(keys == Vector(InputKey.CharKey('a'), InputKey.Tab, InputKey.CharKey('b')))
   }
 
   test("typeString turns LF into Enter") {

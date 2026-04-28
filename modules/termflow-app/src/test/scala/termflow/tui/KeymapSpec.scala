@@ -55,9 +55,9 @@ class KeymapSpec extends AnyFunSuite:
     assert(k.lookup(InputKey.CharKey('q')).contains(DemoMsg.Quit))
     assert(k.lookup(InputKey.CharKey('Q')).contains(DemoMsg.Quit))
 
-  test("Keymap.focus binds Tab (Ctrl+I) to next and BackTab (Shift+Tab) to previous"):
+  test("Keymap.focus binds Tab to next and BackTab (Shift+Tab) to previous"):
     val k = Keymap.focus(next = DemoMsg.NextFocus, previous = DemoMsg.A)
-    assert(k.lookup(InputKey.Ctrl('I')).contains(DemoMsg.NextFocus))
+    assert(k.lookup(InputKey.Tab).contains(DemoMsg.NextFocus))
     assert(k.lookup(InputKey.BackTab).contains(DemoMsg.A))
     assert(k.size == 2)
 
@@ -80,7 +80,7 @@ class KeymapSpec extends AnyFunSuite:
         Keymap.focusHorizontal(previous = DemoMsg.A, next = DemoMsg.NextFocus)
     assert(k.size == 6) // Tab + BackTab + Up + Down + Left + Right
     // Spot-check that all six distinct keys land where expected.
-    assert(k.lookup(InputKey.Ctrl('I')).contains(DemoMsg.NextFocus))
+    assert(k.lookup(InputKey.Tab).contains(DemoMsg.NextFocus))
     assert(k.lookup(InputKey.BackTab).contains(DemoMsg.A))
     assert(k.lookup(InputKey.ArrowUp).contains(DemoMsg.A))
     assert(k.lookup(InputKey.ArrowDown).contains(DemoMsg.NextFocus))
@@ -106,7 +106,7 @@ class KeymapSpec extends AnyFunSuite:
       InputKey.CharKey('q') -> DemoMsg.A // override quit's q->Quit
     )
     val full = baseline ++ mine
-    assert(full.lookup(InputKey.Ctrl('C')).contains(DemoMsg.Quit))      // baseline
-    assert(full.lookup(InputKey.Ctrl('I')).contains(DemoMsg.NextFocus)) // baseline
-    assert(full.lookup(InputKey.CharKey('q')).contains(DemoMsg.A))      // override
-    assert(full.lookup(InputKey.CharKey('Q')).contains(DemoMsg.Quit))   // baseline preserved
+    assert(full.lookup(InputKey.Ctrl('C')).contains(DemoMsg.Quit))    // baseline
+    assert(full.lookup(InputKey.Tab).contains(DemoMsg.NextFocus))     // baseline
+    assert(full.lookup(InputKey.CharKey('q')).contains(DemoMsg.A))    // override
+    assert(full.lookup(InputKey.CharKey('Q')).contains(DemoMsg.Quit)) // baseline preserved

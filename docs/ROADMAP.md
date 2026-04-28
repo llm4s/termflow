@@ -424,16 +424,20 @@ The five shipped helpers cover the everyday cases. All five are
 exercised by `sbt showcase` (`d` = confirm, `i` = textInput, `l` =
 listSelect, `w` = waiting). Tests live in `DialogsSpec`.
 
-### 6.2 Additional widgets (P1, medium)
+### 6.2 Additional widgets (P1, medium) — **complete**
 
-- `CheckBox`, `RadioGroup`
-- `ComboBox` (closed) and `Autocomplete` (open)
-- `Tree[A]`
-- `Tabs` widget (we have a sample demo of this — promote to first-class)
-- `Menu` / `MenuBar` with chord support
-- `Form` builder — declarative composition of fields + validation
-- `SplitPane` (horizontal / vertical, resizable via mouse drag)
-- `LogView` — efficient append-only buffer with scrollback
+| Widget | Status |
+|---|---|
+| `CheckBox` | done (PR #169) — `☒` / `☐` glyphs with ASCII fallback. |
+| `RadioGroup` | done (PR #169) — `◉` / `○` markers; selected and focused are independent. |
+| `Tabs` | done (PR #170) — horizontal bar with `[ X ]` active cell; companion `width` + `hitTest`. |
+| `LogView` | done (PR #170) — append-only viewer with viewport scrolling; pure helpers (`wrapLine` / `viewport` / `maxScroll`) for hit-test math. |
+| `Tree[A]` | done (PR #170) — generic recursive tree via `Tree.Children[A, Id]` type-class; `▾` / `▸` chevrons + per-depth indent; companion `visibleRows` for hit-testing outside the widget. |
+| `ComboBox` (closed) | already shipped as `Select` since 0.2. |
+| `Autocomplete` (open) | done (PR #171) — `State[A]` holds input + options + selectedIdx; pluggable `matches` predicate; companion `handleKey` returns `(state, picked: Option[A])`. |
+| `Menu` / `MenuBar` | done (PR #171) — horizontal title bar + on-demand dropdown; pure `handleKey` dispatcher returns picked `(menuIdx, itemIdx)`; companion `hitTest` maps clicks to title cells or dropdown rows. |
+| `Form` builder | done (PR #171) — declarative `Vector[Form.Row]` of (id, label, widget render fn); pairs with `FocusManager` for navigation; per-row `errors: Map[FocusId, String]` annotations. |
+| `SplitPane` | done (PR #171) — horizontal / vertical two-pane layout at a configurable ratio; renderer callbacks receive resolved `(at, w, h)`. Drag-to-resize deferred to the mouse hit-test cache follow-up; companion `dividerRect` exposes the drag region for apps that want to wire it manually now. |
 
 ### 6.3 Keymap framework (P1, small)
 
@@ -615,18 +619,18 @@ mirror this in module layout (§4.6) and docs (§7.2).
 | Label | `TextNode` (implicit) | done |
 | Button | `Button` | done |
 | TextBox | `TextField` (single-line) | done; multi-line in Stage 3 |
-| CheckBox / RadioBoxList | — | Stage 3 |
-| ComboBox | `Select` | done (closed only); open variant Stage 3 |
+| CheckBox / RadioBoxList | `CheckBox` / `RadioGroup` | done (Stage 3 #169) |
+| ComboBox | `Select` (closed) / `Autocomplete` (open) | done |
 | ActionListBox | `ListView` (close enough) | done |
 | Table | `Table` | done |
 | ProgressBar | `ProgressBar` | done |
 | Spinner (AnimatedLabel) | `Spinner` | done |
-| ScrollBar | — | Stage 3 |
-| Separator | — | Stage 3 (trivial) |
-| Tree | — | Stage 3 |
-| SplitPanel | — | Stage 3 |
+| ScrollBar | — | not started |
+| Separator | — | trivial; deferred until a real use case |
+| Tree | `Tree` | done (Stage 3 #170) |
+| SplitPanel | `SplitPane` | done (Stage 3 #171) — drag-resize deferred |
 | Panel | `BoxNode` (close enough) | done |
-| MenuBar | — | Stage 3 |
+| MenuBar | `MenuBar` | done (Stage 3 #171) |
 | StatusBar | `StatusBar` | done — *not in Lanterna* |
 
 ### 9.4 Layout managers

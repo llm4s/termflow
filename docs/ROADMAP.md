@@ -543,7 +543,10 @@ Today: 13 samples. Target: 25, with one app per major feature:
 - `tree/` — file-tree explorer.
 - `chat/` — already exists; expand to use streaming + scrollback.
 - `dashboard/` — multi-pane realtime metrics.
-- `wizard/` — multi-step form with back/forward.
+- `wizard/` — multi-step form with back/forward. **shipped** as
+  `apps.wizard.WizardApp` (`sbt wizardDemo`); 3-step Account → Plan →
+  Confirm flow with per-step `FocusManager`, validation feeding into
+  the `Form.column` errors map, and a Submit button on the final step.
 - `editor/` — minimal text editor (proves the layout/coords refactor).
 - `ssh-shell/` *(if Stage 5 ships)* — telnet/SSH demo.
 

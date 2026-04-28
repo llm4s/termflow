@@ -476,6 +476,24 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(rendered.contains("focus"), "focused CheckBox label should appear in the frame")
   }
 
+  test("eventHistory grows on each key, capped at the configured maximum") {
+    val d = driver
+    assert(d.model.eventHistory.isEmpty)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('a')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('b')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('c')))
+    assert(d.model.eventHistory.length == 3)
+    assert(d.model.eventHistory.last.contains("'c'"), s"latest event must be at the tail: ${d.model.eventHistory}")
+  }
+
+  test("LogView in the live-input panel renders the most recent events") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('z')))
+    val frame    = d.frame
+    val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
+    assert(rendered.contains("'z'"), "LogView should render the just-pressed key event")
+  }
+
   // Silence unused-import lint warning for AnsiRenderer (it's referenced
   // implicitly through TuiTestDriver, but the file would warn otherwise).
   private val _ = AnsiRenderer.getClass

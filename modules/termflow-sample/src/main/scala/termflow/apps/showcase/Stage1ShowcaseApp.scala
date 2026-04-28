@@ -107,6 +107,9 @@ object Stage1ShowcaseApp:
    */
   private val listSelectTitle: String = "List select demo"
 
+  /** Max events kept in `Model.eventHistory` for the LogView in the live panel. */
+  private val EventHistoryCap: Int = 50
+
   enum Dialog:
     case None
     case ConfirmQuit(yesFocused: Boolean)
@@ -124,6 +127,11 @@ object Stage1ShowcaseApp:
     termName: String,
     /** Most recent input event, formatted for display in the live panel. */
     lastEvent: Option[String],
+    /**
+     * Bounded history of recent events fed to the live-input panel via the
+     * LogView widget. Latest events live at the tail.
+     */
+    eventHistory: Vector[String],
     /** Last value submitted from a textInput dialog (rendered in Live input). */
     lastTextInput: Option[String],
     /** Last item picked from a listSelect dialog. */
@@ -182,6 +190,7 @@ object Stage1ShowcaseApp:
         capabilities = ctx.terminal.capabilities,
         termName = sys.env.getOrElse("TERM", "?"),
         lastEvent = None,
+        eventHistory = Vector.empty,
         lastTextInput = None,
         lastListPick = None,
         tick = 0L,
@@ -225,7 +234,11 @@ object Stage1ShowcaseApp:
         case Key(k)      =>
           // Dialog.TextInput edits its prompt state through Prompt.handleKey
           // before dispatch. Other dialogs / the base view route through dispatch.
-          val withEvent = m.copy(lastEvent = Some(formatEvent(k)))
+          val formatted = formatEvent(k)
+          val withEvent = m.copy(
+            lastEvent = Some(formatted),
+            eventHistory = (m.eventHistory :+ formatted).takeRight(EventHistoryCap)
+          )
           withEvent.dialog match
             case Dialog.TextInput(state, focus) =>
               val (nextState, maybeCmd) =
@@ -531,6 +544,16 @@ object Stage1ShowcaseApp:
         )
       )
 
+      // Static stage Tabs bar — sits on row 2, between the title row and
+      // the panels (which start at topRowY = 3). The active tab marks the
+      // current development stage. Renders the real Tabs widget so the
+      // showcase exercises every shipped widget end-to-end.
+      val tabsNode = widgets.Tabs(
+        labels = showcaseStageTabs,
+        activeIndex = showcaseStageTabs.size - 1
+      )
+      val stageTabs = Layout.translate(tabsNode, dx = 1, dy = 1) // anchor at (2, 2)
+
       val panels: List[VNode] = List(
         capabilitiesPanel(m, capsRect),
         palettePanel(m, paletteRect(m)),
@@ -544,7 +567,7 @@ object Stage1ShowcaseApp:
       val baseRoot = RootNode(
         width = math.max(60, m.width),
         height = math.max(20, m.height),
-        children = titleNode :: panels ++ List(helpNode),
+        children = (titleNode :: stageTabs :: panels) ++ List(helpNode),
         input = None
       )
 
@@ -675,21 +698,24 @@ object Stage1ShowcaseApp:
       panel(r, theme, List(title, ruler, cjk, full, emoji, mixed, hint))
 
     private def liveInputPanel(m: Model, r: Rect)(using theme: Theme): VNode =
-      val title    = TextNode(2.x, 1.y, List(" Live input ".themed(_.primary)))
-      val intro    = TextNode(2.x, 3.y, List("Most recent decoded event:".text))
-      val event    = m.lastEvent.getOrElse("(press a key, click, or paste)")
-      val eventTxt = TextNode(2.x, 5.y, List(event.themed(_.success)))
-      val txt      = m.lastTextInput.map(s => s"\"${truncate(s, 24)}\"").getOrElse("—")
-      val pick     = m.lastListPick.getOrElse("—")
+      val title = TextNode(2.x, 1.y, List(" Live input ".themed(_.primary)))
+      val intro = TextNode(2.x, 3.y, List("Recent events (LogView, scrollable):".text))
+      // LogView for the rolling event history. Five rows fit cleanly under
+      // the intro inside the 13-row bottom panel.
+      val historyRows = widgets.LogView(
+        lines = m.eventHistory,
+        width = r.width - 4,
+        height = 5,
+        at = Coord(2.x, 4.y),
+        style = Some(Style(fg = theme.success))
+      )
+      val txt  = m.lastTextInput.map(s => s"\"${truncate(s, 24)}\"").getOrElse("—")
+      val pick = m.lastListPick.getOrElse("—")
       val results = List(
-        TextNode(2.x, 7.y, List("Last text input: ".text, txt.themed(_.info))),
-        TextNode(2.x, 8.y, List("Last list pick:  ".text, pick.themed(_.info)))
+        TextNode(2.x, 10.y, List("Last text input: ".text, txt.themed(_.info))),
+        TextNode(2.x, 11.y, List("Last list pick:  ".text, pick.themed(_.info)))
       )
-      val tips = List(
-        TextNode(2.x, 10.y, List("• i / l / w opens dialog helpers".text)),
-        TextNode(2.x, 11.y, List("• Scroll-wheel cycles Themes/Borders".text))
-      )
-      panel(r, theme, List(title, intro, eventTxt) ++ results ++ tips)
+      panel(r, theme, (title :: intro :: historyRows) ++ results)
 
     private def truncate(s: String, max: Int): String =
       if s.length <= max then s else s.take(max - 1) + "…"

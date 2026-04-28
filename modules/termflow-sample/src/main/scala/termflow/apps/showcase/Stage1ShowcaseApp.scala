@@ -6,18 +6,24 @@ import termflow.tui.Tui.*
 import termflow.tui.TuiPrelude.*
 
 /**
- * Three-tab showcase of every shipped TermFlow feature.
+ * Six-tab showcase of every shipped TermFlow widget and runtime feature.
  *
- * Tabs (switch with `1` / `2` / `3` or click the cell in the bar at row 2):
+ * Tabs (switch with `1`..`6` or click the cell in the bar at row 2):
  *
- *   - **Showcase** — the Stage 1 + Stage 2 demo: capabilities, palette,
- *     themes, borders, styles, unicode width, live input + dialogs.
- *   - **Widgets** — the Tree widget over a sample file tree (arrow keys
+ *   - **1 Showcase** — Stage 1 + Stage 2 demo: capabilities, palette,
+ *     themes (RadioGroup), borders (RadioGroup), styles (CheckBox),
+ *     unicode width, LogView-driven live input, Tabs widget.
+ *   - **2 Widgets** — the Tree widget over a sample file tree (arrow keys
  *     navigate, Space / Enter toggles).
- *   - **Help** — keybinding reference + about.
+ *   - **3 Inputs** — Form widget composing TextField, Select, Autocomplete,
+ *     CheckBox, and Button. Tab/Shift+Tab cycles focus, Enter submits.
+ *   - **4 Data** — ListView + Table side-by-side with an animated Spinner
+ *     and ProgressBar in the header and a StatusBar pinned at the bottom.
+ *   - **5 Layout** — SplitPane horizontal split with a MenuBar in the left
+ *     pane; `[`/`]` resize the divider, ←/→/↓ drive the menu.
+ *   - **6 Help** — keybinding reference + about.
  *
- * Showcase tab features (every feature lands here unless it grows its own
- * tab):
+ * Stage 1+2 features (Showcase tab):
  *
  * **Stage 1**
  *   - **Color depth + capability detection** (PR #157 / issue #148): the
@@ -122,11 +128,11 @@ object Stage1ShowcaseApp:
 
   /**
    * Tab labels — each cell switches the body to a different demo. Order
-   * is the source of truth for the `1` / `2` / `3` keyboard shortcuts and
-   * for the `activeTab` indices in the model.
+   * is the source of truth for the digit keyboard shortcuts and for the
+   * `activeTab` indices in the model.
    */
   private val showcaseTabs: Vector[String] =
-    Vector("1 Showcase", "2 Widgets", "3 Help")
+    Vector("1 Showcase", "2 Widgets", "3 Inputs", "4 Data", "5 Layout", "6 Help")
 
   /**
    * 0-based row of the Tabs bar inside the root frame. Used by both the
@@ -143,7 +149,123 @@ object Stage1ShowcaseApp:
    */
   private val ShowcaseTabIdx: Int = 0
   private val WidgetsTabIdx: Int  = 1
-  private val HelpTabIdx: Int     = 2
+  private val InputsTabIdx: Int   = 2
+  private val DataTabIdx: Int     = 3
+  private val LayoutTabIdx: Int   = 4
+  private val HelpTabIdx: Int     = 5
+
+  // ---- Inputs tab (Form + TextField + Select + Autocomplete + CheckBox + Button) ----
+  private val InpNameId: FocusId    = FocusId("inp-name")
+  private val InpBioId: FocusId     = FocusId("inp-bio")
+  private val InpCountryId: FocusId = FocusId("inp-country")
+  private val InpFruitId: FocusId   = FocusId("inp-fruit")
+  private val InpAgreeId: FocusId   = FocusId("inp-agree")
+  private val InpSubmitId: FocusId  = FocusId("inp-submit")
+  private val InputsFocusOrder: Vector[FocusId] =
+    Vector(InpNameId, InpBioId, InpCountryId, InpFruitId, InpAgreeId, InpSubmitId)
+
+  private val inputCountries: Vector[String] =
+    Vector("Australia", "Brazil", "Canada", "Denmark", "Egypt", "France", "Germany")
+
+  private val inputFruits: Vector[String] = Vector(
+    "apple",
+    "apricot",
+    "banana",
+    "blackberry",
+    "blueberry",
+    "cherry",
+    "cranberry",
+    "date",
+    "elderberry",
+    "fig",
+    "grape",
+    "grapefruit",
+    "honeydew",
+    "kiwi",
+    "lemon",
+    "lime",
+    "mango",
+    "melon",
+    "nectarine",
+    "orange",
+    "papaya",
+    "peach",
+    "pear",
+    "pineapple",
+    "plum",
+    "raspberry",
+    "strawberry",
+    "tangerine",
+    "watermelon"
+  )
+
+  /** True when focus on the Inputs tab is on a key-consuming text widget. */
+  private def inputsTextFocused(m: Model): Boolean =
+    m.activeTab == InputsTabIdx && {
+      val cur = m.inputsFocus.current
+      cur.contains(InpNameId) || cur.contains(InpBioId) || cur.contains(InpFruitId) ||
+      (cur.contains(InpCountryId) && m.inputsCountry.open)
+    }
+
+  // ---- Data tab (ListView + Table + Spinner + ProgressBar + StatusBar) ----
+  private val DataListId: FocusId             = FocusId("data-list")
+  private val DataTableId: FocusId            = FocusId("data-table")
+  private val DataFocusOrder: Vector[FocusId] = Vector(DataListId, DataTableId)
+
+  /** Sample task names for the ListView/Table demo on the Data tab. */
+  private val dataTasks: Vector[String] = Vector(
+    "Buy groceries",
+    "Write report",
+    "Call alice",
+    "Review PR",
+    "Read book",
+    "Refactor module",
+    "Fix bug #123",
+    "Plan vacation",
+    "Update docs",
+    "Send email",
+    "Renew passport",
+    "Schedule meeting"
+  )
+
+  /** Stable status row per task — shown in the Table on the Data tab. */
+  private val dataStatuses: Vector[String] = Vector(
+    "todo",
+    "doing",
+    "done",
+    "todo",
+    "todo",
+    "doing",
+    "blocked",
+    "todo",
+    "doing",
+    "done",
+    "todo",
+    "doing"
+  )
+
+  /** Columns for the Data tab's Table widget. */
+  private val DataColumns: Vector[widgets.Table.Column[(String, String)]] = Vector(
+    widgets.Table.Column[(String, String)](
+      "Task",
+      width = 22,
+      align = widgets.Table.Align.Left,
+      render = _._1
+    ),
+    widgets.Table.Column[(String, String)](
+      "Status",
+      width = 8,
+      align = widgets.Table.Align.Left,
+      render = _._2
+    )
+  )
+
+  // ---- Layout tab (SplitPane + MenuBar) ----
+  private val layoutMenus: Vector[widgets.MenuBar.Menu] = Vector(
+    widgets.MenuBar.Menu("File", Vector("New", "Open…", "Save", "Save As…", "Quit")),
+    widgets.MenuBar.Menu("Edit", Vector("Cut", "Copy", "Paste", "Find…")),
+    widgets.MenuBar.Menu("View", Vector("Zoom in", "Zoom out", "Reset"))
+  )
 
   /**
    * Sample file-tree used by the Widgets tab to demo the Tree widget.
@@ -213,6 +335,22 @@ object Stage1ShowcaseApp:
     treeExpanded: Set[String],
     /** Highlighted row index in the Widgets tab's Tree. */
     treeSelected: Int,
+    // ---- Inputs tab state ----
+    inputsFocus: FocusManager,
+    inputsName: widgets.TextField.State,
+    inputsBio: widgets.TextField.State,
+    inputsCountry: widgets.Select.State[String],
+    inputsFruit: widgets.Autocomplete.State[String],
+    inputsAgree: Boolean,
+    inputsSubmitted: Option[String],
+    // ---- Data tab state ----
+    dataFocus: FocusManager,
+    dataList: widgets.ListView.State[String],
+    dataProgress: Double,
+    // ---- Layout tab state ----
+    layoutSplitRatio: Double,
+    layoutMenu: widgets.MenuBar.State,
+    layoutLastPick: Option[String],
     input: Sub[Msg],
     resize: Sub[Msg],
     tickSub: Sub[Msg]
@@ -245,6 +383,8 @@ object Stage1ShowcaseApp:
     case ToggleDialogFocus
     case TextInputAccept(value: String)
     case ListSelectAccept(index: Int)
+    case InputsSubmit
+    case LayoutMenuPick(menuTitle: String, item: String)
     case Quit
     case Key(k: KeyDecoder.InputKey)
     case KeyError(t: Throwable)
@@ -276,6 +416,19 @@ object Stage1ShowcaseApp:
         activeTab = ShowcaseTabIdx,
         treeExpanded = Set("termflow", "tui"),
         treeSelected = 0,
+        inputsFocus = FocusManager(InputsFocusOrder),
+        inputsName = widgets.TextField.State.withPlaceholder("Alice"),
+        inputsBio = widgets.TextField.State.withPlaceholder("(short bio)"),
+        inputsCountry = widgets.Select.State.of(inputCountries, visibleRows = 4).selectIndex(2),
+        inputsFruit = widgets.Autocomplete.State.of(inputFruits),
+        inputsAgree = false,
+        inputsSubmitted = None,
+        dataFocus = FocusManager(DataFocusOrder),
+        dataList = widgets.ListView.State.of(dataTasks, visibleRows = 8),
+        dataProgress = 0.0,
+        layoutSplitRatio = 0.55,
+        layoutMenu = widgets.MenuBar.State(layoutMenus),
+        layoutLastPick = None,
         input = Sub.InputKey(k => Key(k), e => KeyError(e), ctx),
         resize = Sub.TerminalResize[Msg](200, (w, h) => Resize(w, h), ctx),
         tickSub = Sub.Every(tickPeriodMs, () => Tick, ctx)
@@ -306,6 +459,14 @@ object Stage1ShowcaseApp:
           m.copy(lastTextInput = Some(value), dialog = Dialog.None).tui
         case ListSelectAccept(idx) =>
           m.copy(lastListPick = Some(listSelectItems(clampIdx(idx, listSelectItems.size))), dialog = Dialog.None).tui
+        case InputsSubmit =>
+          val name    = if m.inputsName.buffer.nonEmpty then m.inputsName.buffer else "<unnamed>"
+          val country = m.inputsCountry.value.getOrElse("?")
+          val fruit   = m.inputsFruit.selected.getOrElse("?")
+          val agree   = if m.inputsAgree then "agreed" else "not agreed"
+          m.copy(inputsSubmitted = Some(s"$name • $country • $fruit • $agree")).tui
+        case LayoutMenuPick(menuTitle, item) =>
+          m.copy(layoutLastPick = Some(s"$menuTitle › $item")).tui
         case SelectListIdx(i) =>
           m.dialog match
             case Dialog.ListSelect(_) =>
@@ -348,14 +509,27 @@ object Stage1ShowcaseApp:
               maybeCmd match
                 case Some(cmd) => Tui(nextModel, cmd)
                 case None      => Tui(nextModel, dispatch(nextModel, k))
+            case Dialog.None =>
+              // Tabs with stateful widgets (Inputs, Data, Layout) handle
+              // keys directly so they can fold the keystroke into widget
+              // state. Other tabs fall through to the Cmd-based dispatch.
+              withEvent.activeTab match
+                case InputsTabIdx => handleInputsKey(withEvent, k, ctx)
+                case DataTabIdx   => handleDataKey(withEvent, k, ctx)
+                case LayoutTabIdx => handleLayoutKey(withEvent, k, ctx)
+                case _            => Tui(withEvent, dispatch(withEvent, k))
             case _ => Tui(withEvent, dispatch(withEvent, k))
 
     /**
-     * Tick handler: advance the counter, auto-close Waiting when its
-     *  duration elapses, and otherwise leave the model alone.
+     * Tick handler: advance the counter, animate the Data tab's progress
+     *  bar, auto-close Waiting when its duration elapses, and otherwise
+     *  leave the model alone.
      */
     private def onTick(m: Model): Tui[Model, Msg] =
-      val tickedModel = m.copy(tick = m.tick + 1)
+      val nextProgress =
+        if m.dataProgress >= 1.0 then 0.0
+        else math.min(1.0, m.dataProgress + 0.01)
+      val tickedModel = m.copy(tick = m.tick + 1, dataProgress = nextProgress)
       tickedModel.dialog match
         case Dialog.Waiting(_, deadline) if tickedModel.tick >= deadline =>
           tickedModel.copy(dialog = Dialog.None).tui
@@ -404,11 +578,9 @@ object Stage1ShowcaseApp:
 
         case Dialog.None =>
           // Tab-switch shortcuts work on every tab.
-          k match
-            case CharKey('1') => Cmd.GCmd(SelectTab(0))
-            case CharKey('2') => Cmd.GCmd(SelectTab(1))
-            case CharKey('3') => Cmd.GCmd(SelectTab(2))
-            case _            =>
+          digitTabSwitch(k, allowDigits = true) match
+            case Some(idx) => Cmd.GCmd(SelectTab(idx))
+            case None      =>
               // Per-tab key bindings.
               m.activeTab match
                 case WidgetsTabIdx => widgetsTabKey(k, m)
@@ -452,6 +624,140 @@ object Stage1ShowcaseApp:
         // here — without this, the Help tab traps the user.
         case Mouse(ev) => tabBarMouseDispatch(ev)
         case _         => Cmd.NoCmd
+
+    /**
+     * Map a digit-key tab switch to the matching tab index, gated on
+     * whether a text-consuming widget currently has focus (in which case
+     * the digit should be inserted instead of switching tabs).
+     */
+    private def digitTabSwitch(k: KeyDecoder.InputKey, allowDigits: Boolean): Option[Int] =
+      import KeyDecoder.InputKey.*
+      if !allowDigits then None
+      else
+        k match
+          case CharKey(c) if c >= '1' && c <= ('0' + showcaseTabs.size).toChar =>
+            Some(c - '1')
+          case _ => None
+
+    /**
+     * Key bindings for the Inputs tab — TextField / Select / Autocomplete
+     * / CheckBox / Button composed via the [[Form]] widget. Updates the
+     * model directly so widget state can be folded in without a round
+     * trip through dispatch.
+     */
+    private def handleInputsKey(m: Model, k: KeyDecoder.InputKey, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+      import KeyDecoder.InputKey.*
+      val textFocused = inputsTextFocused(m)
+
+      // Globals first — Tab/Shift+Tab move focus, Esc opens quit dialog,
+      // then digit-tab-switch (always-on, like the other showcase tabs),
+      // then route to the focused widget. Letter `q` quit is gated on
+      // text focus so typing letters into a TextField stays unaffected;
+      // digits collide with showcase tab shortcuts and are reserved.
+      val pre: Option[Tui[Model, Msg]] = k match
+        case CharKey('\t')                               => Some(m.copy(inputsFocus = m.inputsFocus.next).tui)
+        case BackTab                                     => Some(m.copy(inputsFocus = m.inputsFocus.previous).tui)
+        case Escape                                      => Some(Tui(m, Cmd.GCmd(OpenDialog)))
+        case CharKey('q') | CharKey('Q') if !textFocused => Some(Tui(m, Cmd.GCmd(OpenDialog)))
+        case Mouse(ev)                                   => Some(Tui(m, tabBarMouseDispatch(ev)))
+        case _ =>
+          digitTabSwitch(k, allowDigits = true).map(idx => Tui(m, Cmd.GCmd(SelectTab(idx))))
+
+      pre.getOrElse {
+        // Route the remaining key into the focused widget.
+        m.inputsFocus.current match
+          case Some(id) if id == InpNameId =>
+            val (next, maybe) = widgets.TextField.handleKeyOrSubmit(m.inputsName, k)(InputsSubmit)
+            val nm            = m.copy(inputsName = next)
+            maybe.fold(nm.tui)(msg => update(nm, msg, ctx))
+
+          case Some(id) if id == InpBioId =>
+            val (next, maybe) = widgets.TextField.handleKeyOrSubmit(m.inputsBio, k)(InputsSubmit)
+            val nm            = m.copy(inputsBio = next)
+            maybe.fold(nm.tui)(msg => update(nm, msg, ctx))
+
+          case Some(id) if id == InpCountryId =>
+            val (next, _) = widgets.Select.handleKey(m.inputsCountry, k)((_: String) => None)
+            m.copy(inputsCountry = next).tui
+
+          case Some(id) if id == InpFruitId =>
+            val res = widgets.Autocomplete.handleKey(m.inputsFruit, k)
+            val nm  = m.copy(inputsFruit = res.state)
+            if res.picked.isDefined then update(nm, InputsSubmit, ctx) else nm.tui
+
+          case Some(id) if id == InpAgreeId =>
+            k match
+              case Enter | CharKey(' ') => m.copy(inputsAgree = !m.inputsAgree).tui
+              case ArrowDown            => m.copy(inputsFocus = m.inputsFocus.next).tui
+              case ArrowUp              => m.copy(inputsFocus = m.inputsFocus.previous).tui
+              case _                    => m.tui
+
+          case Some(id) if id == InpSubmitId =>
+            k match
+              case Enter | CharKey(' ') => update(m, InputsSubmit, ctx)
+              case ArrowDown            => m.copy(inputsFocus = m.inputsFocus.next).tui
+              case ArrowUp              => m.copy(inputsFocus = m.inputsFocus.previous).tui
+              case _                    => m.tui
+
+          case _ => m.tui
+      }
+
+    /**
+     * Key bindings for the Data tab — ListView + Table side-by-side.
+     * Tab cycles focus between the two; arrow keys navigate the focused
+     * widget.
+     */
+    private def handleDataKey(m: Model, k: KeyDecoder.InputKey, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+      val _ = ctx
+      import KeyDecoder.InputKey.*
+      val pre: Option[Tui[Model, Msg]] = k match
+        case CharKey('\t')               => Some(m.copy(dataFocus = m.dataFocus.next).tui)
+        case BackTab                     => Some(m.copy(dataFocus = m.dataFocus.previous).tui)
+        case Escape                      => Some(Tui(m, Cmd.GCmd(OpenDialog)))
+        case CharKey('q') | CharKey('Q') => Some(Tui(m, Cmd.GCmd(OpenDialog)))
+        case Mouse(ev)                   => Some(Tui(m, tabBarMouseDispatch(ev)))
+        case _ => digitTabSwitch(k, allowDigits = true).map(idx => Tui(m, Cmd.GCmd(SelectTab(idx))))
+
+      pre.getOrElse {
+        // ListView consumes arrows itself; the Table on the right tracks
+        // the same selection so its cursor moves with the list cursor.
+        m.dataFocus.current match
+          case Some(_) =>
+            val (next, _) = widgets.ListView.handleKey[String, Msg](m.dataList, k)(_ => None)
+            m.copy(dataList = next).tui
+          case None => m.tui
+      }
+
+    /**
+     * Key bindings for the Layout tab — SplitPane + MenuBar. The MenuBar
+     * widget owns navigation when it's open; otherwise `[` / `]` adjust
+     * the split ratio so the divider can move.
+     */
+    private def handleLayoutKey(m: Model, k: KeyDecoder.InputKey, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
+      import KeyDecoder.InputKey.*
+      val menuActive = m.layoutMenu.openIdx.isDefined
+      val pre: Option[Tui[Model, Msg]] = k match
+        case CharKey('q') | CharKey('Q') => Some(Tui(m, Cmd.GCmd(OpenDialog)))
+        case Escape if !menuActive       => Some(Tui(m, Cmd.GCmd(OpenDialog)))
+        case Mouse(ev)                   => Some(Tui(m, tabBarMouseDispatch(ev)))
+        case CharKey('[') =>
+          Some(m.copy(layoutSplitRatio = math.max(widgets.SplitPane.MinSizeRatio, m.layoutSplitRatio - 0.05)).tui)
+        case CharKey(']') =>
+          Some(m.copy(layoutSplitRatio = math.min(1.0 - widgets.SplitPane.MinSizeRatio, m.layoutSplitRatio + 0.05)).tui)
+        case _ =>
+          digitTabSwitch(k, allowDigits = !menuActive).map(idx => Tui(m, Cmd.GCmd(SelectTab(idx))))
+
+      pre.getOrElse {
+        // Everything else drives the MenuBar.
+        val res = widgets.MenuBar.handleKey(m.layoutMenu, k)
+        val nm  = m.copy(layoutMenu = res.state)
+        res.picked match
+          case Some((mi, ii)) =>
+            val title = layoutMenus(mi).title
+            val item  = layoutMenus(mi).items(ii)
+            update(nm, LayoutMenuPick(title, item), ctx)
+          case None => nm.tui
+      }
 
     /**
      * Mouse handling reduced to just the tabs bar — for the non-Showcase
@@ -686,7 +992,7 @@ object Stage1ShowcaseApp:
       // Tab-aware help footer — common bindings on the left, then per-tab
       // hints on the right.
       val tabSwitch = List[Text](
-        " 1/2/3 ".themed(_.primary),
+        " 1..6 ".themed(_.primary),
         "switch tab  ".text,
         " click tab ".themed(_.primary),
         "  ".text
@@ -699,8 +1005,33 @@ object Stage1ShowcaseApp:
             " Space ".themed(_.primary),
             "toggle  ".text
           )
+        case InputsTabIdx =>
+          List(
+            " Tab ".themed(_.primary),
+            "focus  ".text,
+            " Enter ".themed(_.primary),
+            "submit  ".text,
+            " Space ".themed(_.primary),
+            "toggle  ".text
+          )
+        case DataTabIdx =>
+          List(
+            " ↑/↓ ".themed(_.primary),
+            "move  ".text,
+            " Tab ".themed(_.primary),
+            "focus  ".text
+          )
+        case LayoutTabIdx =>
+          List(
+            " ←/→ ".themed(_.primary),
+            "menu  ".text,
+            " ↓ ".themed(_.primary),
+            "open  ".text,
+            " [ / ] ".themed(_.primary),
+            "split  ".text
+          )
         case HelpTabIdx =>
-          List(" press 1 / 2 to leave Help ".themed(_.info), "  ".text)
+          List(" press 1..5 to leave Help ".themed(_.info), "  ".text)
         case _ =>
           List(
             " b ".themed(_.primary),
@@ -730,6 +1061,9 @@ object Stage1ShowcaseApp:
 
       val body: List[VNode] = m.activeTab match
         case WidgetsTabIdx => widgetsTabBody(m)
+        case InputsTabIdx  => inputsTabBody(m)
+        case DataTabIdx    => dataTabBody(m)
+        case LayoutTabIdx  => layoutTabBody(m)
         case HelpTabIdx    => helpTabBody(m)
         case _             => showcaseTabBody(m)
 
@@ -921,25 +1255,236 @@ object Stage1ShowcaseApp:
       )
       List(panel(r, theme, title :: intro :: treeRows))
 
+    /**
+     * Body content for the "Inputs" tab — TextField + Select +
+     * Autocomplete + CheckBox + Button laid out via the [[Form]] widget.
+     */
+    private def inputsTabBody(m: Model)(using theme: Theme): List[VNode] =
+      val r = widgetsTabRect(m)
+      val title = TextNode(
+        2.x,
+        1.y,
+        List(" Form widget — TextField + Select + Autocomplete + CheckBox + Button ".themed(_.primary))
+      )
+      val intro = TextNode(2.x, 3.y, List("Tab/Shift+Tab cycles focus.  Enter submits.".text))
+
+      val fieldWidth  = 28
+      val selectWidth = 16
+
+      val rows: Vector[widgets.Form.Row] = Vector(
+        widgets.Form.Row(
+          InpNameId,
+          "Name:",
+          focused => widgets.TextField.view(m.inputsName, lineWidth = fieldWidth, focused = focused)
+        ),
+        widgets.Form.Row(
+          InpBioId,
+          "Bio:",
+          focused => widgets.TextField.view(m.inputsBio, lineWidth = fieldWidth, focused = focused)
+        ),
+        widgets.Form.Row(
+          InpCountryId,
+          "Country:",
+          focused => widgets.Select.view(m.inputsCountry, lineWidth = selectWidth, focused = focused),
+          height = if m.inputsCountry.open then widgets.Select.maxHeight(m.inputsCountry.listState.visibleRows) else 1
+        ),
+        widgets.Form.Row(
+          InpFruitId,
+          "Fruit:",
+          _ =>
+            // Autocomplete is always-open, so it doesn't take a `focused`
+            // parameter — wrap its node list into a BoxNode so the Form
+            // row can place a single VNode.
+            val parts = widgets.Autocomplete.view(m.inputsFruit, width = fieldWidth, maxVisible = 5)
+            VNode.BoxNode(1.x, 1.y, fieldWidth, widgets.Autocomplete.height(m.inputsFruit, 5), parts, Style())
+          ,
+          height = widgets.Autocomplete.height(m.inputsFruit, 5)
+        ),
+        widgets.Form.Row(
+          InpAgreeId,
+          "Agree:",
+          focused => widgets.CheckBox(label = "I accept", checked = m.inputsAgree, focused = focused)
+        ),
+        widgets.Form.Row(
+          InpSubmitId,
+          "",
+          focused => widgets.Button(label = "Submit", focused = focused)
+        )
+      )
+
+      val formNodes = widgets.Form.column(
+        rows = rows,
+        focusManager = m.inputsFocus,
+        at = Coord(2.x, 5.y),
+        labelWidth = 10,
+        gap = 1
+      )
+
+      val submittedY = 5 + widgets.Form.totalHeight(rows, gap = 1) + 1
+      val submitted = m.inputsSubmitted match
+        case None    => TextNode(2.x, submittedY.y, List("(no submission yet)".themed(_.info)))
+        case Some(s) => TextNode(2.x, submittedY.y, List("Submitted: ".themed(_.success), s.text))
+
+      List(panel(r, theme, (title :: intro :: formNodes) :+ submitted))
+
+    /**
+     * Body content for the "Data" tab — ListView + Table side-by-side
+     * with Spinner + ProgressBar in the header and a StatusBar pinned
+     * to the bottom of the panel.
+     */
+    private def dataTabBody(m: Model)(using theme: Theme): List[VNode] =
+      val r = widgetsTabRect(m)
+
+      val title = TextNode(2.x, 1.y, List(" ListView + Table + Spinner + ProgressBar + StatusBar ".themed(_.primary)))
+
+      // Animated header: spinner + progress bar driven by the existing tick.
+      val barWidth    = math.max(10, math.min(40, r.width - 16))
+      val spinnerNode = widgets.Spinner(widgets.Spinner.Braille, frame = m.tick.toInt, at = Coord(2.x, 3.y))
+      val progressNode = widgets.ProgressBar(
+        value = m.dataProgress,
+        width = barWidth,
+        at = Coord(5.x, 3.y)
+      )
+
+      val intro = TextNode(2.x, 5.y, List("Tab focuses the widget that consumes ↑/↓.".themed(_.info)))
+
+      // ListView (left) — focused selection drives the Table cursor too.
+      val listFocused  = m.dataFocus.isFocused(DataListId)
+      val tableFocused = m.dataFocus.isFocused(DataTableId)
+      val listNode = widgets.ListView.view(
+        m.dataList,
+        at = Coord(2.x, 7.y),
+        lineWidth = 28,
+        focused = listFocused
+      )
+
+      // Table (right) — render rows from the same items + paired statuses.
+      val tableRows: Vector[(String, String)] =
+        m.dataList.items.zipWithIndex.map { case (t, i) =>
+          (t, dataStatuses(i % dataStatuses.size))
+        }
+      val tableState = widgets.Table.State
+        .of(DataColumns, tableRows, visibleRows = 8, selectable = true)
+        .copy(body = m.dataList.copy(items = tableRows))
+      val tableNode = widgets.Table.view(
+        tableState,
+        at = Coord(34.x, 7.y),
+        focused = tableFocused
+      )
+
+      // StatusBar pinned to the bottom of the panel showing live counts.
+      val total   = m.dataList.items.size
+      val curIdx  = m.dataList.selected + 1
+      val statusY = r.height - 1
+      val statusBar = widgets.StatusBar(
+        left = " data ",
+        center = s"item $curIdx / $total",
+        right = f" tick=${m.tick}  progress=${m.dataProgress * 100}%3.0f%% ",
+        width = math.max(20, r.width - 2),
+        at = Coord(2.x, statusY.y)
+      )
+
+      List(panel(r, theme, List(title, spinnerNode, progressNode, intro, listNode, tableNode, statusBar)))
+
+    /**
+     * Body content for the "Layout" tab — SplitPane horizontally split
+     * with a MenuBar in the left pane and decorative content in the
+     * right pane. `[` / `]` move the divider.
+     */
+    private def layoutTabBody(m: Model)(using theme: Theme): List[VNode] =
+      val r = widgetsTabRect(m)
+
+      val title = TextNode(2.x, 1.y, List(" SplitPane + MenuBar ".themed(_.primary)))
+      val intro = TextNode(
+        2.x,
+        3.y,
+        List("←/→ move between menus.  ↓/Enter open.  Esc close.  [ / ] resize split.".themed(_.info))
+      )
+
+      val splitTop    = 5
+      val splitHeight = math.max(8, r.height - splitTop - 2)
+      val splitWidth  = math.max(40, r.width - 4)
+
+      val panes = widgets.SplitPane(
+        first = (at, w, _) => {
+          val menuNodes = widgets.MenuBar(m.layoutMenu, at = Coord(at.x + 1, at.y + 1))
+          val pickRow = TextNode(
+            (at.x.value + 1).x,
+            (at.y.value + 8).y,
+            m.layoutLastPick match
+              case None    => List("(pick a menu item)".themed(_.info))
+              case Some(s) => List("Picked: ".themed(_.success), s.text)
+          )
+          val ratioRow = TextNode(
+            (at.x.value + 1).x,
+            (at.y.value + 10).y,
+            List(f"split ratio = ${m.layoutSplitRatio}%.2f".themed(_.foreground))
+          )
+          val _ = w
+          menuNodes :+ pickRow :+ ratioRow
+        },
+        second = (at, w, _) => {
+          val rowNodes = List(
+            TextNode((at.x.value + 1).x, (at.y.value + 1).y, List(" Right pane ".themed(_.primary))),
+            TextNode((at.x.value + 1).x, (at.y.value + 3).y, List("This pane is rendered by SplitPane.".text)),
+            TextNode((at.x.value + 1).x, (at.y.value + 4).y, List(s"Width = $w cells.".themed(_.info))),
+            TextNode((at.x.value + 1).x, (at.y.value + 6).y, List("[ shrinks the left pane".text)),
+            TextNode((at.x.value + 1).x, (at.y.value + 7).y, List("] grows the left pane".text)),
+            TextNode((at.x.value + 1).x, (at.y.value + 9).y, List("Drag-resize is on the".text)),
+            TextNode((at.x.value + 1).x, (at.y.value + 10).y, List("Stage 3 mouse follow-up.".themed(_.info)))
+          )
+          rowNodes
+        },
+        width = splitWidth,
+        height = splitHeight,
+        direction = widgets.SplitPane.Direction.Horizontal,
+        at = Coord(2.x, splitTop.y),
+        splitRatio = m.layoutSplitRatio,
+        gap = 1
+      )
+
+      // Visualize the divider so the split is obvious to the eye.
+      val dividerNodes = widgets.SplitPane
+        .dividerRect(
+          direction = widgets.SplitPane.Direction.Horizontal,
+          width = splitWidth,
+          height = splitHeight,
+          at = Coord(2.x, splitTop.y),
+          splitRatio = m.layoutSplitRatio,
+          gap = 1
+        )
+        .toList
+        .flatMap { p =>
+          (0 until p.height).map { row =>
+            TextNode(p.at.x, (p.at.y.value + row).y, List(theme.chars.vertical.toString.themed(_.border)))
+          }
+        }
+
+      List(panel(r, theme, (title :: intro :: panes) ++ dividerNodes))
+
     /** Body content for the "Help" tab — keybinding reference + about info. */
     private def helpTabBody(m: Model)(using theme: Theme): List[VNode] =
       val r     = widgetsTabRect(m)
       val title = TextNode(2.x, 1.y, List(" Keybindings & help ".themed(_.primary)))
       val rows = List(
-        TextNode(2.x, 3.y, List(" 1 / 2 / 3 ".themed(_.primary), "  switch tab".text)),
-        TextNode(2.x, 5.y, List(" Showcase tab".themed(_.success))),
+        TextNode(2.x, 3.y, List(" 1..6 ".themed(_.primary), "  switch tab".text)),
+        TextNode(2.x, 5.y, List(" 1 Showcase".themed(_.success))),
         TextNode(2.x, 6.y, List("   b  cycle border style".text)),
         TextNode(2.x, 7.y, List("   t  cycle theme".text)),
-        TextNode(2.x, 8.y, List("   d  open confirm dialog".text)),
-        TextNode(2.x, 9.y, List("   i  open text-input dialog".text)),
-        TextNode(2.x, 10.y, List("   l  open list-select dialog".text)),
-        TextNode(2.x, 11.y, List("   w  open waiting dialog".text)),
-        TextNode(2.x, 13.y, List(" Widgets tab".themed(_.success))),
-        TextNode(2.x, 14.y, List("   ↑/↓  move tree selection".text)),
-        TextNode(2.x, 15.y, List("   Space/Enter  toggle node".text)),
-        TextNode(2.x, 17.y, List(" Anywhere".themed(_.success))),
-        TextNode(2.x, 18.y, List("   q / Esc  open quit confirmation".text)),
-        TextNode(2.x, 19.y, List("   click on Tabs bar  switch tab".text))
+        TextNode(2.x, 8.y, List("   d / i / l / w  open dialogs".text)),
+        TextNode(2.x, 10.y, List(" 2 Widgets (Tree)".themed(_.success))),
+        TextNode(2.x, 11.y, List("   ↑/↓ move,  Space/Enter toggle node".text)),
+        TextNode(2.x, 13.y, List(" 3 Inputs (Form)".themed(_.success))),
+        TextNode(2.x, 14.y, List("   Tab/Shift+Tab cycle focus,  Enter submit".text)),
+        TextNode(2.x, 15.y, List("   Space toggles the CheckBox / activates Button".text)),
+        TextNode(2.x, 17.y, List(" 4 Data (List + Table)".themed(_.success))),
+        TextNode(2.x, 18.y, List("   ↑/↓ move,  Tab focuses ListView vs Table".text)),
+        TextNode(2.x, 20.y, List(" 5 Layout (SplitPane + MenuBar)".themed(_.success))),
+        TextNode(2.x, 21.y, List("   ←/→ menu,  ↓ open,  Enter pick,  Esc close".text)),
+        TextNode(2.x, 22.y, List("   [ / ] resize the split".text)),
+        TextNode(2.x, 24.y, List(" Anywhere".themed(_.success))),
+        TextNode(2.x, 25.y, List("   q / Esc  open quit confirmation".text)),
+        TextNode(2.x, 26.y, List("   click on Tabs bar  switch tab".text))
       )
       List(panel(r, theme, title :: rows))
 

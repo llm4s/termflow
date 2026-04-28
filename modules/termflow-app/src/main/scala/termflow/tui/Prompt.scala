@@ -12,6 +12,22 @@ object Prompt:
 
   final case class RenderedLine(text: String, cursorIndex: Int, prefixLength: Int = 0)
 
+  /**
+   * Visual column the cursor occupies inside `state.buffer`, computed
+   * via [[WCWidth.stringWidth]] across the characters before the
+   * cursor. Wide characters (CJK, fullwidth, most emoji) contribute 2
+   * columns; combining marks contribute 0; everything else is 1.
+   *
+   * The renderer already uses this math when positioning the hardware
+   * cursor on an `InputNode`; [[cursorColumn]] is exposed for apps that
+   * need the same number for their own layout (e.g. drawing a custom
+   * caret indicator next to the buffer).
+   */
+  def cursorColumn(state: State): Int =
+    val cursor = math.max(0, math.min(state.buffer.length, state.cursor))
+    val text   = state.buffer.take(cursor).mkString
+    WCWidth.stringWidth(text)
+
   /** Render the prompt buffer with a fixed prefix, returning full text and cursor index. */
   def renderWithPrefix(state: State, prefix: String): RenderedLine =
     val content = render(state)
@@ -39,13 +55,21 @@ object Prompt:
 
       case KeyDecoder.InputKey.Backspace =>
         if state.cursor > 0 then
-          val newBuf = state.buffer.patch(state.cursor - 1, Nil, 1)
-          (normalized(state.copy(buffer = newBuf, cursor = state.cursor - 1)), None)
+          // Step back by a grapheme so combining marks, surrogate pairs, and
+          // ZWJ sequences delete as one unit.
+          val text    = state.buffer.mkString
+          val prevIdx = Grapheme.previousBoundary(text, state.cursor)
+          val deleteN = state.cursor - prevIdx
+          val newBuf  = state.buffer.patch(prevIdx, Nil, deleteN)
+          (normalized(state.copy(buffer = newBuf, cursor = prevIdx)), None)
         else (state, None)
 
       case KeyDecoder.InputKey.Delete =>
         if state.cursor < state.buffer.length then
-          val newBuf = state.buffer.patch(state.cursor, Nil, 1)
+          val text    = state.buffer.mkString
+          val nextIdx = Grapheme.nextBoundary(text, state.cursor)
+          val deleteN = nextIdx - state.cursor
+          val newBuf  = state.buffer.patch(state.cursor, Nil, deleteN)
           (normalized(state.copy(buffer = newBuf)), None)
         else (state, None)
 
@@ -54,10 +78,15 @@ object Prompt:
         (normalized(state.copy(buffer = newBuf, cursor = state.cursor + 1)), None)
 
       case KeyDecoder.InputKey.ArrowLeft =>
-        (normalized(state.copy(cursor = state.cursor - 1)), None)
+        // Grapheme-aware step so the cursor doesn't strand combining marks.
+        val text    = state.buffer.mkString
+        val prevIdx = Grapheme.previousBoundary(text, state.cursor)
+        (normalized(state.copy(cursor = prevIdx)), None)
 
       case KeyDecoder.InputKey.ArrowRight =>
-        (normalized(state.copy(cursor = state.cursor + 1)), None)
+        val text    = state.buffer.mkString
+        val nextIdx = Grapheme.nextBoundary(text, state.cursor)
+        (normalized(state.copy(cursor = nextIdx)), None)
 
       case KeyDecoder.InputKey.Home =>
         (normalized(state.copy(cursor = 0)), None)

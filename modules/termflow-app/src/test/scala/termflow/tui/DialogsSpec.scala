@@ -165,6 +165,43 @@ class DialogsSpec extends AnyFunSuite:
     assert(s.contains("OK"))
   }
 
+  // ---- Dialogs.actionList --------------------------------------------------
+
+  test("Dialogs.actionList renders one row per action and highlights the focused one") {
+    val o = Dialogs.actionList(
+      title = "Edit",
+      actions = List(
+        Dialogs.Choice("Cut", focused = false),
+        Dialogs.Choice("Copy", focused = true),
+        Dialogs.Choice("Paste", focused = false)
+      )
+    )
+    assert(o.input.isEmpty, "actionList has no live input")
+    assert(o.inputCapture == InputCapture.Modal)
+    val s = stringForm(o)
+    assert(s.contains("Edit"))
+    assert(s.contains("Cut") && s.contains("Copy") && s.contains("Paste"))
+    // OK / Cancel are NOT part of an actionList — apps fire on selection.
+    assert(!s.contains("[ OK ]"))
+    assert(!s.contains("[ Cancel ]"))
+  }
+
+  test("Dialogs.actionList sizes width to its widest label") {
+    val short = Dialogs.actionList("M", List(Dialogs.Choice("Hi", true), Dialogs.Choice("Bye", false)))
+    val wide = Dialogs.actionList(
+      "M",
+      List(Dialogs.Choice("Open Recent…", true), Dialogs.Choice("Save As Encrypted Archive", false))
+    )
+    assert(wide.width > short.width)
+  }
+
+  test("Dialogs.actionList with empty actions still renders the title") {
+    val o = Dialogs.actionList("Empty", List.empty)
+    val s = stringForm(o)
+    assert(s.contains("Empty"))
+    assert(o.height >= 5)
+  }
+
   // ---- Dialogs.waiting -----------------------------------------------------
 
   test("Dialogs.waiting picks the spinner frame from the tick (modulo)") {

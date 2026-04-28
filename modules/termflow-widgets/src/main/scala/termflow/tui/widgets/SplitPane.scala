@@ -11,11 +11,13 @@ import termflow.tui.*
  * receive the resolved `(at, width, height)` of their pane and return
  * the `VNode`s to draw into it.
  *
- * Mouse-drag to resize the divider is not yet implemented — that needs
- * the layout-pass hit-test cache (deferred to Stage 3 mouse follow-up).
- * Until then apps drive `splitRatio` via their own keymap (or simply
- * leave it fixed). Scaffolding for the divider rect is exposed via
- * [[dividerRect]] so apps that want to wire mouse drag themselves can.
+ * Mouse-drag to resize the divider is supported via the [[handleMouse]]
+ * companion: hold a [[DragState]] in the app's model, feed each
+ * `MouseEvent` (typically extracted from `InputKey.Mouse(...)`) through
+ * `handleMouse`, and use the returned `splitRatio` when constructing
+ * the next frame. The divider rectangle is exposed via [[dividerRect]]
+ * so apps that want to wire their own drag handling can; `gap >= 1` is
+ * required for the divider to be pickable.
  *
  * {{{
  * given Theme = Theme.dark
@@ -120,6 +122,138 @@ object SplitPane:
     gap: Int = 0
   ): Option[Pane] =
     layout(direction, width, height, at, splitRatio, gap).divider
+
+  /**
+   * Drag state for mouse-driven divider resize.
+   *
+   * Apps hold a single `DragState` per `SplitPane`, default
+   * [[DragState.idle]], and feed every [[InputKey.Mouse]] event into
+   * [[handleMouse]]. The `splitRatio` field is what the next frame
+   * should use; `dragging` is true while the user is mid-gesture so the
+   * app can render a focused divider style if it likes.
+   *
+   * @param splitRatio Current split ratio. Always clamped to
+   *                   `[MinSizeRatio, 1 - MinSizeRatio]`.
+   * @param dragging   True between [[MouseEvent.Press]] on the divider
+   *                   and the next [[MouseEvent.Release]].
+   */
+  final case class DragState(splitRatio: Double, dragging: Boolean):
+    /** Reset back to the idle state at the supplied ratio. */
+    def reset(ratio: Double): DragState = DragState(clampRatio(ratio), dragging = false)
+
+  object DragState:
+    /** Idle drag state at `0.5`. */
+    val idle: DragState = DragState(0.5, dragging = false)
+
+    /** Idle drag state at the supplied ratio (clamped). */
+    def at(ratio: Double): DragState = DragState(clampRatio(ratio), dragging = false)
+
+  /**
+   * Feed a mouse event into a [[DragState]] and return the updated
+   * state. Apps wire this from their `update` handler:
+   *
+   * {{{
+   * case Msg.Mouse(ev) =>
+   *   val drag = SplitPane.handleMouse(
+   *     state = m.drag,
+   *     event = ev,
+   *     direction = SplitPane.Direction.Horizontal,
+   *     width = m.width, height = m.height,
+   *     gap = 1
+   *   )
+   *   m.copy(drag = drag).tui
+   * }}}
+   *
+   * Press on the divider rect arms the drag; subsequent Drag events
+   * update the ratio based on the cursor's position along the major
+   * axis; Release ends the gesture. Events outside the divider while
+   * not dragging are ignored.
+   *
+   * `gap` must be >= 1 for the divider to be pickable; with `gap = 0`
+   * there is nowhere to click.
+   *
+   * @param state     Current drag state.
+   * @param event     Mouse event to process.
+   * @param direction Split direction.
+   * @param width     Total cell width of the splittable region.
+   * @param height    Total cell height of the splittable region.
+   * @param at        Top-left of the splittable region. Defaults to `(1, 1)`.
+   * @param gap       Divider gap in cells. Must be >= 1 for drag.
+   */
+  def handleMouse(
+    state: DragState,
+    event: MouseEvent,
+    direction: Direction,
+    width: Int,
+    height: Int,
+    at: Coord = Coord(XCoord(1), YCoord(1)),
+    gap: Int = 1
+  ): DragState =
+    if gap < 1 then state
+    else
+      val l       = layout(direction, width, height, at, state.splitRatio, gap)
+      val divider = l.divider
+      event match
+        case MouseEvent.Press(MouseButton.Left, col, row, _) =>
+          if divider.exists(_.contains(col, row)) then state.copy(dragging = true)
+          else state
+
+        case MouseEvent.Drag(MouseButton.Left, col, row, _) if state.dragging =>
+          state.copy(splitRatio = ratioAt(direction, width, height, at, col, row))
+
+        case MouseEvent.Release(MouseButton.Left, col, row, _) =>
+          if state.dragging then
+            // If the release lands inside the splittable region, snap to the
+            // pointer's final ratio; otherwise leave the ratio where the last
+            // Drag put it.
+            val withinRegion = isInside(width, height, at, col, row)
+            val ratio = if withinRegion then ratioAt(direction, width, height, at, col, row) else state.splitRatio
+            DragState(clampRatio(ratio), dragging = false)
+          else state
+
+        case _ => state
+
+  private def isInside(
+    width: Int,
+    height: Int,
+    at: Coord,
+    col: Int,
+    row: Int
+  ): Boolean =
+    val left = at.x.value
+    val top  = at.y.value
+    col >= left && col < left + width && row >= top && row < top + height
+
+  private def ratioAt(
+    direction: Direction,
+    width: Int,
+    height: Int,
+    at: Coord,
+    col: Int,
+    row: Int
+  ): Double =
+    direction match
+      case Direction.Horizontal =>
+        val span    = math.max(1, width)
+        val rel     = col - at.x.value + 1 // 1..width inside the region
+        val clamped = math.max(1, math.min(span, rel))
+        clamped.toDouble / span
+      case Direction.Vertical =>
+        val span    = math.max(1, height)
+        val rel     = row - at.y.value + 1
+        val clamped = math.max(1, math.min(span, rel))
+        clamped.toDouble / span
+
+  private def clampRatio(ratio: Double): Double =
+    math.max(MinSizeRatio, math.min(1.0 - MinSizeRatio, ratio))
+
+  /** Extension for [[Pane]] hit-testing — used by [[handleMouse]]. */
+  extension (pane: Pane)
+    private def contains(col: Int, row: Int): Boolean =
+      val left = pane.at.x.value
+      val top  = pane.at.y.value
+      col >= left && col < left + pane.width &&
+      row >= top && row < top + pane.height
 
   /**
    * Render both panes. The renderer functions are called with the

@@ -304,8 +304,8 @@ self-contained and the goldens churn least at each step:
 | 1 | §5.5 Extended style attributes | done — `Style` gains `italic`/`dim`/`reverse`/`strikethrough`/`blink`; capability gate `Capabilities.extendedStyles` decides emission |
 | 2 | §5.6 Extended modifier parsing | done — new `KeyDecoder.Modifiers`, `InputKey.Modified`, `Insert`/`PageUp`/`PageDown`; CSI parser unified to read params then dispatch |
 | 3 | §5.4 Bracketed paste | done — `Capabilities.bracketedPaste`, `ANSI.enableBracketedPaste`/`disableBracketedPaste`, `InputKey.Paste(text)` collapses the whole `200~ … 201~` window into one event |
-| 4 | §5.3 Unicode width handling | initial cut — `WCWidth` helper, `RenderCell.width`, layout / diff respect wide cells. Known gap: `Prompt`/`InputNode` cursor math is still 1-char-per-column; multi-line input + grapheme clusters deferred |
-| 5 | §5.1 Mouse support | done — `MouseEvent` / `MouseButton` / `ScrollDirection` ADTs, `ANSI.enableMouse`/`disableMouse` SGR-1006 + button-event tracking, `InputKey.Mouse(event)` multiplexed onto the key stream so existing `Sub.InputKey` handlers see it. Hit-testing on the layout-pass rect cache is deferred to Stage 3 |
+| 4 | §5.3 Unicode width handling | done — `WCWidth` helper, `RenderCell.width`, layout / diff respect wide cells. Stage 3 follow-up landed cursor column math (renderer's `visibleInput` uses `WCWidth.stringWidth` for the hardware cursor), grapheme-aware navigation in `Prompt` (`Backspace`, `Delete`, `ArrowLeft`, `ArrowRight` step by Unicode UAX #29 boundaries via `BreakIterator`), and a new `widgets.MultiLineInput` for multi-line editing. |
+| 5 | §5.1 Mouse support | done — `MouseEvent` / `MouseButton` / `ScrollDirection` ADTs, `ANSI.enableMouse`/`disableMouse` SGR-1006 + button-event tracking, `InputKey.Mouse(event)` multiplexed onto the key stream so existing `Sub.InputKey` handlers see it. Stage 3 follow-up shipped the layout-pass hit-test cache (`HitTest[Id]` + `Rect` + `Layout.Zone(id, content)` + `Layout.resolveTracked[Id]`) so apps can map a click coordinate to a logical zone without re-deriving rectangles. |
 
 The showcase demo (`sbt showcase`) was extended in the same session to
 exercise every sub-item — Styles panel for §5.5, Live-input panel for
@@ -402,7 +402,7 @@ function keys). Update `KeyDecoder.scala` and `InputKey` enum.
 
 Polishing the catalogue so users don't reinvent common patterns.
 
-### 6.1 Dialog helpers (P1, medium) — **mostly done**
+### 6.1 Dialog helpers (P1, medium) — **complete**
 
 Layered on §4.2. Helpers are pure presentation builders that return an
 `Overlay` ready to drop into `RootNode.overlays`; the dialog state lives
@@ -419,15 +419,16 @@ maintain.)
 | `Dialogs.textInput(title, prompt, value, cursor?, prefix?, …)` | done | Owns its own `InputNode`; supports a fixed pinned prefix. |
 | `Dialogs.listSelect(title, items, selectedIndex, maxVisible?, render?)` | done | Selection-following viewport scrolling; custom render callback. |
 | `Dialogs.waiting(title, body, tick, frames?, cancelLabel?)` | done | Spinner glyph picked from the tick (modulo); optional cancel button. App drives the tick from a `Sub.Every`. |
-| `Dialogs.actionList` | not started | Trivially expressed as `listSelect` over `Choice` values; deferred until a real use case appears. |
+| `Dialogs.actionList(title, actions, …)` | done | Centred vertical menu of `Choice` actions; auto-sizes to the longest label and ships without an OK / Cancel row. Wired to the showcase as `a`. |
 | `Dialogs.fileDialog` / `directoryDialog` | done | Path bar + entry list (parent / dir / file) + sized column for files. Companion `FileEntry` ADT, `listEntries(path, showHidden)`, and `fileDialogLayout` for hit-testing. |
 
-All seven helpers are exercised by `sbt showcase` (`d` = confirm, `i` =
-textInput, `l` = listSelect, `w` = waiting, `f` = fileDialog, `g` =
-directoryDialog) on the Showcase tab. The file pickers also ship with
-a dedicated demo (`apps.dialog.FileDialogDemoApp`, runnable as
-`sbt run file-dialog`) for a focused look. Tests live in `DialogsSpec`
-and `Stage1ShowcaseAppSpec`.
+All eight helpers are exercised by `sbt showcase` (`d` = confirm, `i` =
+textInput, `l` = listSelect, `w` = waiting, `a` = actionList, `f` =
+fileDialog, `g` = directoryDialog) on the Showcase tab. The file
+pickers also ship with a dedicated demo
+(`apps.dialog.FileDialogDemoApp`, runnable as `sbt run file-dialog`)
+for a focused look. Tests live in `DialogsSpec` and
+`Stage1ShowcaseAppSpec`.
 
 ### 6.2 Additional widgets (P1, medium) — **complete**
 
@@ -442,7 +443,10 @@ and `Stage1ShowcaseAppSpec`.
 | `Autocomplete` (open) | done (PR #171) — `State[A]` holds input + options + selectedIdx; pluggable `matches` predicate; companion `handleKey` returns `(state, picked: Option[A])`. |
 | `Menu` / `MenuBar` | done (PR #171) — horizontal title bar + on-demand dropdown; pure `handleKey` dispatcher returns picked `(menuIdx, itemIdx)`; companion `hitTest` maps clicks to title cells or dropdown rows. |
 | `Form` builder | done (PR #171) — declarative `Vector[Form.Row]` of (id, label, widget render fn); pairs with `FocusManager` for navigation; per-row `errors: Map[FocusId, String]` annotations. |
-| `SplitPane` | done (PR #171) — horizontal / vertical two-pane layout at a configurable ratio; renderer callbacks receive resolved `(at, w, h)`. Drag-to-resize deferred to the mouse hit-test cache follow-up; companion `dividerRect` exposes the drag region for apps that want to wire it manually now. |
+| `SplitPane` | done — horizontal / vertical two-pane layout at a configurable ratio; renderer callbacks receive resolved `(at, w, h)`. Drag-to-resize landed via `SplitPane.handleMouse` + `DragState`: apps hold a `DragState`, feed every `MouseEvent` through `handleMouse`, and the returned `splitRatio` drives the next frame. The Layout tab in `sbt showcase` exercises it. |
+| `ScrollBar` | done — vertical / horizontal scroll indicator with track + proportional thumb. Pure-presentation `State(offset, visible, total)` plus companion `thumbRange`, `hitTest`, `offsetForDrag`, `clampOffset` helpers. The Data tab on the showcase pins one next to the ListView. |
+| `Separator` | done — horizontal / vertical single-glyph rule with optional centred title. Uses the active theme's `chars`. The Help tab on the showcase uses two as section rules. |
+| `MultiLineInput` | done (Stage 3 §5.3) — multi-line editor with grapheme-aware `Backspace` / `Delete` / arrow-key navigation, `Enter` inserts a newline, `Home` / `End` snap within the row. Cursor row renders with a reverse-video cell (TextField-style) so embedding is straightforward; vertical scroll keeps the cursor visible. The new `9 Editor` tab on the showcase drives it. |
 
 ### 6.3 Keymap framework (P1, small) — **done**
 
@@ -900,6 +904,34 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
   backends remain on the speculative roadmap. §3 stages overview, the
   §9.2 Lanterna comparison table, and the Stage 5 section all updated
   to match.
+- *2026-04-28* — Stage 3 final components landed: §6.1
+  `Dialogs.actionList`; §6.2 `widgets.{ScrollBar, Separator,
+  MultiLineInput}` plus `widgets.SplitPane` drag-to-resize via
+  `handleMouse` + `DragState`; §5.1 hit-test cache (`HitTest[Id]` +
+  `Rect` + `Layout.Zone` + `Layout.resolveTracked[Id]`); §5.3
+  grapheme-aware cursor navigation in `Prompt` (via
+  `java.text.BreakIterator.getCharacterInstance`, exposed as a
+  `Grapheme` helper alongside `WCWidth`) plus column-aware hardware-
+  cursor placement in `AnsiRenderer.visibleInput`. The showcase grew
+  to nine tabs: `9 Editor` drives the new MultiLineInput, the Help
+  tab uses `Separator` rules, the Data tab pins a `ScrollBar` next to
+  the ListView, and the Layout tab wires mouse drag through
+  `SplitPane.handleMouse`. **Decision: SplitPane + MultiLineInput
+  render their cursor-bearing rows with a TextField-style
+  reverse-video cell rather than installing an `InputNode`.** The
+  renderer ignores InputNodes that aren't `RootNode.input`, so
+  embedding-friendly widgets need a self-contained caret. The
+  reverse-video approach matches the existing `widgets.TextField`
+  convention and keeps these widgets composable inside any container
+  (panels, tabs, overlays) without the parent having to thread an
+  `InputNode` through `RootNode.input`. **Decision: hit-test ids are
+  declared at the `resolveTracked[Id]` call site, not on `Layout.Zone`
+  itself.** The `Zone` case carries `id: Any` so a single layout tree
+  can mix id types; the call site fixes the registry's `Id` parameter.
+  JVM erasure means the cast is unchecked at runtime, so apps using a
+  uniform id type per tracked tree (sealed enums, strings) get clean
+  ergonomics; mixed-type trees still resolve and the registry contains
+  whatever the call sites supplied.
 
 ---
 

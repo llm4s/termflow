@@ -92,3 +92,52 @@ class PromptSpec extends AnyFunSuite:
     assert(line.text == ">> ab")
     assert(line.cursorIndex == 4)
     assert(line.prefixLength == 3)
+
+  // ---- grapheme-aware navigation ------------------------------------------
+
+  test("Backspace deletes a surrogate pair as one unit"):
+    // 😀 = U+1F600, encoded as a high+low surrogate (length = 2).
+    val emoji     = "a😀"
+    val state     = Prompt.State(buffer = emoji.toVector, cursor = emoji.length)
+    val (next, _) = Prompt.handleKey[String](state, InputKey.Backspace)(noopToMsg)
+    assert(Prompt.render(next) == "a")
+    assert(next.cursor == 1)
+
+  test("Backspace deletes a combining mark with its base"):
+    // "é" = e + COMBINING ACUTE ACCENT (one grapheme, two chars).
+    val s         = "é"
+    val state     = Prompt.State(buffer = s.toVector, cursor = s.length)
+    val (next, _) = Prompt.handleKey[String](state, InputKey.Backspace)(noopToMsg)
+    assert(Prompt.render(next).isEmpty)
+    assert(next.cursor == 0)
+
+  test("ArrowLeft steps over a surrogate pair"):
+    val emoji     = "a😀b"
+    val state     = Prompt.State(buffer = emoji.toVector, cursor = 3) // after the emoji
+    val (next, _) = Prompt.handleKey[String](state, InputKey.ArrowLeft)(noopToMsg)
+    assert(next.cursor == 1, s"expected cursor=1 after stepping over 😀, got ${next.cursor}")
+
+  test("ArrowRight steps over a surrogate pair"):
+    val emoji     = "a😀b"
+    val state     = Prompt.State(buffer = emoji.toVector, cursor = 1) // after a
+    val (next, _) = Prompt.handleKey[String](state, InputKey.ArrowRight)(noopToMsg)
+    assert(next.cursor == 3)
+
+  test("Delete removes a surrogate pair"):
+    val emoji     = "a😀b"
+    val state     = Prompt.State(buffer = emoji.toVector, cursor = 1)
+    val (next, _) = Prompt.handleKey[String](state, InputKey.Delete)(noopToMsg)
+    assert(Prompt.render(next) == "ab")
+    assert(next.cursor == 1)
+
+  test("cursorColumn counts wide characters as 2 columns"):
+    // 你好 = two CJK chars, each width 2.
+    val s     = "你好"
+    val state = Prompt.State(buffer = s.toVector, cursor = 1) // after 你
+    assert(Prompt.cursorColumn(state) == 2)
+    val state2 = state.copy(cursor = 2) // after 好
+    assert(Prompt.cursorColumn(state2) == 4)
+
+  test("cursorColumn counts combining marks as 0 columns"):
+    val state = Prompt.State(buffer = "é".toVector, cursor = 2)
+    assert(Prompt.cursorColumn(state) == 1, "e=1, combining mark=0")

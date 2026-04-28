@@ -383,13 +383,20 @@ object AnsiRenderer:
       val text = fixedPrefix + visibleSuffix
       if text.length >= width then text.take(width)
       else text + (" " * (width - text.length))
-    val unclampedCursorIndex =
+
+    // Cursor column = sum of WCWidth across visible characters up to the
+    // cursor's char index. This makes wide-char input (CJK, emoji) and
+    // combining-mark sequences land the hardware cursor at the right
+    // visual column, not the character count.
+    val cursorCharIndex =
       if clampedCursor <= prefixLength then clampedCursor
       else fixedPrefix.length + (suffixCursor - suffixStart)
+    val unclampedCursorColumn =
+      WCWidth.stringWidth(visibleText.take(math.max(0, cursorCharIndex)))
     val cursorLimit =
       if inp.x.value + width <= rootWidth then width
       else width - 1
-    val cursorIndex = math.max(0, math.min(cursorLimit, unclampedCursorIndex))
+    val cursorIndex = math.max(0, math.min(cursorLimit, unclampedCursorColumn))
     VisibleInput(visibleText, cursorIndex, width)
 
   private def renderInput(

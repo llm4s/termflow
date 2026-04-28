@@ -7,9 +7,15 @@ import termflow.tui.widgets.*
 
 /**
  * Multi-field form demo wiring [[TextField]], [[FocusManager]], [[Keymap]],
- * and [[Layout]] together. Three editable fields (Name / Email / Bio) plus
- * Submit and Reset buttons share one focus order; Tab cycles forward,
- * Shift+Tab backward, and Enter does the right thing per element type.
+ * [[Form]], and [[Layout]] together. Three editable fields (Name / Email /
+ * Bio) plus Submit and Reset buttons share one focus order; Tab cycles
+ * forward, Shift+Tab backward, and Enter does the right thing per element
+ * type.
+ *
+ * The body of the form is built declaratively from a [[Form.Row]] vector
+ * — each row owns a render callback that produces a `VNode` from the
+ * focused boolean. The button row reuses the same row primitive so the
+ * whole panel layout flows from one [[Form.column]] call.
  *
  * ## Keys
  *
@@ -124,6 +130,10 @@ object FormDemoApp:
 
   object App extends TuiApp[Model, Msg]:
 
+    private val FieldWidth: Int = 30
+    private val LabelWidth: Int = 10
+    private val FieldGap: Int   = 0
+
     private def syncTerminalSize(m: Model, ctx: RuntimeCtx[Msg]): Model =
       val w = ctx.terminal.width
       val h = ctx.terminal.height
@@ -223,67 +233,59 @@ object FormDemoApp:
 
       val termWidth  = math.max(60, m.terminalWidth)
       val termHeight = math.max(20, m.terminalHeight)
-      val fieldWidth = 30
       val themeName  = if m.darkTheme then "dark" else "light"
 
-      def fieldRow(label: String, state: TextField.State, focused: Boolean): Layout =
-        Layout.row(gap = 2)(
-          TextNode(1.x, 1.y, List(Text(label.padTo(8, ' '), Style(fg = theme.foreground)))),
-          TextField.view(state, lineWidth = fieldWidth, focused = focused)
-        )
-
-      val title = Layout.Elem(
-        TextNode(
-          1.x,
-          1.y,
-          List(Text("User Profile Form", Style(fg = theme.primary, bold = true, underline = true)))
-        )
+      // Form rows: each row's render callback receives `focused: Boolean`
+      // and returns the VNode for that row. The Form widget aligns the
+      // labels into a fixed-width column and translates each widget into
+      // the row's allocated cell.
+      val rows: Vector[Form.Row] = Vector(
+        Form.Row(NameId, "Name:", focused => TextField.view(m.name, lineWidth = FieldWidth, focused = focused)),
+        Form.Row(EmailId, "Email:", focused => TextField.view(m.email, lineWidth = FieldWidth, focused = focused)),
+        Form.Row(BioId, "Bio:", focused => TextField.view(m.bio, lineWidth = FieldWidth, focused = focused))
       )
 
-      val nameRow  = fieldRow("Name:", m.name, m.fm.isFocused(NameId))
-      val emailRow = fieldRow("Email:", m.email, m.fm.isFocused(EmailId))
-      val bioRow   = fieldRow("Bio:", m.bio, m.fm.isFocused(BioId))
-
-      val buttons = Layout.row(gap = 2)(
-        Button("Submit", focused = m.fm.isFocused(SubmitId)),
-        Button("Reset", focused = m.fm.isFocused(ResetId))
+      // Form fields anchored at (2, 6) — first row of the form sits below
+      // the title + spacer.
+      val formNodes = Form.column(
+        rows = rows,
+        focusManager = m.fm,
+        at = Coord(2.x, 6.y),
+        labelWidth = LabelWidth,
+        gap = FieldGap
       )
 
-      val submittedLine: Layout = m.submitted match
+      // Buttons row; rendered manually below the form because Form rows
+      // are single-widget per row and the buttons want to share a row.
+      val buttonsRow = Layout
+        .row(gap = 2)(
+          Button("Submit", focused = m.fm.isFocused(SubmitId)),
+          Button("Reset", focused = m.fm.isFocused(ResetId))
+        )
+        .resolve(Coord(2.x, 13.y))
+
+      val title = TextNode(
+        2.x,
+        2.y,
+        List(Text("User Profile Form", Style(fg = theme.primary, bold = true, underline = true)))
+      )
+
+      val submittedLine: VNode = m.submitted match
         case None =>
-          Layout.Elem(
-            TextNode(1.x, 1.y, List(Text("(no submission yet)", Style(fg = theme.foreground))))
-          )
+          TextNode(2.x, 17.y, List(Text("(no submission yet)", Style(fg = theme.foreground))))
         case Some(s) =>
-          Layout.Elem(
-            TextNode(
-              1.x,
-              1.y,
-              List(
-                Text("Last submitted: ", Style(fg = theme.success, bold = true)),
-                Text(
-                  s"name=${displayOrPlaceholder(s.name, m.name.placeholder)}, " +
-                    s"email=${displayOrPlaceholder(s.email, m.email.placeholder)}",
-                  Style(fg = theme.foreground)
-                )
+          TextNode(
+            2.x,
+            17.y,
+            List(
+              Text("Last submitted: ", Style(fg = theme.success, bold = true)),
+              Text(
+                s"name=${displayOrPlaceholder(s.name, m.name.placeholder)}, " +
+                  s"email=${displayOrPlaceholder(s.email, m.email.placeholder)}",
+                Style(fg = theme.foreground)
               )
             )
           )
-
-      val column = Layout.Column(
-        gap = 1,
-        children = List(
-          title,
-          Layout.Spacer(1, 1),
-          nameRow,
-          emailRow,
-          bioRow,
-          Layout.Spacer(1, 1),
-          buttons,
-          Layout.Spacer(1, 1),
-          submittedLine
-        )
-      )
 
       // Inverse-video status bar pinned to the bottom row. This is the only
       // row guaranteed to be readable across all terminal backgrounds — the
@@ -302,7 +304,7 @@ object FormDemoApp:
       RootNode(
         width = termWidth,
         height = termHeight,
-        children = column.resolve(Coord(2.x, 2.y)) :+ helpBar,
+        children = title :: formNodes ++ buttonsRow ++ List(submittedLine, helpBar),
         input = None
       )
 

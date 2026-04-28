@@ -273,3 +273,4 @@ addCommandAlias("dialogDemo",   "termflowSample/runMain termflow.apps.dialog.Dia
 addCommandAlias("showcase",     "termflowSample/runMain termflow.apps.showcase.Stage1ShowcaseApp")
 addCommandAlias("unicodeDemo",  "termflowSample/runMain termflow.apps.unicode.UnicodeDemoApp")
 addCommandAlias("dashboardDemo","termflowSample/runMain termflow.apps.dashboard.DashboardApp")
+addCommandAlias("wizardDemo",   "termflowSample/runMain termflow.apps.wizard.WizardApp")

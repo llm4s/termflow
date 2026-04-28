@@ -561,8 +561,13 @@ Target: 25, with one app per major feature.
 - `dashboard/` — multi-pane realtime metrics. **shipped** as
   `apps.dashboard.DashboardApp` (`sbt dashboardDemo`); ListView + ProgressBar
   per service, Spinner + StatusBar in header/footer, `Sub.Every`-driven
-  simulation with pause / restart.
-- `wizard/` — multi-step form with back/forward.
+  simulation with pause / restart. Also embedded as the **Dashboard** tab
+  in `sbt showcase`.
+- `wizard/` — multi-step form with back/forward. **shipped** as
+  `apps.wizard.WizardApp` (`sbt wizardDemo`); 3-step Account → Plan →
+  Confirm flow with per-step `FocusManager`, validation feeding into
+  the `Form.column` errors map, and a Submit button on the final step.
+  Also embedded as the **Wizard** tab in `sbt showcase`.
 - `editor/` — minimal text editor (proves the layout/coords refactor).
 - `ssh-shell/` *(if Stage 5 ships)* — telnet/SSH demo.
 

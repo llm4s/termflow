@@ -810,6 +810,31 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(d.model.themeName != themeBefore, "first-row click should fire CycleTheme")
   }
 
+  test("Layout tab '=' resets the split ratio to 0.5") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('5')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('[')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('[')))
+    assert(d.model.layoutSplitRatio < 0.55)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('=')))
+    assert(d.model.layoutSplitRatio == 0.5)
+  }
+
+  test("Widgets tab Mouse press on a Tree chevron toggles the node") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('2')))
+    val initiallyExpanded = d.model.treeExpanded.contains("termflow")
+    assert(initiallyExpanded, "tree starts with 'termflow' expanded")
+    // Click the chevron of the first visible row (the `termflow` root).
+    // Origin of the tree is r.col + 1, r.row + 4. The widgets-tab rect
+    // starts at col=1, row=topRowY=3, so the tree origin is (2, 7).
+    // Click col 3 (inside `[-] `).
+    val mods = termflow.tui.KeyDecoder.Modifiers(false, false, false)
+    val ev   = termflow.tui.MouseEvent.Press(termflow.tui.MouseButton.Left, col = 3, row = 7, mods)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Mouse(ev)))
+    assert(!d.model.treeExpanded.contains("termflow"), "chevron click should collapse the node")
+  }
+
   test("Layout tab Mouse press on the divider arms the SplitPane drag") {
     val d = driver
     d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('5')))

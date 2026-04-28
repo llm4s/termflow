@@ -17,10 +17,12 @@ import termflow.tui.*
  *   - **Indentation.** Each level adds two cells of left padding so
  *     ancestor relationships are visually obvious. Override with
  *     `indentWidth`.
- *   - **Markers.** Internal nodes (those with children) get a `▾`
- *     (expanded) or `▸` (collapsed) chevron, two columns wide
- *     (chevron + space). Leaves get two spaces. ASCII fallbacks are
- *     `v ` / `> ` / `  ` when `unicode = false`.
+ *   - **Markers.** Internal nodes (those with children) get a `+`
+ *     (collapsed, "click to open") or `-` (expanded, "click to
+ *     collapse") glyph, three columns wide (`[+] ` / `[-] `). Leaves
+ *     get four spaces of leading padding. The `unicode` flag is kept
+ *     for backwards compatibility but no longer changes the glyph
+ *     since `+` / `-` are already ASCII.
  *   - **Selection.** The row at `selectedIndex` (an index into the
  *     *visible* row list) is highlighted in the theme's primary slot,
  *     bolded.
@@ -102,13 +104,12 @@ object Tree:
     roots.foreach(walk(_, 0))
     builder.result()
 
-  // Marker glyphs.
-  private val expandedGlyph       = "▾ "
-  private val collapsedGlyph      = "▸ "
-  private val leafGlyph           = "  "
-  private val expandedGlyphAscii  = "v "
-  private val collapsedGlyphAscii = "> "
-  private val leafGlyphAscii      = "  "
+  // Marker glyphs. `[+] ` for collapsed, `[-] ` for expanded —
+  // unambiguous click targets that survive any font / locale combo.
+  // Leaves get four spaces so the label column lines up across rows.
+  private val expandedGlyph  = "[-] "
+  private val collapsedGlyph = "[+] "
+  private val leafGlyph      = "    "
 
   /**
    * Render the tree as a list of `TextNode`s.
@@ -148,15 +149,70 @@ object Tree:
 
   /** Marker glyph for an expanded internal node. */
   def expandedFor(unicode: Boolean = true): String =
-    if unicode then expandedGlyph else expandedGlyphAscii
+    val _ = unicode // glyphs are now ASCII-only; param kept for source compat
+    expandedGlyph
 
   /** Marker glyph for a collapsed internal node. */
   def collapsedFor(unicode: Boolean = true): String =
-    if unicode then collapsedGlyph else collapsedGlyphAscii
+    val _ = unicode
+    collapsedGlyph
 
   /** Padding used in place of a marker for leaf nodes. */
   def leafFor(unicode: Boolean = true): String =
-    if unicode then leafGlyph else leafGlyphAscii
+    val _ = unicode
+    leafGlyph
+
+  /**
+   * Region of a tree row a click landed in. Apps map a
+   * [[HitResult.Chevron]] to "toggle expand" and a
+   * [[HitResult.Label]] to "select this row".
+   */
+  enum HitResult:
+    case Chevron(rowIndex: Int)
+    case Label(rowIndex: Int)
+
+  /**
+   * Map a click `(col, row)` to a [[HitResult]] over the rendered
+   * row list.
+   *
+   * The chevron region is the column span occupied by the `[+] ` /
+   * `[-] ` glyph (skipped for leaves since they have no toggle). Apps
+   * pre-compute `rows = Tree.visibleRows(...)` once per frame and pass
+   * it in alongside the same `at` / `indentWidth` they used to render.
+   *
+   * Returns `None` for clicks outside any rendered row.
+   *
+   * @param rows         Row list returned by [[visibleRows]].
+   * @param at           Top-left of the first row (mirrors the
+   *                     rendering call).
+   * @param indentWidth  Cells per depth level (mirrors the rendering call).
+   * @param col          Click column (1-based, absolute).
+   * @param row          Click row (1-based, absolute).
+   * @param labelLength  Maximum label width for the click target.
+   *                     Pass `Int.MaxValue` if rows can be any length.
+   */
+  def hitTest[A](
+    rows: Vector[Row[A]],
+    at: Coord,
+    indentWidth: Int,
+    col: Int,
+    row: Int,
+    labelLength: Int = Int.MaxValue
+  ): Option[HitResult] =
+    val rowIdx = row - at.y.value
+    if rowIdx < 0 || rowIdx >= rows.size then None
+    else
+      val r           = rows(rowIdx)
+      val rowLeft     = at.x.value
+      val pad         = r.depth * indentWidth
+      val markerLeft  = rowLeft + pad
+      val markerLen   = if r.hasChildren then expandedGlyph.length else leafGlyph.length
+      val markerRight = markerLeft + markerLen - 1
+      val labelLeft   = markerLeft + markerLen
+      val labelRight  = labelLeft + math.max(0, labelLength) - 1
+      if r.hasChildren && col >= markerLeft && col <= markerRight then Some(HitResult.Chevron(rowIdx))
+      else if col >= labelLeft && col <= labelRight then Some(HitResult.Label(rowIdx))
+      else None
 
   /** Cell width of a tree row at `depth` carrying the given label. */
   def rowWidth(label: String, depth: Int, indentWidth: Int = 2, unicode: Boolean = true): Int =

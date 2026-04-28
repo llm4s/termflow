@@ -459,6 +459,7 @@ object Stage1ShowcaseApp:
     case LayoutMenuPick(menuTitle: String, item: String)
     case LayoutMouse(ev: MouseEvent)
     case EditorKey(k: KeyDecoder.InputKey)
+    case TreeMouse(ev: MouseEvent)
     case Quit
     case Key(k: KeyDecoder.InputKey)
     case KeyError(t: Throwable)
@@ -598,6 +599,29 @@ object Stage1ShowcaseApp:
         case EditorKey(k) =>
           val (next, _) = widgets.MultiLineInput.handleKey[Msg](m.editorState, k)
           m.copy(editorState = next).tui
+        case TreeMouse(ev) =>
+          ev match
+            case MouseEvent.Press(MouseButton.Left, col, row, _) =>
+              val r      = widgetsTabRect(m)
+              val origin = Coord(XCoord(r.col + 1), YCoord(r.row + 4))
+              val rows   = widgets.Tree.visibleRows(demoTree, m.treeExpanded)
+              widgets.Tree.hitTest(rows, origin, indentWidth = 2, col = col, row = row, labelLength = 60) match
+                case Some(widgets.Tree.HitResult.Chevron(idx)) =>
+                  val r0  = rows(idx)
+                  val nxt = if r0.expanded then m.treeExpanded - r0.id else m.treeExpanded + r0.id
+                  m.copy(treeSelected = idx, treeExpanded = nxt).tui
+                case Some(widgets.Tree.HitResult.Label(idx)) =>
+                  m.copy(treeSelected = idx).tui
+                case None => m.tui
+            case MouseEvent.Scroll(dir, _, _, _) =>
+              val rows = widgets.Tree.visibleRows(demoTree, m.treeExpanded)
+              val step = dir match
+                case ScrollDirection.Up   => -1
+                case ScrollDirection.Down => +1
+                case _                    => 0
+              val next = math.max(0, math.min(rows.size - 1, m.treeSelected + step))
+              m.copy(treeSelected = next).tui
+            case _ => m.tui
         case LayoutMouse(ev) =>
           val (sw, sh, sx, sy) = layoutSplitGeom(m)
           val state            = m.layoutSplitDrag.copy(splitRatio = m.layoutSplitRatio)
@@ -864,6 +888,7 @@ object Stage1ShowcaseApp:
 
     /** Key bindings for the Widgets tab — tree navigation. */
     private def widgetsTabKey(k: KeyDecoder.InputKey, m: Model): Cmd[Msg] =
+      val _ = m
       import KeyDecoder.InputKey.*
       k match
         case ArrowUp                     => Cmd.GCmd(TreeUp)
@@ -871,8 +896,16 @@ object Stage1ShowcaseApp:
         case Enter | CharKey(' ')        => Cmd.GCmd(ToggleTreeNode)
         case CharKey('q') | CharKey('Q') => Cmd.GCmd(OpenDialog)
         case Escape                      => Cmd.GCmd(OpenDialog)
-        case Mouse(ev)                   => tabBarMouseDispatch(ev)
-        case _                           => Cmd.NoCmd
+        case Mouse(ev)                   =>
+          // A press on the tab bar still switches tabs; everything else
+          // (clicks on the tree, scroll wheel) goes to the Tree handler.
+          ev match
+            case MouseEvent.Press(MouseButton.Left, col, row, _) =>
+              tabHitTest(col, row) match
+                case Some(idx) => Cmd.GCmd(SelectTab(idx))
+                case None      => Cmd.GCmd(TreeMouse(ev))
+            case _ => Cmd.GCmd(TreeMouse(ev))
+        case _ => Cmd.NoCmd
 
     /** Key bindings for the Help tab. */
     private def helpTabKey(k: KeyDecoder.InputKey): Cmd[Msg] =
@@ -1010,9 +1043,16 @@ object Stage1ShowcaseApp:
             case Some(idx) => Some(Tui(m, Cmd.GCmd(SelectTab(idx))))
             case None      => Some(Tui(m, Cmd.GCmd(LayoutMouse(ev))))
         case CharKey('[') =>
-          Some(m.copy(layoutSplitRatio = math.max(widgets.SplitPane.MinSizeRatio, m.layoutSplitRatio - 0.05)).tui)
+          val next = math.max(widgets.SplitPane.MinSizeRatio, m.layoutSplitRatio - 0.05)
+          Some(m.copy(layoutSplitRatio = next, layoutSplitDrag = widgets.SplitPane.DragState.at(next)).tui)
         case CharKey(']') =>
-          Some(m.copy(layoutSplitRatio = math.min(1.0 - widgets.SplitPane.MinSizeRatio, m.layoutSplitRatio + 0.05)).tui)
+          val next = math.min(1.0 - widgets.SplitPane.MinSizeRatio, m.layoutSplitRatio + 0.05)
+          Some(m.copy(layoutSplitRatio = next, layoutSplitDrag = widgets.SplitPane.DragState.at(next)).tui)
+        case CharKey('=') | CharKey('/') =>
+          // Reset the split back to 50/50. `=` is the more conventional
+          // key (Vim-style window resize); `/` is the explicit "reset"
+          // documented in the help footer.
+          Some(m.copy(layoutSplitRatio = 0.5, layoutSplitDrag = widgets.SplitPane.DragState.at(0.5)).tui)
         case _ =>
           digitTabSwitch(k, allowDigits = !menuActive).map(idx => Tui(m, Cmd.GCmd(SelectTab(idx))))
 
@@ -1326,8 +1366,12 @@ object Stage1ShowcaseApp:
             "menu  ".text,
             " ↓ ".themed(_.primary),
             "open  ".text,
-            " [ / ] ".themed(_.primary),
-            "split  ".text
+            " [ ".themed(_.primary),
+            "shrink ".text,
+            " ] ".themed(_.primary),
+            "grow ".text,
+            " = ".themed(_.primary),
+            "reset  ".text
           )
         case HelpTabIdx =>
           List(" press 1..9 to leave Help ".themed(_.info), "  ".text)
@@ -1598,7 +1642,17 @@ object Stage1ShowcaseApp:
     private def widgetsTabBody(m: Model)(using theme: Theme): List[VNode] =
       val r     = widgetsTabRect(m)
       val title = TextNode(2.x, 1.y, List(" Tree widget demo ".themed(_.primary)))
-      val intro = TextNode(2.x, 3.y, List("Arrow keys move; Space/Enter toggles a node.".text))
+      val intro = TextNode(
+        2.x,
+        3.y,
+        List(
+          "↑/↓ move; Space/Enter toggle.  Click a row to select it.  Click ".text,
+          "[+]".themed(_.primary),
+          " or ".text,
+          "[-]".themed(_.primary),
+          " to expand/collapse.  Scroll wheel moves selection.".text
+        )
+      )
       val treeRows = widgets.Tree(
         roots = demoTree,
         expanded = m.treeExpanded,
@@ -1772,7 +1826,9 @@ object Stage1ShowcaseApp:
       val intro = TextNode(
         2.x,
         3.y,
-        List("←/→ move between menus.  ↓/Enter open.  Esc close.  [ / ] resize split.".themed(_.info))
+        List(
+          "←/→ menus.  ↓/Enter open.  Esc close.  [ shrink, ] grow, = reset.  Drag divider with mouse.".themed(_.info)
+        )
       )
 
       val splitTop    = 5
@@ -1802,8 +1858,8 @@ object Stage1ShowcaseApp:
             TextNode((at.x.value + 1).x, (at.y.value + 1).y, List(" Right pane ".themed(_.primary))),
             TextNode((at.x.value + 1).x, (at.y.value + 3).y, List("This pane is rendered by SplitPane.".text)),
             TextNode((at.x.value + 1).x, (at.y.value + 4).y, List(s"Width = $w cells.".themed(_.info))),
-            TextNode((at.x.value + 1).x, (at.y.value + 6).y, List("[ shrinks the left pane".text)),
-            TextNode((at.x.value + 1).x, (at.y.value + 7).y, List("] grows the left pane".text)),
+            TextNode((at.x.value + 1).x, (at.y.value + 6).y, List("[ shrink, ] grow,".text)),
+            TextNode((at.x.value + 1).x, (at.y.value + 7).y, List("= or / reset to 50/50.".text)),
             TextNode((at.x.value + 1).x, (at.y.value + 9).y, List("…or drag the divider".text)),
             TextNode((at.x.value + 1).x, (at.y.value + 10).y, List("with the mouse.".themed(_.info)))
           )
@@ -1865,7 +1921,7 @@ object Stage1ShowcaseApp:
         TextNode(2.x, 19.y, List("   ↑/↓ move,  Tab focuses ListView vs Table".text)),
         TextNode(2.x, 21.y, List(" 5 Layout (SplitPane + MenuBar)".themed(_.success))),
         TextNode(2.x, 22.y, List("   ←/→ menu,  ↓ open,  Enter pick,  Esc close".text)),
-        TextNode(2.x, 23.y, List("   [ / ] or drag the divider to resize the split".text)),
+        TextNode(2.x, 23.y, List("   [ shrink, ] grow, = reset, or drag the divider with the mouse".text)),
         TextNode(2.x, 25.y, List(" 6 Wizard / 7 Dashboard / 9 Editor (MultiLineInput)".themed(_.success))),
         TextNode(2.x, 26.y, List("   editor: Enter inserts newline, ↑/↓ between rows".text)),
         TextNode(2.x, 29.y, List("   q / Esc  open quit confirmation".text)),

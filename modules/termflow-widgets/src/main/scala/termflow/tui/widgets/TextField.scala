@@ -251,8 +251,10 @@ object TextField:
         )
       )
     else
+      // Placeholder text renders dimmed in the theme's secondary slot
+      // so users can tell the sample value isn't real input.
       val style =
-        if showPlaceholder then Style(fg = theme.foreground)
+        if showPlaceholder then Style(fg = theme.secondary, dim = true, italic = true)
         else Style(fg = theme.foreground)
       TextNode(at.x, at.y, List(Text(padded, style)))
 

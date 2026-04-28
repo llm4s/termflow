@@ -1,5 +1,7 @@
 package termflow.apps.showcase
 
+import termflow.apps.dashboard.DashboardApp
+import termflow.apps.wizard.WizardApp
 import termflow.tui.*
 import termflow.tui.Theme.themed
 import termflow.tui.Tui.*
@@ -135,7 +137,16 @@ object Stage1ShowcaseApp:
    * `activeTab` indices in the model.
    */
   private val showcaseTabs: Vector[String] =
-    Vector("1 Showcase", "2 Widgets", "3 Inputs", "4 Data", "5 Layout", "6 Help")
+    Vector(
+      "1 Showcase",
+      "2 Widgets",
+      "3 Inputs",
+      "4 Data",
+      "5 Layout",
+      "6 Wizard",
+      "7 Dashboard",
+      "8 Help"
+    )
 
   /**
    * 0-based row of the Tabs bar inside the root frame. Used by both the
@@ -150,12 +161,14 @@ object Stage1ShowcaseApp:
    * Tab index for the file-tree demo so the view function and the
    *  dispatch agree on what `1` selects.
    */
-  private val ShowcaseTabIdx: Int = 0
-  private val WidgetsTabIdx: Int  = 1
-  private val InputsTabIdx: Int   = 2
-  private val DataTabIdx: Int     = 3
-  private val LayoutTabIdx: Int   = 4
-  private val HelpTabIdx: Int     = 5
+  private val ShowcaseTabIdx: Int  = 0
+  private val WidgetsTabIdx: Int   = 1
+  private val InputsTabIdx: Int    = 2
+  private val DataTabIdx: Int      = 3
+  private val LayoutTabIdx: Int    = 4
+  private val WizardTabIdx: Int    = 5
+  private val DashboardTabIdx: Int = 6
+  private val HelpTabIdx: Int      = 7
 
   // ---- Inputs tab (Form + TextField + Select + Autocomplete + CheckBox + Button) ----
   private val InpNameId: FocusId    = FocusId("inp-name")
@@ -367,6 +380,9 @@ object Stage1ShowcaseApp:
     layoutSplitRatio: Double,
     layoutMenu: widgets.MenuBar.State,
     layoutLastPick: Option[String],
+    // ---- Embedded sub-apps ----
+    wizardModel: WizardApp.Model,
+    dashboardModel: DashboardApp.Model,
     input: Sub[Msg],
     resize: Sub[Msg],
     tickSub: Sub[Msg]
@@ -451,6 +467,8 @@ object Stage1ShowcaseApp:
         layoutSplitRatio = 0.55,
         layoutMenu = widgets.MenuBar.State(layoutMenus),
         layoutLastPick = None,
+        wizardModel = WizardApp.initialModel,
+        dashboardModel = DashboardApp.initialModel,
         input = Sub.InputKey(k => Key(k), e => KeyError(e), ctx),
         resize = Sub.TerminalResize[Msg](200, (w, h) => Resize(w, h), ctx),
         tickSub = Sub.Every(tickPeriodMs, () => Tick, ctx)
@@ -561,26 +579,69 @@ object Stage1ShowcaseApp:
               // keys directly so they can fold the keystroke into widget
               // state. Other tabs fall through to the Cmd-based dispatch.
               withEvent.activeTab match
-                case InputsTabIdx => handleInputsKey(withEvent, k, ctx)
-                case DataTabIdx   => handleDataKey(withEvent, k, ctx)
-                case LayoutTabIdx => handleLayoutKey(withEvent, k, ctx)
-                case _            => Tui(withEvent, dispatch(withEvent, k))
+                case InputsTabIdx    => handleInputsKey(withEvent, k, ctx)
+                case DataTabIdx      => handleDataKey(withEvent, k, ctx)
+                case LayoutTabIdx    => handleLayoutKey(withEvent, k, ctx)
+                case WizardTabIdx    => handleWizardKey(withEvent, k)
+                case DashboardTabIdx => handleDashboardKey(withEvent, k)
+                case _               => Tui(withEvent, dispatch(withEvent, k))
             case _ => Tui(withEvent, dispatch(withEvent, k))
 
     /**
      * Tick handler: advance the counter, animate the Data tab's progress
-     *  bar, auto-close Waiting when its duration elapses, and otherwise
-     *  leave the model alone.
+     *  bar, auto-close Waiting when its duration elapses, drive the
+     *  embedded dashboard simulation when its tab is active, and
+     *  otherwise leave the model alone.
      */
     private def onTick(m: Model): Tui[Model, Msg] =
       val nextProgress =
         if m.dataProgress >= 1.0 then 0.0
         else math.min(1.0, m.dataProgress + 0.01)
-      val tickedModel = m.copy(tick = m.tick + 1, dataProgress = nextProgress)
+      val nextDashboard =
+        if m.activeTab == DashboardTabIdx then DashboardApp.step(m.dashboardModel, DashboardApp.Msg.Tick)
+        else m.dashboardModel
+      val tickedModel = m.copy(tick = m.tick + 1, dataProgress = nextProgress, dashboardModel = nextDashboard)
       tickedModel.dialog match
         case Dialog.Waiting(_, deadline) if tickedModel.tick >= deadline =>
           tickedModel.copy(dialog = Dialog.None).tui
         case _ => tickedModel.tui
+
+    /**
+     * Forward a keystroke to the embedded wizard. `q`/`Esc` outside a
+     * `TextField` opens the showcase quit dialog instead of quitting the
+     * wizard's standalone runtime — embedding semantics differ from the
+     * standalone app on quit only.
+     */
+    private def handleWizardKey(m: Model, k: KeyDecoder.InputKey): Tui[Model, Msg] =
+      import KeyDecoder.InputKey.*
+      // Tab-switch digits and tab-bar mouse hits stay routed through the
+      // showcase, not the embedded wizard.
+      digitTabSwitch(k, allowDigits = !m.wizardModel.isFocusedTextField) match
+        case Some(idx) => Tui(m, Cmd.GCmd(SelectTab(idx)))
+        case None =>
+          k match
+            case Mouse(ev) => Tui(m, tabBarMouseDispatch(ev))
+            case CharKey('q') | CharKey('Q') | Escape if !m.wizardModel.isFocusedTextField =>
+              Tui(m, Cmd.GCmd(OpenDialog))
+            case _ =>
+              val nextWizard = WizardApp.step(m.wizardModel, WizardApp.Msg.Key(k))
+              m.copy(wizardModel = nextWizard).tui
+
+    /**
+     * Forward a keystroke to the embedded dashboard. Dashboard never has
+     * a TextField focused, so quit semantics are simpler than the wizard.
+     */
+    private def handleDashboardKey(m: Model, k: KeyDecoder.InputKey): Tui[Model, Msg] =
+      import KeyDecoder.InputKey.*
+      digitTabSwitch(k, allowDigits = true) match
+        case Some(idx) => Tui(m, Cmd.GCmd(SelectTab(idx)))
+        case None =>
+          k match
+            case Mouse(ev)                            => Tui(m, tabBarMouseDispatch(ev))
+            case CharKey('q') | CharKey('Q') | Escape => Tui(m, Cmd.GCmd(OpenDialog))
+            case _ =>
+              val nextDashboard = DashboardApp.step(m.dashboardModel, DashboardApp.Msg.Key(k))
+              m.copy(dashboardModel = nextDashboard).tui
 
     private def clampIdx(i: Int, size: Int): Int = math.max(0, math.min(size - 1, i))
 
@@ -1144,12 +1205,14 @@ object Stage1ShowcaseApp:
       )
 
       val body: List[VNode] = m.activeTab match
-        case WidgetsTabIdx => widgetsTabBody(m)
-        case InputsTabIdx  => inputsTabBody(m)
-        case DataTabIdx    => dataTabBody(m)
-        case LayoutTabIdx  => layoutTabBody(m)
-        case HelpTabIdx    => helpTabBody(m)
-        case _             => showcaseTabBody(m)
+        case WidgetsTabIdx   => widgetsTabBody(m)
+        case InputsTabIdx    => inputsTabBody(m)
+        case DataTabIdx      => dataTabBody(m)
+        case LayoutTabIdx    => layoutTabBody(m)
+        case WizardTabIdx    => wizardTabBody(m)
+        case DashboardTabIdx => dashboardTabBody(m)
+        case HelpTabIdx      => helpTabBody(m)
+        case _               => showcaseTabBody(m)
 
       val baseRoot = RootNode(
         width = math.max(60, m.width),
@@ -1577,7 +1640,7 @@ object Stage1ShowcaseApp:
       val r     = widgetsTabRect(m)
       val title = TextNode(2.x, 1.y, List(" Keybindings & help ".themed(_.primary)))
       val rows = List(
-        TextNode(2.x, 3.y, List(" 1..6 ".themed(_.primary), "  switch tab".text)),
+        TextNode(2.x, 3.y, List(" 1..8 ".themed(_.primary), "  switch tab".text)),
         TextNode(2.x, 5.y, List(" 1 Showcase".themed(_.success))),
         TextNode(2.x, 6.y, List("   b  cycle border style".text)),
         TextNode(2.x, 7.y, List("   t  cycle theme".text)),
@@ -1593,11 +1656,36 @@ object Stage1ShowcaseApp:
         TextNode(2.x, 20.y, List(" 5 Layout (SplitPane + MenuBar)".themed(_.success))),
         TextNode(2.x, 21.y, List("   ←/→ menu,  ↓ open,  Enter pick,  Esc close".text)),
         TextNode(2.x, 22.y, List("   [ / ] resize the split".text)),
-        TextNode(2.x, 24.y, List(" Anywhere".themed(_.success))),
-        TextNode(2.x, 25.y, List("   q / Esc  open quit confirmation".text)),
-        TextNode(2.x, 26.y, List("   click on Tabs bar  switch tab".text))
+        TextNode(2.x, 24.y, List(" 6 Wizard (3-step form)".themed(_.success))),
+        TextNode(2.x, 25.y, List("   Tab/Shift+Tab cycle focus,  Enter activates Next/Submit".text)),
+        TextNode(2.x, 26.y, List(" 7 Dashboard (live metrics)".themed(_.success))),
+        TextNode(2.x, 27.y, List("   ↑/↓ select service,  r restart,  p / Space pause".text)),
+        TextNode(2.x, 29.y, List(" Anywhere".themed(_.success))),
+        TextNode(2.x, 30.y, List("   q / Esc  open quit confirmation".text)),
+        TextNode(2.x, 31.y, List("   click on Tabs bar  switch tab".text))
       )
       List(panel(r, theme, title :: rows))
+
+    /**
+     * Body content for the "Wizard" tab — embeds [[WizardApp]]'s view by
+     * rendering its `RootNode` and translating the children into the
+     * tab's rect, so we don't need a parallel render path.
+     */
+    private def wizardTabBody(m: Model)(using theme: Theme): List[VNode] =
+      val r        = widgetsTabRect(m)
+      val embedded = WizardApp.App.view(m.wizardModel)
+      embedded.children.map(c => Layout.translate(c, dx = r.col - 1, dy = r.row - 1))
+
+    /**
+     * Body content for the "Dashboard" tab — same delegation pattern as
+     * `wizardTabBody`. The `Sub.Every` ticker on the showcase drives the
+     * embedded simulation forward when this tab is active (see
+     * `onTick`).
+     */
+    private def dashboardTabBody(m: Model)(using theme: Theme): List[VNode] =
+      val r        = widgetsTabRect(m)
+      val embedded = DashboardApp.App.view(m.dashboardModel)
+      embedded.children.map(c => Layout.translate(c, dx = r.col - 1, dy = r.row - 1))
 
     /**
      * Rect that fills the area below the Tabs bar to the help footer.

@@ -522,7 +522,7 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(rendered.contains("focus"), "focused CheckBox label should appear in the frame")
   }
 
-  test("the Tabs bar appears on row 2 with all six tab labels") {
+  test("the Tabs bar appears on row 2 with all eight tab labels") {
     val d        = driver
     val frame    = d.frame
     val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
@@ -531,7 +531,9 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(rendered.contains("3 Inputs"), "Tabs widget should render Inputs tab")
     assert(rendered.contains("4 Data"), "Tabs widget should render Data tab")
     assert(rendered.contains("5 Layout"), "Tabs widget should render Layout tab")
-    assert(rendered.contains("6 Help"), "Tabs widget should render Help tab")
+    assert(rendered.contains("6 Wizard"), "Tabs widget should render Wizard tab")
+    assert(rendered.contains("7 Dashboard"), "Tabs widget should render Dashboard tab")
+    assert(rendered.contains("8 Help"), "Tabs widget should render Help tab")
     // Default active tab (0) should be bracketed by the Tabs widget.
     assert(rendered.contains("[ 1 Showcase ]"), s"default active tab should be bracketed; rendered:\n$rendered")
   }
@@ -591,7 +593,7 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
 
   test("Help tab renders keybinding reference") {
     val d = driver
-    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('6')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('8')))
     val frame    = d.frame
     val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
     assert(rendered.contains("Keybindings"), s"Help tab title missing in:\n$rendered")
@@ -602,8 +604,8 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     // Regression: helpTabKey originally had no Mouse handler, trapping
     // the user on Help.
     val d = driver
-    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('6')))
-    assert(d.model.activeTab == 5)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('8')))
+    assert(d.model.activeTab == 7)
     d.send(
       Stage1ShowcaseApp.Msg.Key(
         InputKey.Mouse(
@@ -669,6 +671,71 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('c')))
     assert(d.model.eventHistory.length == 3)
     assert(d.model.eventHistory.last.contains("'c'"), s"latest event must be at the tail: ${d.model.eventHistory}")
+  }
+
+  // ---- Wizard tab (embedded WizardApp) -------------------------------------
+
+  test("'6' switches to Wizard tab and renders Wizard step indicator") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('6')))
+    assert(d.model.activeTab == 5)
+    val frame    = d.frame
+    val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
+    assert(rendered.contains("Account"), s"expected Account step label in:\n$rendered")
+    assert(rendered.contains("Plan"), "expected Plan step label")
+    assert(rendered.contains("Confirm"), "expected Confirm step label")
+  }
+
+  test("typing characters on Wizard tab folds them into the Name field") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('6')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('A')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('l')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('i')))
+    assert(d.model.wizardModel.name.buffer == "Ali")
+  }
+
+  test("'q' on Wizard tab opens the showcase quit dialog (not a literal char)") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('6')))
+    // Tab past Name and Email so focus is on the Next button (no TextField).
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('\t')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('\t')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('q')))
+    assert(d.model.dialog.isInstanceOf[Stage1ShowcaseApp.Dialog.ConfirmQuit])
+  }
+
+  // ---- Dashboard tab (embedded DashboardApp) -------------------------------
+
+  test("'7' switches to Dashboard tab and renders service names") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('7')))
+    assert(d.model.activeTab == 6)
+    val frame    = d.frame
+    val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
+    termflow.apps.dashboard.DashboardApp.defaultServices.foreach(svc =>
+      assert(rendered.contains(svc), s"expected service '$svc' to render on Dashboard tab")
+    )
+  }
+
+  test("Tick advances the embedded dashboard simulation only when its tab is active") {
+    val d      = driver
+    val before = d.model.dashboardModel.tick
+    // Tick on the Showcase tab — dashboard frozen.
+    d.send(Stage1ShowcaseApp.Msg.Tick)
+    assert(d.model.dashboardModel.tick == before, "dashboard ticks should not advance off-tab")
+    // Switch to Dashboard tab and tick.
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('7')))
+    d.send(Stage1ShowcaseApp.Msg.Tick)
+    assert(d.model.dashboardModel.tick == before + 1, "dashboard tick should advance when its tab is active")
+  }
+
+  test("ArrowDown on the Dashboard tab moves the service selection") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('7')))
+    assert(d.model.dashboardModel.services.selected == 0)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.ArrowDown))
+    assert(d.model.dashboardModel.services.selected == 1)
   }
 
   test("LogView in the live-input panel renders the most recent events") {

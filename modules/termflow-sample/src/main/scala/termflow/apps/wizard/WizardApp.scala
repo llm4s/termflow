@@ -125,160 +125,158 @@ object WizardApp:
     else if !emailRaw.contains("@") then builder += (EmailId.value -> "Email must contain '@'")
     builder.result()
 
+  /**
+   * Pure factory for the wizard's initial model. The full [[App]] runtime
+   * uses this in `init` after subscribing to keyboard input; the
+   * embeddable form lets the Stage 1 showcase construct a wizard model
+   * without registering its own subscriptions.
+   */
+  def initialModel: Model =
+    Model(
+      step = Step.Account,
+      name = widgets.TextField.State.withPlaceholder("Alice"),
+      email = widgets.TextField.State.withPlaceholder("alice@example.com"),
+      planIndex = 0,
+      submitted = false,
+      focus = Map(
+        Step.Account -> FocusManager(accountFocusOrder),
+        Step.Plan    -> FocusManager(planFocusOrder),
+        Step.Confirm -> FocusManager(confirmFocusOrder)
+      ),
+      pendingKey = None,
+      errors = Map.empty
+    )
+
+  /**
+   * Pure model transition for one [[Msg]]. The full [[App]] runtime
+   * delegates to this for everything except `Quit`, which it pairs with
+   * `Cmd.Exit`. Exposed at object scope so the Stage 1 showcase can embed
+   * the wizard as a tab without re-implementing the state machine.
+   */
+  def step(m: Model, msg: Msg): Model =
+    msg match
+      case NextStep =>
+        m.step match
+          case Step.Account =>
+            val errs = validateAccount(m)
+            if errs.nonEmpty then m.copy(errors = errs)
+            else m.copy(step = Step.Plan, errors = Map.empty)
+          case Step.Plan    => m.copy(step = Step.Confirm, errors = Map.empty)
+          case Step.Confirm => m
+
+      case PrevStep =>
+        m.step match
+          case Step.Account => m
+          case Step.Plan    => m.copy(step = Step.Account, errors = Map.empty)
+          case Step.Confirm => m.copy(step = Step.Plan, errors = Map.empty)
+
+      case NextFocus   => m.copy(focus = m.focus.updated(m.step, m.currentFocus.next))
+      case PrevFocus   => m.copy(focus = m.focus.updated(m.step, m.currentFocus.previous))
+      case Activate    => stepActivate(m)
+      case ToggleField => m.copy(focus = m.focus.updated(m.step, m.currentFocus.next))
+      case PlanUp      => m.copy(planIndex = math.max(0, m.planIndex - 1))
+      case PlanDown    => m.copy(planIndex = math.min(planOptions.size - 1, m.planIndex + 1))
+      case Submitted   => m.copy(submitted = true)
+      case Quit        => m
+      case KeyError(_) => m
+      case Key(k)      => stepKey(m, k)
+
+  /** Activate the focused button — pure variant of `activateFocused`. */
+  private def stepActivate(m: Model): Model =
+    m.currentFocus.current match
+      case Some(NextAccountId) => step(m, NextStep)
+      case Some(BackPlanId)    => step(m, PrevStep)
+      case Some(NextPlanId)    => step(m, NextStep)
+      case Some(BackConfirmId) => step(m, PrevStep)
+      case Some(SubmitId)      => step(m, Submitted)
+      case _                   => m
+
+  /** Pure key dispatch — mirrors `onKey` without the runtime side-effects. */
+  private def stepKey(m: Model, k: KeyDecoder.InputKey): Model =
+    import KeyDecoder.InputKey.*
+    val isQuitKey = k match
+      case CharKey('q') | CharKey('Q') | Escape => !m.isFocusedTextField
+      case _                                    => false
+    if isQuitKey then m // runtime handles Quit at the App layer
+    else
+      k match
+        case CharKey('\t') => step(m, NextFocus)
+        case BackTab       => step(m, PrevFocus)
+        case _             => stepKeyForStep(m, k)
+
+  private def stepKeyForStep(m: Model, k: KeyDecoder.InputKey): Model =
+    import KeyDecoder.InputKey.*
+    m.step match
+      case Step.Account =>
+        m.currentFocus.current match
+          case Some(id) if id == NameId =>
+            val (next, _) = widgets.TextField.handleKey[Msg](m.name, k)(_ => None)
+            m.copy(name = next)
+          case Some(id) if id == EmailId =>
+            val (next, _) = widgets.TextField.handleKey[Msg](m.email, k)(_ => None)
+            m.copy(email = next)
+          case Some(id) if id == NextAccountId =>
+            k match
+              case Enter | CharKey(' ') => step(m, NextStep)
+              case ArrowLeft            => step(m, PrevFocus)
+              case _                    => m
+          case _ => m
+
+      case Step.Plan =>
+        m.currentFocus.current match
+          case Some(id) if id == PlanRadioId =>
+            k match
+              case ArrowUp   => step(m, PlanUp)
+              case ArrowDown => step(m, PlanDown)
+              case _         => m
+          case Some(id) if id == BackPlanId =>
+            k match
+              case Enter | CharKey(' ') => step(m, PrevStep)
+              case ArrowRight           => step(m, NextFocus)
+              case _                    => m
+          case Some(id) if id == NextPlanId =>
+            k match
+              case Enter | CharKey(' ') => step(m, NextStep)
+              case ArrowLeft            => step(m, PrevFocus)
+              case _                    => m
+          case _ => m
+
+      case Step.Confirm =>
+        m.currentFocus.current match
+          case Some(id) if id == BackConfirmId =>
+            k match
+              case Enter | CharKey(' ') => step(m, PrevStep)
+              case ArrowRight           => step(m, NextFocus)
+              case _                    => m
+          case Some(id) if id == SubmitId =>
+            k match
+              case Enter | CharKey(' ') => step(m, Submitted)
+              case ArrowLeft            => step(m, PrevFocus)
+              case _                    => m
+          case _ => m
+
   object App extends TuiApp[Model, Msg]:
 
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Sub.InputKey(Key.apply, KeyError.apply, ctx)
-      Model(
-        step = Step.Account,
-        name = widgets.TextField.State.withPlaceholder("Alice"),
-        email = widgets.TextField.State.withPlaceholder("alice@example.com"),
-        planIndex = 0,
-        submitted = false,
-        focus = Map(
-          Step.Account -> FocusManager(accountFocusOrder),
-          Step.Plan    -> FocusManager(planFocusOrder),
-          Step.Confirm -> FocusManager(confirmFocusOrder)
-        ),
-        pendingKey = None,
-        errors = Map.empty
-      ).tui
+      initialModel.tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       val _ = ctx
       msg match
-        case NextStep =>
-          // Account → Plan: validate first.
-          m.step match
-            case Step.Account =>
-              val errs = validateAccount(m)
-              if errs.nonEmpty then m.copy(errors = errs).tui
-              else m.copy(step = Step.Plan, errors = Map.empty).tui
-            case Step.Plan    => m.copy(step = Step.Confirm, errors = Map.empty).tui
-            case Step.Confirm => m.tui
-
-        case PrevStep =>
-          m.step match
-            case Step.Account => m.tui
-            case Step.Plan    => m.copy(step = Step.Account, errors = Map.empty).tui
-            case Step.Confirm => m.copy(step = Step.Plan, errors = Map.empty).tui
-
-        case NextFocus =>
-          m.copy(focus = m.focus.updated(m.step, m.currentFocus.next)).tui
-
-        case PrevFocus =>
-          m.copy(focus = m.focus.updated(m.step, m.currentFocus.previous)).tui
-
-        case Activate =>
-          activateFocused(m)
-
-        case ToggleField =>
-          // Account-step shortcut: Tab cycles within the step's focus order.
-          // Reused as the generic "advance focus" message.
-          m.copy(focus = m.focus.updated(m.step, m.currentFocus.next)).tui
-
-        case PlanUp =>
-          m.copy(planIndex = math.max(0, m.planIndex - 1)).tui
-
-        case PlanDown =>
-          m.copy(planIndex = math.min(planOptions.size - 1, m.planIndex + 1)).tui
-
-        case Submitted =>
-          m.copy(submitted = true).tui
-
-        case Quit        => Tui(m, Cmd.Exit)
-        case KeyError(_) => m.tui
-        case Key(k)      => onKey(m, k)
-
-    /**
-     * Activate the focused button. Buttons are step-specific:
-     *   - Account / NextAccount → NextStep
-     *   - Plan / BackPlan       → PrevStep, NextPlan → NextStep
-     *   - Confirm / BackConfirm → PrevStep, Submit   → Submitted
-     *
-     * On any other focus (text field, radio), activation is a no-op so
-     * Enter inside a text field doesn't accidentally advance the wizard.
-     */
-    private def activateFocused(m: Model): Tui[Model, Msg] =
-      m.currentFocus.current match
-        case Some(NextAccountId) => update(m, NextStep, null)
-        case Some(BackPlanId)    => update(m, PrevStep, null)
-        case Some(NextPlanId)    => update(m, NextStep, null)
-        case Some(BackConfirmId) => update(m, PrevStep, null)
-        case Some(SubmitId)      => update(m, Submitted, null)
-        case _                   => m.tui
-
-    /**
-     * Single dispatch: text-field keystrokes fold into the focused
-     * `TextField.State` directly, everything else routes through the
-     * step-aware keymap.
-     */
-    private def onKey(m: Model, k: KeyDecoder.InputKey): Tui[Model, Msg] =
-      import KeyDecoder.InputKey.*
-
-      // Globals always handled, regardless of focus.
-      val globalCmd = k match
-        case CharKey('q') | CharKey('Q') | Escape => Some(Quit)
-        case _                                    => None
-      globalCmd match
-        case Some(quit) if !m.isFocusedTextField => return Tui(m, Cmd.GCmd(quit))
-        case _                                   => ()
-
-      // Tab / Shift+Tab focus cycling on every step.
-      k match
-        case CharKey('\t') => return update(m, NextFocus, null)
-        case BackTab       => return update(m, PrevFocus, null)
-        case _             => ()
-
-      m.step match
-        case Step.Account =>
-          m.currentFocus.current match
-            case Some(id) if id == NameId =>
-              val (next, _) = widgets.TextField.handleKey[Msg](m.name, k)(_ => None)
-              m.copy(name = next).tui
-            case Some(id) if id == EmailId =>
-              val (next, _) = widgets.TextField.handleKey[Msg](m.email, k)(_ => None)
-              m.copy(email = next).tui
-            case Some(id) if id == NextAccountId =>
-              k match
-                case Enter | CharKey(' ') => update(m, NextStep, null)
-                case ArrowLeft            => update(m, PrevFocus, null)
-                case _                    => m.tui
-            case _ => m.tui
-
-        case Step.Plan =>
-          m.currentFocus.current match
-            case Some(id) if id == PlanRadioId =>
-              k match
-                case ArrowUp              => update(m, PlanUp, null)
-                case ArrowDown            => update(m, PlanDown, null)
-                case Enter | CharKey(' ') => m.tui
-                case _                    => m.tui
-            case Some(id) if id == BackPlanId =>
-              k match
-                case Enter | CharKey(' ') => update(m, PrevStep, null)
-                case ArrowRight           => update(m, NextFocus, null)
-                case _                    => m.tui
-            case Some(id) if id == NextPlanId =>
-              k match
-                case Enter | CharKey(' ') => update(m, NextStep, null)
-                case ArrowLeft            => update(m, PrevFocus, null)
-                case _                    => m.tui
-            case _ => m.tui
-
-        case Step.Confirm =>
-          m.currentFocus.current match
-            case Some(id) if id == BackConfirmId =>
-              k match
-                case Enter | CharKey(' ') => update(m, PrevStep, null)
-                case ArrowRight           => update(m, NextFocus, null)
-                case _                    => m.tui
-            case Some(id) if id == SubmitId =>
-              k match
-                case Enter | CharKey(' ') => update(m, Submitted, null)
-                case ArrowLeft            => update(m, PrevFocus, null)
-                case _                    => m.tui
-            case _ => m.tui
+        // Quit is the only message with a non-NoCmd effect at the runtime
+        // boundary; inside Key(k) we also need to exit on `q`/Esc when
+        // not focused on a TextField. Everything else delegates to the
+        // pure `step` function so the showcase can embed the wizard.
+        case Quit => Tui(m, Cmd.Exit)
+        case Key(k) =>
+          import KeyDecoder.InputKey.*
+          val quitKey = k match
+            case CharKey('q') | CharKey('Q') | Escape => !m.isFocusedTextField
+            case _                                    => false
+          if quitKey then Tui(m, Cmd.Exit)
+          else step(m, msg).tui
+        case _ => step(m, msg).tui
 
     override def view(m: Model): RootNode =
       given Theme = Theme.dark

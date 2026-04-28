@@ -105,58 +105,77 @@ object DashboardApp:
   /** Visible rows in the service `ListView`. */
   val visibleServices: Int = 8
 
+  /**
+   * Pure factory for the dashboard's initial model. The full [[App]]
+   * runtime uses this in `init` after wiring its `Sub.Every` ticker; the
+   * embeddable form lets the Stage 1 showcase slot the dashboard into a
+   * tab without registering its own subscriptions.
+   */
+  def initialModel: Model =
+    val services = defaultServices.zipWithIndex.map { case (name, i) =>
+      ServiceState(name, cpu = 0.10 + (i * 0.07) % 0.6, ticks = 0L)
+    }
+    Model(
+      services = widgets.ListView.State.of(services, visibleRows = visibleServices),
+      tick = 0L,
+      paused = false,
+      rng = new Random(20260428L)
+    )
+
+  /**
+   * Pure model transition for one [[Msg]]. The full [[App]] runtime
+   * delegates to this for everything except `Quit`, which it pairs with
+   * `Cmd.Exit`. Exposed at object scope so the Stage 1 showcase can
+   * embed the dashboard as a tab without re-implementing the simulation.
+   */
+  def step(m: Model, msg: Msg): Model =
+    msg match
+      case Tick =>
+        if m.paused then m.copy(tick = m.tick + 1)
+        else
+          val nextItems = m.services.items.map { s =>
+            val delta = (m.rng.nextDouble() - 0.5) * 0.20
+            s.withCpu(s.cpu + delta).copy(ticks = s.ticks + 1)
+          }
+          m.copy(services = m.services.withItems(nextItems), tick = m.tick + 1)
+
+      case Restart =>
+        m.services.selectedItem match
+          case None => m
+          case Some(picked) =>
+            val idx        = m.services.selected
+            val resetItems = m.services.items.updated(idx, picked.copy(cpu = 0.0, ticks = 0L))
+            m.copy(services = m.services.withItems(resetItems))
+
+      case TogglePause => m.copy(paused = !m.paused)
+      case Quit        => m
+      case KeyError(_) => m
+      case Key(k) =>
+        val (nextList, _) = widgets.ListView.handleKey[ServiceState, Msg](m.services, k)(_ => None)
+        val nm            = m.copy(services = nextList)
+        Keys.lookup(k) match
+          case Some(out) => step(nm, out)
+          case None      => nm
+
   object App extends TuiApp[Model, Msg]:
 
     override def init(ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       Sub.Every(tickPeriodMs, () => Tick, ctx)
       Sub.InputKey(Key.apply, KeyError.apply, ctx)
-      val initial = defaultServices.zipWithIndex.map { case (name, i) =>
-        // Deterministic-ish initial loads so the demo's first frame is
-        // varied without introducing test flakes — the spec seeds its
-        // own `Random` and never reads `init`'s.
-        ServiceState(name, cpu = 0.10 + (i * 0.07) % 0.6, ticks = 0L)
-      }
-      Model(
-        services = widgets.ListView.State.of(initial, visibleRows = visibleServices),
-        tick = 0L,
-        paused = false,
-        // Stable seed so production runs are visually consistent —
-        // tests inject their own seeded model instead of going through
-        // `init`.
-        rng = new Random(20260428L)
-      ).tui
+      initialModel.tui
 
     override def update(m: Model, msg: Msg, ctx: RuntimeCtx[Msg]): Tui[Model, Msg] =
       val _ = ctx
       msg match
-        case Tick =>
-          if m.paused then m.copy(tick = m.tick + 1).tui
-          else
-            val nextItems = m.services.items.map { s =>
-              val delta = (m.rng.nextDouble() - 0.5) * 0.20
-              s.withCpu(s.cpu + delta).copy(ticks = s.ticks + 1)
-            }
-            m.copy(services = m.services.withItems(nextItems), tick = m.tick + 1).tui
-
-        case Restart =>
-          m.services.selectedItem match
-            case None => m.tui
-            case Some(picked) =>
-              val idx        = m.services.selected
-              val resetItems = m.services.items.updated(idx, picked.copy(cpu = 0.0, ticks = 0L))
-              m.copy(services = m.services.withItems(resetItems)).tui
-
-        case TogglePause =>
-          m.copy(paused = !m.paused).tui
-
-        case Quit        => Tui(m, Cmd.Exit)
-        case KeyError(_) => m.tui
+        case Quit => Tui(m, Cmd.Exit)
         case Key(k) =>
           val (nextList, _) = widgets.ListView.handleKey[ServiceState, Msg](m.services, k)(_ => None)
           val nm            = m.copy(services = nextList)
           Keys.lookup(k) match
-            case Some(out) => Tui(nm, Cmd.GCmd(out))
-            case None      => nm.tui
+            case Some(Quit) => Tui(nm, Cmd.Exit)
+            case Some(out)  => step(nm, out).tui
+            case None       => nm.tui
+        case _ => step(m, msg).tui
 
     override def view(m: Model): RootNode =
       given Theme = Theme.dark

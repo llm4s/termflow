@@ -110,13 +110,15 @@ plus a few public-API breaks.
 | §4.3 Theme + WidgetRenderer split | `Theme` + themable `BoxNode.chars` (#159, plus existing `Theme.scala`) | done — `Theme` ships with `BorderChars` slots; per-widget renderers come in Stage 3 with the dialog/widget expansion |
 | §4.4 Color depth + capability detection | `Color.Indexed` / `Color.Rgb` + capability-driven downgrade (#157) | done |
 | §4.5 SIGWINCH | `Sub.TerminalResize` switched to `backend.onResize` signal with polling fallback (#158) | done |
-| §4.6 Module split | `termflow-testkit` promoted to a published artifact (#161) | partial — testkit is its own module; the finer-grained `termflow-terminal/screen/app/widgets` carve-out is deferred to Stage 4 (§7.1), where MiMa will be wired up at the same time |
+| §4.6 Module split | `termflow-testkit` promoted to a published artifact (#161); `termflow-{terminal,screen,app,widgets}` carve-out lands in Stage 4 prep | done — five published framework modules now back the umbrella `termflow` artifact; sources stay in `termflow.tui` so consumer imports don't move |
 | §4.7 Definition of done | Stage 1 showcase demo (`sbt showcase`, #163) exercises layout, overlays, theme, color depth, and resize end-to-end | done |
 
-The §4.6 module split was scoped down deliberately: the user-facing pain of
-"no separate testkit" was real (#147) and is now fixed; the terminal/screen/app
-split is internal plumbing that is cheap to do later, and pairs naturally with
-Stage 4 stabilisation when MiMa filters need to be defined per-module anyway.
+The §4.6 module split was originally scoped down to "promote testkit" only;
+the finer-grained `termflow-{terminal,screen,app,widgets}` carve-out then
+landed early as Stage 4 prep so MiMa filters can be wired per-module from
+day one (§7.1). Sources kept their `termflow.tui` package: every existing
+`import termflow.tui.*` still works unchanged. The umbrella `termflow`
+artifact stays as a thin transitional pom that depends on all four.
 
 
 ### 4.1 Relative-coordinate VDom (P0, large)
@@ -506,6 +508,12 @@ This is **TermFlow's unique selling point** — no Java TUI library has it.
 The lock-in stage. Goal: produce an API we are willing to keep stable for
 years.
 
+**Module split.** Stage 4's structural prep landed early — the framework
+is now five published modules (`termflow-{terminal,screen,app,widgets}` plus
+the umbrella `termflow`) so each layer can carry its own MiMa baseline.
+Sources stayed in `termflow.tui` so existing consumers don't have to
+rewrite imports.
+
 ### 7.1 MiMa for binary compatibility
 
 Add `sbt-mima-plugin`. Configure to check `termflow-terminal`,
@@ -804,6 +812,31 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
   collapses to a single `Enter` in `typeString` to match real terminal
   behaviour, and `MouseSim.dragGesture` samples intermediate drag points
   so hit-tests can be validated mid-gesture.
+- *2026-04-28* — Module split (§4.6 / §7.1 prep) completed. The
+  monolithic `termflow` artifact now decomposes into five published
+  modules: `termflow-terminal` (backend, key decoding, capabilities,
+  mouse, unicode width), `termflow-screen` (VNode, layout, overlay,
+  ANSI renderer, theme, border chars), `termflow-app` (TuiApp, Tui,
+  Cmd, Sub, runtime, dialogs, focus, keymap, devtools, prompt history,
+  `SimpleANSIRenderer`, `RenderMetrics`), `termflow-widgets` (the
+  catalogue), and a transitional umbrella `termflow` that depends on
+  all four so existing `org.llm4s:termflow_3` users carry on
+  unchanged. **Source-level shape kept**: every file stays in package
+  `termflow.tui`, so call sites that say `import termflow.tui.*` keep
+  working. The screen-only `ScreenPrelude` carries the `2.x`/`3.y`/
+  `"hi".text` extensions so screen-layer callers can use them without
+  pulling in the rest of the app layer; `TuiPrelude` re-exports them
+  unchanged. Custom scalafix rules moved to a dedicated
+  `termflow-scalafix-rules` sub-project that the four framework
+  modules pull in via `% ScalafixConfig`. Tests sit in the module
+  whose code they cover; `AnsiRendererSpec` (which exercises
+  `SimpleANSIRenderer`) lives in `termflow-app`. The umbrella `termflow`
+  is intentionally skinny so a follow-up can wire MiMa per-module
+  (§7.1) without re-arranging files. Alternative considered:
+  rename packages too (`termflow.terminal.*` etc) — rejected for now
+  because the consumer-side cost is enormous and the layering benefit
+  is mostly already realised by the build-level enforcement (each
+  module only sees its declared deps).
 
 ---
 

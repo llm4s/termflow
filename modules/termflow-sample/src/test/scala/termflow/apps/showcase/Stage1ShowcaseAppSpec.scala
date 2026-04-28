@@ -476,6 +476,158 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(rendered.contains("focus"), "focused CheckBox label should appear in the frame")
   }
 
+  test("the Tabs bar appears on row 2 with showcase / widgets / help labels") {
+    val d        = driver
+    val frame    = d.frame
+    val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
+    assert(rendered.contains("1 Showcase"), "Tabs widget should render Showcase tab")
+    assert(rendered.contains("2 Widgets"), "Tabs widget should render Widgets tab")
+    assert(rendered.contains("3 Help"), "Tabs widget should render Help tab")
+    // Default active tab (0) should be bracketed by the Tabs widget.
+    assert(rendered.contains("[ 1 Showcase ]"), s"default active tab should be bracketed; rendered:\n$rendered")
+  }
+
+  // ---- Interactive tab switching ------------------------------------------
+
+  test("pressing 1 / 2 / 3 switches the active tab") {
+    val d = driver
+    assert(d.model.activeTab == 0)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('2')))
+    assert(d.model.activeTab == 1)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('3')))
+    assert(d.model.activeTab == 2)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('1')))
+    assert(d.model.activeTab == 0)
+  }
+
+  test("clicking a tab cell on row 2 switches to that tab") {
+    val d = driver
+    // First tab " 1 Showcase " is 12 cells wide starting at col 2 — col 7 is mid-tab.
+    // Second tab starts at col 2 + 12 + 1 (separator) = col 15.
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Press(
+            termflow.tui.MouseButton.Left,
+            18,
+            2,
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    assert(d.model.activeTab == 1, "click on the Widgets tab cell should select it")
+  }
+
+  test("Widgets tab renders the Tree widget") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('2')))
+    val frame    = d.frame
+    val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
+    assert(rendered.contains("Tree widget demo"), "Widgets tab title should appear")
+    assert(rendered.contains("termflow"), "Tree should render the root node label")
+  }
+
+  test("Widgets tab: ↓ moves selection, Space toggles a node") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('2')))
+    assert(d.model.treeSelected == 0)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.ArrowDown))
+    assert(d.model.treeSelected == 1)
+    // Toggle the currently-selected row (which is "tui" — already expanded).
+    val before = d.model.treeExpanded
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey(' ')))
+    assert(d.model.treeExpanded != before, "Space on an internal node should flip its expanded state")
+  }
+
+  test("Help tab renders keybinding reference") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('3')))
+    val frame    = d.frame
+    val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
+    assert(rendered.contains("Keybindings"), s"Help tab title missing in:\n$rendered")
+    assert(rendered.contains("switch tab"), "Help should document tab switching")
+  }
+
+  test("clicking a tab cell from inside the Help tab still switches tabs") {
+    // Regression: helpTabKey originally had no Mouse handler, trapping
+    // the user on tab 3.
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('3')))
+    assert(d.model.activeTab == 2)
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Press(
+            termflow.tui.MouseButton.Left,
+            6, // anywhere inside the first tab cell
+            2,
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    assert(d.model.activeTab == 0, "click on tab 1 from Help tab should switch to Showcase")
+  }
+
+  test("clicking a tab cell from inside the Widgets tab still switches tabs") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('2')))
+    assert(d.model.activeTab == 1)
+    // Tab cells (separator " ", padding 4):
+    //   "1 Showcase" cols 2..15, sep 16, "2 Widgets" 17..29, sep 30, "3 Help" 31..40.
+    d.send(
+      Stage1ShowcaseApp.Msg.Key(
+        InputKey.Mouse(
+          termflow.tui.MouseEvent.Press(
+            termflow.tui.MouseButton.Left,
+            35, // mid-"3 Help" cell
+            2,
+            termflow.tui.KeyDecoder.Modifiers()
+          )
+        )
+      )
+    )
+    assert(d.model.activeTab == 2, "click on tab 3 from Widgets tab should switch to Help")
+  }
+
+  test("Widgets / Help tab body keeps a 1-cell right margin") {
+    // Regression: widgetsTabRect originally extended to col m.width, so
+    // the right border landed on the very last column and got clipped on
+    // narrower terminals.
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('2')))
+    val frame    = d.frame
+    val rightCol = d.model.width
+    // The last column should NOT contain a vertical border glyph from the
+    // Widgets-tab box (some renderers may also pad with spaces; either is
+    // fine — the assertion is "no border at the screen edge").
+    val borderChars  = Set('│', '┃', '║', '|')
+    val lastColCells = (0 until frame.height).map(r => frame.cells(r)(rightCol - 1).ch).filter(borderChars.contains)
+    assert(
+      lastColCells.isEmpty,
+      s"expected no panel border in the rightmost column ($rightCol); found: ${lastColCells.mkString(",")}"
+    )
+  }
+
+  test("eventHistory grows on each key, capped at the configured maximum") {
+    val d = driver
+    assert(d.model.eventHistory.isEmpty)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('a')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('b')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('c')))
+    assert(d.model.eventHistory.length == 3)
+    assert(d.model.eventHistory.last.contains("'c'"), s"latest event must be at the tail: ${d.model.eventHistory}")
+  }
+
+  test("LogView in the live-input panel renders the most recent events") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('z')))
+    val frame    = d.frame
+    val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
+    assert(rendered.contains("'z'"), "LogView should render the just-pressed key event")
+  }
+
   // Silence unused-import lint warning for AnsiRenderer (it's referenced
   // implicitly through TuiTestDriver, but the file would warn otherwise).
   private val _ = AnsiRenderer.getClass

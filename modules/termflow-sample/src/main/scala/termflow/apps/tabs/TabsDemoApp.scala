@@ -126,13 +126,14 @@ object TabsDemoApp:
       val notesRows      = math.max(1, boxHeight - 12)
       val notes          = active.notes.take(notesRows)
 
-      val tabBar = m.tabs.zipWithIndex
-        .map { case (tab, idx) =>
-          if idx == m.activeTab then s"[${idx + 1}:${tab.name}]"
-          else s" ${idx + 1}:${tab.name} "
-        }
-        .mkString(" ")
-      val tabBarFit  = if tabBar.length <= innerWidth then tabBar else tabBar.take(innerWidth)
+      // Tab bar rendered through the real Tabs widget. Themed via the
+      // ambient Theme; we override the colours below to match the demo's
+      // existing palette.
+      given Theme = Theme.dark.copy(primary = Magenta, foreground = White, border = Magenta)
+      val tabsNode = widgets.Tabs(
+        labels = m.tabs.map(t => s"${m.tabs.indexOf(t) + 1}:${t.name}"),
+        activeIndex = m.activeTab
+      )
       val statusFit  = if m.status.length <= innerWidth then m.status else m.status.take(innerWidth)
       val headerText = s"Active: ${active.name} | counter=${active.counter}"
       val headerFit  = if headerText.length <= innerWidth then headerText else headerText.take(innerWidth)
@@ -142,7 +143,7 @@ object TabsDemoApp:
         gap = 0,
         children = List(
           Layout.Elem(TextNode(1.x, 1.y, List(Text("Tabs Demo", Style(fg = Yellow, bold = true, underline = true))))),
-          Layout.Elem(TextNode(1.x, 1.y, List(Text(tabBarFit, Style(fg = Magenta, bold = true))))),
+          Layout.Elem(tabsNode),
           Layout.Elem(TextNode(1.x, 1.y, List(Text(headerFit, Style(fg = Cyan))))),
           Layout.Elem(TextNode(1.x, 1.y, List(Text("-" * innerWidth, Style(fg = Blue)))))
         )

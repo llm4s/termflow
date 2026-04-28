@@ -791,6 +791,25 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(d.model.editorState.lines.size == rowsBefore + 1)
   }
 
+  test("Mouse click on an actionList row dispatches via HitTest registry") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('a')))
+    val themeBefore = d.model.themeName
+    // The actionList is centred at width=30 over a 100x28 driver; first
+    // row sits roughly at (rootH - dialogH)/2 + 3. We click around the
+    // middle of the dialog to land somewhere on the first action row.
+    val mods    = termflow.tui.KeyDecoder.Modifiers(false, false, false)
+    val frameH  = 28
+    val dialogH = 4 + 3
+    val rowY    = (frameH - dialogH) / 2 + 1 + 2 // +2 = title + blank
+    val rowX    = (100 - 30) / 2 + 1 + 5         // +5 = somewhere inside the row
+    val ev      = termflow.tui.MouseEvent.Press(termflow.tui.MouseButton.Left, col = rowX, row = rowY, mods)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Mouse(ev)))
+    // First row = "Cycle theme" — click should fire the action and close the dialog.
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None)
+    assert(d.model.themeName != themeBefore, "first-row click should fire CycleTheme")
+  }
+
   test("Layout tab Mouse press on the divider arms the SplitPane drag") {
     val d = driver
     d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('5')))

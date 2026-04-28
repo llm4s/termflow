@@ -802,15 +802,26 @@ object Stage1ShowcaseApp:
             case Escape => Cmd.GCmd(CloseDialog)
             case _      => Cmd.NoCmd
 
-        case Dialog.ActionList(idx) =>
+        case Dialog.ActionList(_) =>
           k match
             case ArrowUp   => Cmd.GCmd(ActionListMove(-1))
             case ArrowDown => Cmd.GCmd(ActionListMove(+1))
             case Home      => Cmd.GCmd(ActionListMove(-actionListItems.size))
             case End       => Cmd.GCmd(ActionListMove(actionListItems.size))
-            case Enter     => Cmd.GCmd(ActionListAccept(idx))
-            case Escape    => Cmd.GCmd(CloseDialog)
-            case _         => Cmd.NoCmd
+            case Enter =>
+              m.dialog match
+                case Dialog.ActionList(i) => Cmd.GCmd(ActionListAccept(i))
+                case _                    => Cmd.NoCmd
+            case Escape                                                 => Cmd.GCmd(CloseDialog)
+            case Mouse(MouseEvent.Press(MouseButton.Left, col, row, _)) =>
+              // Route the click through the HitTest registry built for
+              // the dialog's rows. Demonstrates the Stage 3 §5.1 API
+              // end-to-end: zones registered, `hit(col, row)` looks up
+              // the topmost match, dispatch fires the matching Msg.
+              actionListHitTest(m).hit(col, row) match
+                case Some(idx) => Cmd.GCmd(ActionListAccept(idx))
+                case None      => Cmd.NoCmd
+            case _ => Cmd.NoCmd
 
         case Dialog.FilePicker(_, _, _, _) =>
           k match
@@ -1101,6 +1112,36 @@ object Stage1ShowcaseApp:
      * Mouse handling while the listSelect dialog is open: clicks on a
      *  visible row commit that item, scroll-wheel cycles the selection.
      */
+    /**
+     * Build a [[HitTest]] registry for the actionList dialog's rows so
+     * mouse clicks can be mapped back to the underlying action index
+     * (Stage 3 §5.1 API). The dialog's geometry mirrors what
+     * [[Dialogs.actionList]] computes internally; the registry is
+     * rebuilt every frame so resizes / theme changes are picked up
+     * automatically.
+     */
+    private def actionListHitTest(m: Model): HitTest[Int] =
+      val title    = "Quick actions"
+      val labels   = Vector("Cycle theme", "Cycle border", "Open list dialog")
+      val titleLen = title.length + 4
+      val itemLen  = (0 +: labels.map(_.length)).max + 6
+      val width    = math.max(30, math.max(titleLen, itemLen))
+      val height   = 4 + math.max(1, labels.size)
+
+      val rootW    = math.max(60, m.width)
+      val rootH    = math.max(20, m.height)
+      val (ox, oy) = OverlayPosition.resolve(OverlayPosition.Centered, width, height, rootW, rootH)
+
+      // Each row sits at panel-local (3.x, (3 + i).y). Translate to
+      // absolute; click target is the full inner width of the row so
+      // users don't have to land precisely on the label.
+      labels.indices.foldLeft(HitTest.empty[Int]) { (reg, i) =>
+        val rowX  = ox.value + 1
+        val rowY  = oy.value + 2 + i
+        val rectW = math.max(1, width - 2)
+        reg.add(i, termflow.tui.Rect(rowX, rowY, rectW, 1))
+      }
+
     private def listSelectMouseDispatch(m: Model, currentIdx: Int, ev: MouseEvent): Cmd[Msg] =
       val (col, row) = ev.at
       val rect       = listSelectRect(m, currentIdx)
@@ -1813,7 +1854,7 @@ object Stage1ShowcaseApp:
         TextNode(2.x, 6.y, List("   b  cycle border style".text)),
         TextNode(2.x, 7.y, List("   t  cycle theme".text)),
         TextNode(2.x, 8.y, List("   d / i / l / w  open dialogs".text)),
-        TextNode(2.x, 9.y, List("   a  open actionList dialog".text)),
+        TextNode(2.x, 9.y, List("   a  open actionList (click rows for HitTest demo)".text)),
         TextNode(2.x, 10.y, List("   f / g  open fileDialog / directoryDialog".text)),
         TextNode(2.x, 11.y, List(" 2 Widgets (Tree)".themed(_.success))),
         TextNode(2.x, 12.y, List("   ↑/↓ move,  Space/Enter toggle node".text)),

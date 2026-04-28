@@ -2,7 +2,7 @@
 # cursor=6,16
 |┌──────────────────────────────────────────────────────┐    |
 |│Tabs Demo                                             │    |
-|│[1:Home]  2:Work   3:Notes                            │    |
+|│[ 1:Home ]   2:Work     3:Notes                       │    |
 |│Active: Home | counter=0                              │    |
 |│Notes (per-tab persistent):---------------------------│    |
 |│(none)                                                │    |

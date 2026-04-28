@@ -1,5 +1,12 @@
 package termflow.tui
 
+import termflow.tui.TuiPrelude.Result
+
+import java.nio.file.Files
+import java.nio.file.Path
+import scala.jdk.CollectionConverters.*
+import scala.util.Try
+
 /**
  * Builders for common modal dialogs as [[Overlay]] values.
  *
@@ -272,6 +279,319 @@ object Dialogs:
       children = (box :: titleNode :: rows) :+ actionsRow,
       inputCapture = InputCapture.Modal
     )
+
+  /**
+   * One row in a [[fileDialog]] / [[directoryDialog]] listing.
+   *
+   * The helpers are pure presentation: they don't touch the filesystem.
+   * Apps build a `Seq[FileEntry]` (typically via [[listEntries]]) and pass
+   * it in alongside the current selection. This keeps directory traversal
+   * and any caching policy (e.g. listing in a `Future` for huge trees) out
+   * of the dialog rendering, which stays trivially testable.
+   */
+  enum FileEntry:
+    /** Sentinel for the parent directory. Rendered as `"..".`. */
+    case Parent
+
+    /** A subdirectory of the currently displayed path. */
+    case Directory(name: String)
+
+    /** A regular file in the currently displayed path. */
+    case File(name: String, size: Long)
+
+    /** True for `Parent` and `Directory(_)`; false for `File(_, _)`. */
+    def isDirectory: Boolean = this match
+      case Parent | Directory(_) => true
+      case File(_, _)            => false
+
+    /** Human-readable name; directories get a trailing `/`. */
+    def displayName: String = this match
+      case Parent          => ".."
+      case Directory(name) => s"$name/"
+      case File(name, _)   => name
+
+  /**
+   * Synchronously list the immediate children of `path` as a
+   * `Vector[FileEntry]`, sorted directories-first then alphabetically.
+   *
+   * A [[FileEntry.Parent]] sentinel is prepended unless `path` is the
+   * filesystem root. Hidden entries (names starting with `.`) are filtered
+   * out unless `showHidden` is set.
+   *
+   * Errors (path not a directory, permission denied, I/O failure) are
+   * surfaced as `TermFlowError.Unexpected` so the caller can choose
+   * whether to render an error toast or fall back. Apps that need
+   * non-blocking listings on slow filesystems should wrap the call in a
+   * `Cmd.asyncResult` rather than calling this from `view`.
+   *
+   * @param path        Directory to list.
+   * @param showHidden  Include dotfiles when true.
+   */
+  def listEntries(path: Path, showHidden: Boolean = false): Result[Vector[FileEntry]] =
+    Try {
+      if !Files.isDirectory(path) then throw new IllegalArgumentException(s"Not a directory: $path")
+      val parentEntry =
+        if path.getParent != null then Vector(FileEntry.Parent) else Vector.empty
+      val stream = Files.newDirectoryStream(path)
+      try
+        val all = stream.iterator().asScala.toVector
+        val visible =
+          if showHidden then all
+          else all.filterNot(p => Option(p.getFileName).exists(_.toString.startsWith(".")))
+        val (rawDirs, rawFiles) = visible.partition(p => Files.isDirectory(p))
+        val dirs =
+          rawDirs
+            .sortBy(p => Option(p.getFileName).fold("")(_.toString.toLowerCase))
+            .map(p => FileEntry.Directory(p.getFileName.toString))
+        val files =
+          rawFiles
+            .sortBy(p => Option(p.getFileName).fold("")(_.toString.toLowerCase))
+            .map { p =>
+              val size = Try(Files.size(p)).getOrElse(0L)
+              FileEntry.File(p.getFileName.toString, size)
+            }
+        parentEntry ++ dirs ++ files
+      finally stream.close()
+    }.toEither.left.map(t => TermFlowError.Unexpected(s"listEntries failed for $path", Some(t)))
+
+  /**
+   * Layout descriptor for a [[fileDialog]] or [[directoryDialog]]. Mirrors
+   * [[ListSelectLayout]] so apps wiring mouse hit-testing on the listing
+   * portion can map a click row to an entry without re-deriving the
+   * helper's anchor math.
+   *
+   * @param visibleCount   Number of list rows actually drawn.
+   * @param anchorIndex    Index of the first visible entry — selection
+   *                       scrolls relative to this.
+   * @param firstRowOffset Y-offset of the first list row inside the
+   *                       overlay rectangle (panel-local).
+   */
+  final case class FileDialogLayout(
+    visibleCount: Int,
+    anchorIndex: Int,
+    firstRowOffset: Int
+  )
+
+  /** First selectable row inside a fileDialog (panel-local Y). */
+  private val FileDialogFirstRowOffset: Int = 4
+
+  /** Compute the visible-window math `fileDialog` uses internally. */
+  def fileDialogLayout(
+    entriesSize: Int,
+    selectedIndex: Int,
+    maxVisible: Int = 10
+  ): FileDialogLayout =
+    val visible = math.max(1, math.min(maxVisible, math.max(1, entriesSize)))
+    val anchor =
+      if entriesSize == 0 then 0
+      else
+        val sel    = math.max(0, math.min(entriesSize - 1, selectedIndex))
+        val maxTop = math.max(0, entriesSize - visible)
+        val raw    = sel - visible / 2
+        math.max(0, math.min(maxTop, raw))
+    FileDialogLayout(visible, anchor, FileDialogFirstRowOffset)
+
+  /**
+   * Centred file-picker dialog. Renders the current path on the second
+   * row, a scrollable list of [[FileEntry]] values below it, and an
+   * OK / Cancel action row at the bottom.
+   *
+   * Like the other helpers, `fileDialog` is pure presentation. The app
+   * holds:
+   *
+   *   - the current `Path` and a precomputed `Seq[FileEntry]` for it
+   *     (via [[listEntries]] or its own listing strategy);
+   *   - a `selectedIndex` that the app advances on `↑`/`↓`;
+   *   - logic that, on `Enter` over a [[FileEntry.Directory]] or
+   *     [[FileEntry.Parent]], rebuilds `entries` for the new path.
+   *
+   * The dialog itself doesn't filter or sort entries — it draws what it
+   * is given. Use [[directoryDialog]] when you want a directory-only
+   * picker; in that mode entries should already be filtered to
+   * directories.
+   *
+   * Sizing: width is the max of (title + padding), (path + padding),
+   * (longest item + size column + padding), (action row + padding) with
+   * a 50-cell floor. Height is `6 + visibleCount`.
+   *
+   * @param title         Title rendered on the top border.
+   * @param currentPath   Path shown on the second row. Truncated from
+   *                      the left with `…` if longer than the inner width.
+   * @param entries       Listing rows to draw. The first entry is shown
+   *                      at the top of the viewport; selection scrolls
+   *                      the viewport per [[fileDialogLayout]].
+   * @param selectedIndex Index of the highlighted row.
+   * @param okFocused     Action-button focus.
+   * @param maxVisible    Number of entry rows visible at once. Defaults to 10.
+   * @param showSizes     Render a right-aligned size column for files.
+   *                      Off for [[directoryDialog]] by default.
+   * @param okLabel       Label for the confirm button.
+   * @param cancelLabel   Label for the cancel button.
+   * @param position      Anchor (default [[OverlayPosition.Centered]]).
+   */
+  def fileDialog(
+    title: String,
+    currentPath: Path,
+    entries: Seq[FileEntry],
+    selectedIndex: Int,
+    okFocused: Boolean = true,
+    maxVisible: Int = 10,
+    showSizes: Boolean = true,
+    okLabel: String = "Open",
+    cancelLabel: String = "Cancel",
+    position: OverlayPosition = OverlayPosition.Centered
+  )(using theme: Theme): Overlay =
+    val layout  = fileDialogLayout(entries.size, selectedIndex, maxVisible)
+    val visible = layout.visibleCount
+    val anchor  = layout.anchorIndex
+    val choices = List(Choice(okLabel, okFocused), Choice(cancelLabel, !okFocused))
+
+    val pathStr    = currentPath.toString
+    val titleLen   = title.length + 4
+    val pathLen    = pathStr.length + 8 // "Path: " + name + padding
+    val actionsLen = choiceWidth(choices) + 4
+    val sizeColLen = if showSizes then 10 else 0
+    val itemLen =
+      (0 +: entries.map(e => e.displayName.length)).max + 4 + sizeColLen
+    val width  = math.max(50, math.max(titleLen, math.max(pathLen, math.max(actionsLen, itemLen))))
+    val height = 6 + visible
+
+    val box = Theme.box(XCoord(1), YCoord(1), width, height)
+    val titleNode =
+      TextNode(XCoord(3), YCoord(1), List(Text(s" $title ", Style(fg = theme.primary, bold = true))))
+
+    val innerWidth = width - 4
+    val pathLabel  = "Path: "
+    val pathBudget = math.max(1, innerWidth - pathLabel.length)
+    val pathDisplay =
+      if pathStr.length <= pathBudget then pathStr
+      else "…" + pathStr.takeRight(math.max(1, pathBudget - 1))
+    val pathNode =
+      TextNode(
+        XCoord(3),
+        YCoord(2),
+        List(
+          Text(pathLabel, Style(fg = theme.secondary)),
+          Text(pathDisplay, Style(fg = theme.foreground))
+        )
+      )
+
+    val rows: List[VNode] =
+      entries
+        .slice(anchor, anchor + visible)
+        .zipWithIndex
+        .map { case (entry, i) =>
+          val absIdx = anchor + i
+          val sel    = absIdx == selectedIndex
+          renderEntryRow(entry, sel, layout.firstRowOffset + i, innerWidth, showSizes, theme)
+        }
+        .toList
+
+    val actionsRow = renderActions(choices, width, height - 1, theme)
+
+    Overlay(
+      position = position,
+      width = width,
+      height = height,
+      children = (box :: titleNode :: pathNode :: rows) :+ actionsRow,
+      inputCapture = InputCapture.Modal
+    )
+
+  /**
+   * Centred directory-picker dialog. Identical layout to [[fileDialog]]
+   * but defaults `okLabel = "Select"` and `showSizes = false`. Apps are
+   * expected to have already filtered `entries` to directories (and the
+   * [[FileEntry.Parent]] sentinel) — the dialog itself doesn't enforce
+   * the constraint, so listing files alongside directories still
+   * renders, just without sizes.
+   */
+  def directoryDialog(
+    title: String,
+    currentPath: Path,
+    entries: Seq[FileEntry],
+    selectedIndex: Int,
+    okFocused: Boolean = true,
+    maxVisible: Int = 10,
+    okLabel: String = "Select",
+    cancelLabel: String = "Cancel",
+    position: OverlayPosition = OverlayPosition.Centered
+  )(using Theme): Overlay =
+    fileDialog(
+      title = title,
+      currentPath = currentPath,
+      entries = entries,
+      selectedIndex = selectedIndex,
+      okFocused = okFocused,
+      maxVisible = maxVisible,
+      showSizes = false,
+      okLabel = okLabel,
+      cancelLabel = cancelLabel,
+      position = position
+    )
+
+  /**
+   * Format a byte count as a short, human-readable size string for the
+   * file-dialog size column. Kept package-private for tests.
+   */
+  private[tui] def formatSize(bytes: Long): String =
+    if bytes < 1024L then s"$bytes B"
+    else
+      val units         = Vector("KB", "MB", "GB", "TB", "PB")
+      var value: Double = bytes.toDouble / 1024.0
+      var idx           = 0
+      while value >= 1024.0 && idx < units.size - 1 do
+        value /= 1024.0
+        idx += 1
+      val rendered =
+        if value >= 100.0 then f"$value%.0f"
+        else if value >= 10.0 then f"$value%.1f"
+        else f"$value%.2f"
+      s"$rendered ${units(idx)}"
+
+  private def renderEntryRow(
+    entry: FileEntry,
+    selected: Boolean,
+    row: Int,
+    innerWidth: Int,
+    showSizes: Boolean,
+    theme: Theme
+  ): VNode =
+    val marker = if selected then "▸ " else "  "
+    val (glyph, glyphColor) = entry match
+      case FileEntry.Parent       => ("↩ ", theme.info)
+      case FileEntry.Directory(_) => ("▸ ", theme.primary)
+      case FileEntry.File(_, _)   => ("  ", theme.foreground)
+    val nameStyle =
+      if selected then Style(fg = theme.background, bg = theme.primary, bold = true)
+      else Style(fg = theme.foreground)
+    val markerStyle =
+      if selected then nameStyle
+      else Style(fg = glyphColor, bold = entry.isDirectory)
+    val sizeText = entry match
+      case FileEntry.File(_, size) if showSizes => formatSize(size)
+      case _                                    => ""
+    val nameMaxLen =
+      math.max(1, innerWidth - marker.length - glyph.length - (if sizeText.nonEmpty then sizeText.length + 2 else 0))
+    val displayName = entry.displayName
+    val truncatedName =
+      if displayName.length <= nameMaxLen then displayName
+      else displayName.take(math.max(1, nameMaxLen - 1)) + "…"
+    val padCount =
+      if sizeText.isEmpty then 0
+      else math.max(1, nameMaxLen - truncatedName.length + 1)
+    val padding = if padCount > 0 then " " * padCount else ""
+    val sizeStyle =
+      if selected then nameStyle
+      else Style(fg = theme.secondary)
+    val segments: List[Text] =
+      val base = List(
+        Text(marker, markerStyle),
+        Text(glyph, markerStyle),
+        Text(truncatedName, nameStyle)
+      )
+      if sizeText.isEmpty then base
+      else base ++ List(Text(padding, nameStyle), Text(sizeText, sizeStyle))
+    TextNode(XCoord(3), YCoord(row), segments)
 
   /**
    * Animated frames for [[waiting]]. Apps that don't pass a custom set

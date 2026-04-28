@@ -26,8 +26,10 @@ object TermFlowMain:
           new JLineTerminalBackend(),
           termflow.apps.diagnostics.LoggingMetricsDemoApp.Config
         )
-      case Some("input-line") | Some("input") => TuiRuntime.run(termflow.apps.input.InputLineReproApp.App)
-      case Some(_)                            => SampleHubMain.main(Array.empty)
+      case Some("input-line") | Some("input")    => TuiRuntime.run(termflow.apps.input.InputLineReproApp.App)
+      case Some("dialog") | Some("dialog-demo")  => TuiRuntime.run(termflow.apps.dialog.DialogDemoApp.App)
+      case Some("file-dialog") | Some("filedlg") => TuiRuntime.run(termflow.apps.dialog.FileDialogDemoApp.App)
+      case Some(_)                               => SampleHubMain.main(Array.empty)
 
   def syncCounterMain(args: Array[String]): Unit =
     val _ = args

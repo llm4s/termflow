@@ -5,6 +5,9 @@ import termflow.tui.Theme.themed
 import termflow.tui.Tui.*
 import termflow.tui.TuiPrelude.*
 
+import java.nio.file.Path
+import java.nio.file.Paths
+
 /**
  * Six-tab showcase of every shipped TermFlow widget and runtime feature.
  *
@@ -301,12 +304,23 @@ object Stage1ShowcaseApp:
     DemoFile("build.sbt")
   )
 
+  /** Whether a [[Dialog.FilePicker]] is showing files + directories or only directories. */
+  enum FilePickerMode:
+    case Files
+    case Directories
+
   enum Dialog:
     case None
     case ConfirmQuit(yesFocused: Boolean)
     case TextInput(state: Prompt.State, okFocused: Boolean)
     case ListSelect(selectedIndex: Int)
     case Waiting(openedAtTick: Long, autoCloseAtTick: Long)
+    case FilePicker(
+      mode: FilePickerMode,
+      currentPath: Path,
+      entries: Vector[Dialogs.FileEntry],
+      selectedIndex: Int
+    )
 
   final case class Model(
     width: Int,
@@ -327,6 +341,8 @@ object Stage1ShowcaseApp:
     lastTextInput: Option[String],
     /** Last item picked from a listSelect dialog. */
     lastListPick: Option[String],
+    /** Last value picked from a fileDialog / directoryDialog. */
+    lastFilePick: Option[String],
     /** Tick counter incremented by `tickSub`; drives the waiting spinner. */
     tick: Long,
     /** 0-based index of the currently selected tab. See `showcaseTabs`. */
@@ -379,6 +395,11 @@ object Stage1ShowcaseApp:
     case OpenTextInput
     case OpenListSelect
     case OpenWaiting
+    case OpenFileDialog
+    case OpenDirectoryDialog
+    case FilePickerMove(delta: Int)
+    case FilePickerActivate
+    case FilePickerAccept(path: String)
     case CloseDialog
     case ToggleDialogFocus
     case TextInputAccept(value: String)
@@ -412,6 +433,7 @@ object Stage1ShowcaseApp:
         eventHistory = Vector.empty,
         lastTextInput = None,
         lastListPick = None,
+        lastFilePick = None,
         tick = 0L,
         activeTab = ShowcaseTabIdx,
         treeExpanded = Set("termflow", "tui"),
@@ -449,6 +471,31 @@ object Stage1ShowcaseApp:
           m.copy(dialog = Dialog.ListSelect(selectedIndex = 0)).tui
         case OpenWaiting =>
           m.copy(dialog = Dialog.Waiting(openedAtTick = m.tick, autoCloseAtTick = m.tick + waitingDurationTicks)).tui
+        case OpenFileDialog      => openFilePicker(m, FilePickerMode.Files)
+        case OpenDirectoryDialog => openFilePicker(m, FilePickerMode.Directories)
+        case FilePickerMove(delta) =>
+          m.dialog match
+            case Dialog.FilePicker(mode, p, entries, idx) if entries.nonEmpty =>
+              val next = math.max(0, math.min(entries.size - 1, idx + delta))
+              m.copy(dialog = Dialog.FilePicker(mode, p, entries, next)).tui
+            case _ => m.tui
+        case FilePickerActivate =>
+          m.dialog match
+            case Dialog.FilePicker(mode, p, entries, idx) if entries.nonEmpty =>
+              entries(idx) match
+                case Dialogs.FileEntry.Parent =>
+                  refreshFilePicker(m, mode, Option(p.getParent).getOrElse(p))
+                case Dialogs.FileEntry.Directory(name) =>
+                  refreshFilePicker(m, mode, p.resolve(name))
+                case Dialogs.FileEntry.File(name, _) =>
+                  mode match
+                    case FilePickerMode.Files =>
+                      val picked = p.resolve(name).toString
+                      m.copy(dialog = Dialog.None, lastFilePick = Some(picked)).tui
+                    case FilePickerMode.Directories => m.tui
+            case _ => m.tui
+        case FilePickerAccept(path) =>
+          m.copy(dialog = Dialog.None, lastFilePick = Some(path)).tui
         case CloseDialog => m.copy(dialog = Dialog.None).tui
         case ToggleDialogFocus =>
           m.dialog match
@@ -537,6 +584,27 @@ object Stage1ShowcaseApp:
 
     private def clampIdx(i: Int, size: Int): Int = math.max(0, math.min(size - 1, i))
 
+    /** Start path for the file pickers — `user.home`, defaulting to `.` if unset. */
+    private val filePickerStartPath: Path = Paths.get(sys.props.getOrElse("user.home", "."))
+
+    private def openFilePicker(m: Model, mode: FilePickerMode): Tui[Model, Msg] =
+      refreshFilePicker(m, mode, filePickerStartPath)
+
+    /**
+     * (Re)list `path` and replace the FilePicker dialog state. On listing
+     * failure the dialog is closed and the error message is shown via
+     * `lastFilePick`.
+     */
+    private def refreshFilePicker(m: Model, mode: FilePickerMode, path: Path): Tui[Model, Msg] =
+      Dialogs.listEntries(path) match
+        case Right(entries) =>
+          val filtered = mode match
+            case FilePickerMode.Files       => entries
+            case FilePickerMode.Directories => entries.filter(_.isDirectory)
+          m.copy(dialog = Dialog.FilePicker(mode, path, filtered, 0)).tui
+        case Left(err) =>
+          m.copy(dialog = Dialog.None, lastFilePick = Some(s"error: $err")).tui
+
     private def dispatch(m: Model, k: KeyDecoder.InputKey): Cmd[Msg] =
       import KeyDecoder.InputKey.*
       m.dialog match
@@ -576,6 +644,16 @@ object Stage1ShowcaseApp:
             case Escape => Cmd.GCmd(CloseDialog)
             case _      => Cmd.NoCmd
 
+        case Dialog.FilePicker(_, _, _, _) =>
+          k match
+            case ArrowUp   => Cmd.GCmd(FilePickerMove(-1))
+            case ArrowDown => Cmd.GCmd(FilePickerMove(+1))
+            case PageUp    => Cmd.GCmd(FilePickerMove(-5))
+            case PageDown  => Cmd.GCmd(FilePickerMove(+5))
+            case Enter     => Cmd.GCmd(FilePickerActivate)
+            case Escape    => Cmd.GCmd(CloseDialog)
+            case _         => Cmd.NoCmd
+
         case Dialog.None =>
           // Tab-switch shortcuts work on every tab.
           digitTabSwitch(k, allowDigits = true) match
@@ -597,6 +675,8 @@ object Stage1ShowcaseApp:
         case CharKey('i') | CharKey('I') => Cmd.GCmd(OpenTextInput)
         case CharKey('l') | CharKey('L') => Cmd.GCmd(OpenListSelect)
         case CharKey('w') | CharKey('W') => Cmd.GCmd(OpenWaiting)
+        case CharKey('f') | CharKey('F') => Cmd.GCmd(OpenFileDialog)
+        case CharKey('g') | CharKey('G') => Cmd.GCmd(OpenDirectoryDialog)
         case CharKey('q') | CharKey('Q') => Cmd.GCmd(OpenDialog)
         case Escape                      => Cmd.GCmd(OpenDialog)
         case Mouse(ev)                   => mouseDispatch(m, ev)
@@ -1045,7 +1125,11 @@ object Stage1ShowcaseApp:
             " l ".themed(_.primary),
             "list  ".text,
             " w ".themed(_.primary),
-            "wait  ".text
+            "wait  ".text,
+            " f ".themed(_.primary),
+            "file  ".text,
+            " g ".themed(_.primary),
+            "dir  ".text
           )
       val tail     = List[Text](" q ".themed(_.primary), "quit ".text)
       val helpNode = TextNode(2.x, (m.height - 1).y, tabSwitch ++ perTab ++ tail)
@@ -1111,6 +1195,30 @@ object Stage1ShowcaseApp:
                 body = s"simulated task — ${remaining / 10}.${remaining % 10}s remaining",
                 tick = m.tick - openedAt,
                 cancelLabel = Some("Cancel")
+              )
+            )
+          )
+        case Dialog.FilePicker(FilePickerMode.Files, p, entries, idx) =>
+          baseRoot.copy(overlays =
+            List(
+              Dialogs.fileDialog(
+                title = "Open file",
+                currentPath = p,
+                entries = entries,
+                selectedIndex = idx,
+                maxVisible = 8
+              )
+            )
+          )
+        case Dialog.FilePicker(FilePickerMode.Directories, p, entries, idx) =>
+          baseRoot.copy(overlays =
+            List(
+              Dialogs.directoryDialog(
+                title = "Choose directory",
+                currentPath = p,
+                entries = entries,
+                selectedIndex = idx,
+                maxVisible = 8
               )
             )
           )
@@ -1214,9 +1322,11 @@ object Stage1ShowcaseApp:
       )
       val txt  = m.lastTextInput.map(s => s"\"${truncate(s, 24)}\"").getOrElse("—")
       val pick = m.lastListPick.getOrElse("—")
+      val file = m.lastFilePick.map(truncate(_, 26)).getOrElse("—")
       val results = List(
         TextNode(2.x, 10.y, List("Last text input: ".text, txt.themed(_.info))),
-        TextNode(2.x, 11.y, List("Last list pick:  ".text, pick.themed(_.info)))
+        TextNode(2.x, 11.y, List("Last list pick:  ".text, pick.themed(_.info))),
+        TextNode(2.x, 12.y, List("Last file pick:  ".text, file.themed(_.info)))
       )
       panel(r, theme, (title :: intro :: historyRows) ++ results)
 
@@ -1472,6 +1582,7 @@ object Stage1ShowcaseApp:
         TextNode(2.x, 6.y, List("   b  cycle border style".text)),
         TextNode(2.x, 7.y, List("   t  cycle theme".text)),
         TextNode(2.x, 8.y, List("   d / i / l / w  open dialogs".text)),
+        TextNode(2.x, 9.y, List("   f / g  open fileDialog / directoryDialog".text)),
         TextNode(2.x, 10.y, List(" 2 Widgets (Tree)".themed(_.success))),
         TextNode(2.x, 11.y, List("   ↑/↓ move,  Space/Enter toggle node".text)),
         TextNode(2.x, 13.y, List(" 3 Inputs (Form)".themed(_.success))),

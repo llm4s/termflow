@@ -413,6 +413,52 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None, "waiting dialog should auto-close after its deadline")
   }
 
+  test("'f' opens the file picker rooted at user.home in Files mode") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('f')))
+    d.model.dialog match
+      case Stage1ShowcaseApp.Dialog.FilePicker(mode, _, _, _) =>
+        assert(mode == Stage1ShowcaseApp.FilePickerMode.Files)
+      case other => fail(s"expected FilePicker(Files), got $other")
+  }
+
+  test("'g' opens the file picker in Directories mode and filters out files") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('g')))
+    d.model.dialog match
+      case Stage1ShowcaseApp.Dialog.FilePicker(mode, _, entries, _) =>
+        assert(mode == Stage1ShowcaseApp.FilePickerMode.Directories)
+        assert(entries.forall(_.isDirectory), "Directories mode must drop File entries")
+      case other => fail(s"expected FilePicker(Directories), got $other")
+  }
+
+  test("ArrowDown advances FilePicker selection; Esc closes without picking") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('f')))
+    val before = d.model.dialog match
+      case Stage1ShowcaseApp.Dialog.FilePicker(_, _, _, idx) => idx
+      case other                                             => fail(s"expected FilePicker, got $other")
+    val entriesSize = d.model.dialog match
+      case Stage1ShowcaseApp.Dialog.FilePicker(_, _, e, _) => e.size
+      case _                                               => 0
+    if entriesSize > 1 then
+      d.send(Stage1ShowcaseApp.Msg.Key(InputKey.ArrowDown))
+      d.model.dialog match
+        case Stage1ShowcaseApp.Dialog.FilePicker(_, _, _, idx) => assert(idx == before + 1)
+        case other => fail(s"expected FilePicker after ArrowDown, got $other")
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Escape))
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None)
+    assert(d.model.lastFilePick.isEmpty, "Esc must not record a pick")
+  }
+
+  test("FilePicker base bindings are suppressed (modal)") {
+    val d            = driver
+    val borderBefore = d.model.borderName
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('f')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('b')))
+    assert(d.model.borderName == borderBefore, "modal must suppress base 'b' binding")
+  }
+
   test("Esc inside waiting cancels immediately") {
     val d = driver
     d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('w')))

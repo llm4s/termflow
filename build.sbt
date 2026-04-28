@@ -239,11 +239,19 @@ lazy val termflowSample = (project in file("modules/termflow-sample"))
   )
 
 addCommandAlias("ciCheck", ";scalafmtCheckAll;scalafixAll --check;test")
+// `coverage`/`coverageReport` are sbt-scoverage *commands* — they
+// can't be invoked with the `project/key` selector syntax. The pattern
+// below switches into each framework module in turn, enables coverage,
+// runs its tests, and emits the per-module scoverage report. CI picks
+// up the resulting `modules/termflow-*/target/scala-*/scoverage-report/`
+// directories.
 addCommandAlias(
   "coverageLib",
-  ";termflowTerminal/coverage;termflowScreen/coverage;termflowApp/coverage;termflowWidgets/coverage" +
-    ";termflowTerminal/test;termflowScreen/test;termflowApp/test;termflowWidgets/test" +
-    ";termflowTerminal/coverageReport;termflowScreen/coverageReport;termflowApp/coverageReport;termflowWidgets/coverageReport"
+  ";project termflowTerminal;coverage;test;coverageReport" +
+    ";project termflowScreen;coverage;test;coverageReport" +
+    ";project termflowApp;coverage;test;coverageReport" +
+    ";project termflowWidgets;coverage;test;coverageReport" +
+    ";project root"
 )
 addCommandAlias("prePR", ";ciCheck;coverageLib;termflowSample/runMain termflow.run.SampleSmoke")
 addCommandAlias(

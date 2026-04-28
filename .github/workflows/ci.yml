@@ -48,7 +48,11 @@ jobs:
         uses: codecov/codecov-action@v4
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: modules/termflow/target/scala-*/scoverage-report/scoverage.xml
+          files: |
+            modules/termflow-terminal/target/scala-*/scoverage-report/scoverage.xml
+            modules/termflow-screen/target/scala-*/scoverage-report/scoverage.xml
+            modules/termflow-app/target/scala-*/scoverage-report/scoverage.xml
+            modules/termflow-widgets/target/scala-*/scoverage-report/scoverage.xml
           slug: llm4s/termflow
           fail_ci_if_error: false
           verbose: true
@@ -58,22 +62,36 @@ jobs:
         with:
           name: scoverage-report
           path: |
-            modules/termflow/target/scala-*/scoverage-report/
+            modules/termflow-terminal/target/scala-*/scoverage-report/
+            modules/termflow-screen/target/scala-*/scoverage-report/
+            modules/termflow-app/target/scala-*/scoverage-report/
+            modules/termflow-widgets/target/scala-*/scoverage-report/
           retention-days: 14
 
       - name: Coverage summary (informational)
         if: always()
         continue-on-error: true
         run: |
-          REPORT=$(ls modules/termflow/target/scala-*/scoverage-report/scoverage.xml 2>/dev/null | head -n1)
-          if [ -n "$REPORT" ]; then
-            RATE=$(grep -o 'statement-rate="[^"]*"' "$REPORT" | head -n1 | cut -d'"' -f2)
-            if [ -n "$RATE" ]; then
-              PCT=$(awk "BEGIN { printf \"%.2f\", $RATE * 100 }")
-              echo "Library statement coverage: ${PCT}%"
+          # Sum statement-count + statement-rate across the four framework
+          # modules to produce a single library-wide coverage figure.
+          TOTAL=0
+          COVERED=0
+          for m in termflow-terminal termflow-screen termflow-app termflow-widgets; do
+            REPORT=$(ls modules/$m/target/scala-*/scoverage-report/scoverage.xml 2>/dev/null | head -n1)
+            if [ -n "$REPORT" ]; then
+              CNT=$(grep -oE 'statement-count="[0-9]+"' "$REPORT" | head -n1 | cut -d'"' -f2)
+              RATE=$(grep -oE 'statement-rate="[0-9.]+"' "$REPORT" | head -n1 | cut -d'"' -f2)
+              if [ -n "$CNT" ] && [ -n "$RATE" ]; then
+                MOD_COVERED=$(awk "BEGIN { printf \"%.0f\", $CNT * $RATE / 100.0 }")
+                TOTAL=$((TOTAL + CNT))
+                COVERED=$((COVERED + MOD_COVERED))
+                echo "$m: ${RATE}% (${CNT} statements)"
+              fi
             else
-              echo "Coverage report found, but statement-rate was not parsed."
+              echo "$m: report not found"
             fi
-          else
-            echo "Coverage report file not found."
+          done
+          if [ "$TOTAL" -gt 0 ]; then
+            PCT=$(awk "BEGIN { printf \"%.2f\", $COVERED * 100.0 / $TOTAL }")
+            echo "Library statement coverage (combined): ${PCT}% (${COVERED}/${TOTAL})"
           fi

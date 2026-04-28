@@ -420,11 +420,12 @@ maintain.)
 | `Dialogs.actionList` | not started | Trivially expressed as `listSelect` over `Choice` values; deferred until a real use case appears. |
 | `Dialogs.fileDialog` / `directoryDialog` | done | Path bar + entry list (parent / dir / file) + sized column for files. Companion `FileEntry` ADT, `listEntries(path, showHidden)`, and `fileDialogLayout` for hit-testing. |
 
-The five base helpers cover the everyday cases. All are exercised by
-`sbt showcase` (`d` = confirm, `i` = textInput, `l` = listSelect, `w` =
-waiting). The file pickers ship with a dedicated demo
-(`apps.dialog.FileDialogDemoApp`, runnable as `sbt run file-dialog`)
-since they need filesystem state. Tests live in `DialogsSpec`.
+All seven helpers are exercised by `sbt showcase` (`d` = confirm, `i` =
+textInput, `l` = listSelect, `w` = waiting, `f` = fileDialog, `g` =
+directoryDialog) on the Showcase tab. The file pickers also ship with
+a dedicated demo (`apps.dialog.FileDialogDemoApp`, runnable as
+`sbt run file-dialog`) for a focused look. Tests live in `DialogsSpec`
+and `Stage1ShowcaseAppSpec`.
 
 ### 6.2 Additional widgets (P1, medium) — **complete**
 

@@ -88,7 +88,7 @@ full notes live at the bottom of the document (§9).
 | 2 | 0.4.x | **Capability expansion**: mouse, 256/truecolor, unicode width, paste | done (2026-04-27) |
 | 3 | 0.5.x | **Breadth**: dialog helpers, more widgets, testkit module | in progress |
 | 4 | 1.0.0 | **Stabilise**: module split, MiMa, docs site, three-layer narrative | proposed |
-| 5 | post-1.0 | **Alternative backends**: Swing emulator, telnet/SSH | speculative |
+| 5 | post-1.0 | **Alternative backends**: telnet, web (xterm.js) | speculative |
 
 The first three stages each break binary compat; that is the deliberate
 purpose of staying at 0.x. Stage 4 is the lock-in point.
@@ -572,42 +572,47 @@ Not on the critical path. Each is an opt-in module.
 
 Promoted to first-class in Stage 3 (§6.4). Listed here for completeness.
 
-### 8.2 Swing/AWT emulator backend
-
-`termflow-backend-swing`. Opens a desktop window containing a TUI emulator;
-the rest of the framework is unchanged. Lanterna's `SwingTerminal` is the
-template.
-
-**Why it matters.** Run a TUI in your IDE, in a Docker exec environment
-without TTY allocation, or in a CI dashboard. Massive DX win.
-
-**Effort.** Large — a working font-rendered cell grid, blink, selection,
-copy-paste, Unicode-correct width.
-
-### 8.3 Telnet backend
+### 8.2 Telnet backend
 
 `termflow-backend-telnet`. Boilerplate: bind a port, accept connections,
 each connection becomes a `TerminalBackend`. Telnet option negotiation
 (NAWS for size, ECHO suppression, binary). Small library; medium effort.
 
 **Use case.** Self-hosted admin consoles, MUDs, BBS-style apps, oncall
-debug shells. **Not encrypted** — pair with SSH for production.
+debug shells. **Not encrypted** — operators wrap it in stunnel /
+WireGuard / SSH-jumphost for production.
 
-### 8.4 SSH backend
-
-`termflow-backend-ssh`. Wrap Apache MINA SSHD or sshj, hand the PTY channel
-to a `TerminalBackend` adapter. Lanterna doesn't ship this; a Scala
-ecosystem niche.
-
-**Effort.** Medium-large; needs key management, auth, connection state.
-
-### 8.5 Web backend (xterm.js over WebSocket)
+### 8.3 Web backend (xterm.js over WebSocket)
 
 `termflow-backend-web`. Serve `xterm.js` plus a WebSocket; the WS frames
 become the terminal stream. Run a TUI in a browser tab.
 
 **Effort.** Large but cleanly bounded. Dependencies: an HTTP server, an
 xterm.js distribution. Probably the most "wow factor" of the bunch.
+
+### 8.4 Possible future extensions (not on the roadmap)
+
+These two backends were on the original speculative list but are
+**explicitly not planned**. Captured here so the trade-offs are
+discoverable, not so they're committed.
+
+- **Swing / AWT emulator backend** — desktop window with a TUI emulator
+  inside. Compelling DX (run a TUI in your IDE, in a Docker exec
+  environment without TTY allocation, or in a CI dashboard) but the
+  effort is large: font-rendered cell grid, blink, selection,
+  copy-paste, Unicode-correct width. Lanterna's `SwingTerminal` is the
+  template. Skipped because the §8.3 web backend covers most of the
+  same use cases at a similar effort and reaches more users.
+- **SSH backend** (`termflow-backend-ssh`) — wrap Apache MINA SSHD or
+  sshj, hand the PTY channel to a `TerminalBackend` adapter. Skipped
+  because key management, auth, and connection state are a
+  perpetually-supported surface area we don't want to own. The Telnet
+  backend (§8.2) gets you most of the way for the niche where it's
+  useful; production deployments compose Telnet with an external SSH
+  jump host.
+
+External contributors are welcome to ship either as a separate
+artifact — the `TerminalBackend` trait stays public.
 
 ---
 
@@ -635,12 +640,12 @@ mirror this in module layout (§4.6) and docs (§7.2).
 | ANSI / unix tty | `UnixTerminal`, `ANSITerminal` | `JLineTerminalBackend` | done |
 | Cygwin | `CygwinTerminal` | — | not planned |
 | Windows native | `terminal/win32` (JNA) | — relies on JLine | TBD |
-| Swing emulator | `SwingTerminal` | — | Stage 5 |
-| AWT emulator | `AWTTerminal` | — | Stage 5 (combined with Swing) |
-| Telnet server | `TelnetTerminal`, `TelnetTerminalServer` | — | Stage 5 |
+| Swing emulator | `SwingTerminal` | — | not planned (§8.4) — third-party module welcome |
+| AWT emulator | `AWTTerminal` | — | not planned (§8.4) — third-party module welcome |
+| Telnet server | `TelnetTerminal`, `TelnetTerminalServer` | — | Stage 5 (§8.2) |
 | Virtual / test | `DefaultVirtualTerminal` | informal in test code | Stage 3 (promote) |
-| SSH | — *(not in Lanterna)* | — | Stage 5, opportunity |
-| Web (xterm.js) | — *(not in Lanterna)* | — | Stage 5, opportunity |
+| SSH | — *(not in Lanterna)* | — | not planned (§8.4) — compose Telnet with an SSH jump host |
+| Web (xterm.js) | — *(not in Lanterna)* | — | Stage 5 (§8.3) — opportunity |
 
 ### 9.3 Components
 
@@ -804,6 +809,20 @@ on design rationale, light on user-facing tutorial. Closed in Stage 4
   collapses to a single `Enter` in `typeString` to match real terminal
   behaviour, and `MouseSim.dragGesture` samples intermediate drag points
   so hit-tests can be validated mid-gesture.
+- *2026-04-28* — Stage 5 backends pruned. The original speculative list
+  named four post-1.0 backends (Swing/AWT, Telnet, SSH, Web). After
+  weighing each against expected user reach versus ongoing maintenance
+  surface, two are now **explicitly not planned** and have moved to
+  §8.4 "Possible future extensions": **Swing/AWT emulator** (web
+  backend covers most of the same DX wins for similar effort) and
+  **SSH** (PTY plumbing plus key-management / auth is a perpetual
+  surface area we don't want to own — operators can compose Telnet
+  with an external SSH jump host where they need encryption).
+  `TerminalBackend` stays public so contributors can ship either as a
+  separate artifact. The Telnet (§8.2) and Web/xterm.js (§8.3)
+  backends remain on the speculative roadmap. §3 stages overview, the
+  §9.2 Lanterna comparison table, and the Stage 5 section all updated
+  to match.
 
 ---
 

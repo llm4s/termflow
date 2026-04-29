@@ -86,10 +86,10 @@ package termflow
  *
  * ## Further reading
  *
- *   - `docs/DESIGN.md` — architecture and motivation
- *   - `docs/RENDER_PIPELINE.md` — coalescing, diff rendering, and
+ *   - `docs/contrib/DESIGN.md` — architecture and motivation
+ *   - `docs/contrib/RENDER_PIPELINE.md` — coalescing, diff rendering, and
  *     snapshot testing conventions
- *   - `docs/RUN_EXAMPLES.md` — runnable sample apps and how to launch
+ *   - `docs/contrib/RUN_EXAMPLES.md` — runnable sample apps and how to launch
  *     them
  */
 package object tui

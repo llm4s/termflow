@@ -1,0 +1,34 @@
+[book]
+authors = ["llm4s contributors"]
+language = "en"
+multilingual = false
+src = "docs"
+title = "TermFlow"
+description = "A small, functional terminal UI framework for Scala 3."
+
+[output.html]
+default-theme = "rust"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/llm4s/termflow"
+git-repository-icon = "fa-github"
+edit-url-template = "https://github.com/llm4s/termflow/edit/main/{path}"
+site-url = "/termflow/"
+no-section-label = true
+
+[output.html.fold]
+enable = true
+level = 1
+
+[output.html.search]
+enable = true
+limit-results = 30
+
+[output.html.playground]
+runnable = false
+
+[output.linkcheck]
+follow-web-links = false
+warning-policy = "error"
+exclude = [
+  "github\\.com/llm4s/termflow/edit/.*",
+]

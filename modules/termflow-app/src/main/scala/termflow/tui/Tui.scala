@@ -232,7 +232,7 @@ object Cmd:
  * terminal, drive it through `termflow.testkit.TuiTestDriver` instead.
  *
  * The architectural shape and rationale are documented in more depth in
- * `docs/DESIGN.md` and `docs/RENDER_PIPELINE.md`.
+ * `docs/contrib/DESIGN.md` and `docs/contrib/RENDER_PIPELINE.md`.
  *
  * @tparam Model The application state type.
  * @tparam Msg The message / event type handled by the application.
@@ -263,7 +263,7 @@ trait TuiApp[Model, Msg]:
    *
    * The returned [[RootNode]] is diffed against the previous frame by
    * `AnsiRenderer` to produce a minimal ANSI patch. See
-   * `docs/RENDER_PIPELINE.md` for the full pipeline.
+   * `docs/contrib/RENDER_PIPELINE.md` for the full pipeline.
    */
   def view(model: Model): RootNode
 

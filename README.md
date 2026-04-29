@@ -3,6 +3,8 @@
 [![Maven Central](https://img.shields.io/maven-central/v/org.llm4s/termflow_3.svg?label=Maven%20Central)](https://central.sonatype.com/artifact/org.llm4s/termflow_3)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://mit-license.org/)
 
+📖 **[User guide & tutorials → llm4s.github.io/termflow](https://llm4s.github.io/termflow)**
+
 `termflow` is a small, functional terminal UI (TUI) framework for Scala.
 
 It’s designed for building interactive CLIs with a simple architecture:

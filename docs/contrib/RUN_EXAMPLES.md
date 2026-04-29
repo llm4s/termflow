@@ -27,6 +27,7 @@ sbt taskDemo          # Task manager
 sbt stressDemo        # High-frequency renders for repaint stress testing
 sbt sineDemo          # Animated sine wave
 sbt inputDemo         # Prompt / cursor regression repro (#73 / #74)
+sbt treeDemo          # File-tree explorer (Tree widget + Layout.Border)
 ```
 
 Inside an `sbt` session you can chain them: `sbt> widgetsDemo`.

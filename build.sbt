@@ -1,6 +1,9 @@
 import sbt._
 import Keys._
 import _root_.scalafix.sbt.{BuildInfo => ScalafixBuildInfo}
+import sbtunidoc.ScalaUnidocPlugin
+import sbtunidoc.BaseUnidocPlugin.autoImport.*
+import sbtunidoc.ScalaUnidocPlugin.autoImport.*
 
 val scala3   = Versions.scala3
 val fixedLocalVersion = "0.1.1-SNAPSHOT"
@@ -110,6 +113,7 @@ lazy val frameworkScalafixSettings = Seq(
 )
 
 lazy val root = (project in file("."))
+  .enablePlugins(ScalaUnidocPlugin)
   .aggregate(
     termflowScalafixRules,
     termflowTerminal,
@@ -122,7 +126,17 @@ lazy val root = (project in file("."))
   )
   .settings(
     name           := "termflow",
-    publish / skip := true
+    publish / skip := true,
+    // Aggregated Scaladoc for the four published framework modules. The
+    // generated tree is consumed by the docs site workflow and copied into
+    // the mdBook output under `/api/`.
+    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
+      termflowTerminal,
+      termflowScreen,
+      termflowApp,
+      termflowWidgets
+    ),
+    ScalaUnidoc / unidoc / target := (ThisBuild / baseDirectory).value / "target" / "unidoc"
   )
 
 // ---- Layered framework modules -------------------------------------------

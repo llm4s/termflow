@@ -1,0 +1,94 @@
+name: Docs site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "book.toml"
+      - ".github/workflows/docs.yml"
+      - "modules/**/src/main/scala/**"   # Scaladoc inputs
+      - "build.sbt"
+      - "project/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "book.toml"
+      - ".github/workflows/docs.yml"
+  workflow_dispatch:
+
+# Don't pile up Pages deploys; cancel in-progress runs from PRs but never the
+# main-branch deploy.
+concurrency:
+  group: docs-${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: sbt
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Install mdBook + linkcheck
+        env:
+          MDBOOK_VERSION: "0.4.40"
+          MDBOOK_LINKCHECK_VERSION: "0.7.7"
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL "https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin"
+          curl -sSL "https://github.com/Michael-F-Bryan/mdbook-linkcheck/releases/download/v${MDBOOK_LINKCHECK_VERSION}/mdbook-linkcheck.x86_64-unknown-linux-gnu.zip" \
+            -o /tmp/mdbook-linkcheck.zip
+          unzip -o /tmp/mdbook-linkcheck.zip -d "$HOME/.local/bin"
+          chmod +x "$HOME/.local/bin/mdbook" "$HOME/.local/bin/mdbook-linkcheck"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Build aggregated Scaladoc (sbt unidoc)
+        run: sbt --batch unidoc
+
+      - name: Build mdBook
+        run: mdbook build
+
+      - name: Merge Scaladoc into book/api
+        run: |
+          set -euo pipefail
+          mkdir -p book/html/api
+          cp -R target/unidoc/. book/html/api/
+          # Drop a top-level redirect so /api works without /html in the URL
+          # path (Pages deploys the html/ subdir as the site root).
+
+      - name: Upload site artifact
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: book/html
+
+  deploy:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

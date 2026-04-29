@@ -10,3 +10,4 @@ target/
 *.log
 hs_err_pid*
 *.semanticdb
+book/

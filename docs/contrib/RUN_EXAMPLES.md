@@ -28,6 +28,7 @@ sbt stressDemo        # High-frequency renders for repaint stress testing
 sbt sineDemo          # Animated sine wave
 sbt inputDemo         # Prompt / cursor regression repro (#73 / #74)
 sbt treeDemo          # File-tree explorer (Tree widget + Layout.Border)
+sbt editorDemo        # Multi-buffer editor (MultiLineInput + SplitPane + MenuBar)
 ```
 
 Inside an `sbt` session you can chain them: `sbt> widgetsDemo`.

@@ -756,13 +756,15 @@ object Stage1ShowcaseApp:
      */
     private def handleEditorKey(m: Model, k: KeyDecoder.InputKey): Tui[Model, Msg] =
       import KeyDecoder.InputKey.*
-      digitTabSwitch(k, allowDigits = false) match
-        case Some(idx) => Tui(m, Cmd.GCmd(SelectTab(idx)))
-        case None =>
-          k match
-            case Mouse(ev) => Tui(m, tabBarMouseDispatch(ev))
-            case Escape    => Tui(m, Cmd.GCmd(OpenDialog))
-            case _         => Tui(m, Cmd.GCmd(EditorKey(k)))
+      // The editor consumes every printable key (digits included) so the
+      // showcase's normal `1..9` tab-switch is unavailable. Esc is the
+      // dedicated leave-the-editor key — it switches back to the
+      // Showcase tab so the user has a keyboard-only path out. Ctrl+C
+      // still closes the app at the runtime level.
+      k match
+        case Mouse(ev) => Tui(m, tabBarMouseDispatch(ev))
+        case Escape    => Tui(m, Cmd.GCmd(SelectTab(ShowcaseTabIdx)))
+        case _         => Tui(m, Cmd.GCmd(EditorKey(k)))
 
     private def clampIdx(i: Int, size: Int): Int = math.max(0, math.min(size - 1, i))
 
@@ -1382,7 +1384,9 @@ object Stage1ShowcaseApp:
             " ↑/↓/←/→ ".themed(_.primary),
             "navigate  ".text,
             " Enter ".themed(_.primary),
-            "newline  ".text
+            "newline  ".text,
+            " Esc ".themed(_.primary),
+            "leave  ".text
           )
         case _ =>
           List(
@@ -1698,11 +1702,16 @@ object Stage1ShowcaseApp:
         widgets.Form.Row(
           InpFruitId,
           "Fruit:",
-          _ =>
-            // Autocomplete is always-open, so it doesn't take a `focused`
-            // parameter — wrap its node list into a BoxNode so the Form
-            // row can place a single VNode.
-            val parts = widgets.Autocomplete.view(m.inputsFruit, width = fieldWidth, maxVisible = 5)
+          focused =>
+            // Pass focus through so the dropdown drops the primary-bar
+            // highlight when another row owns focus — the static field
+            // shouldn't compete with the active widget visually.
+            val parts = widgets.Autocomplete.view(
+              m.inputsFruit,
+              width = fieldWidth,
+              maxVisible = 5,
+              focused = focused
+            )
             VNode.BoxNode(1.x, 1.y, fieldWidth, widgets.Autocomplete.height(m.inputsFruit, 5), parts, Style())
           ,
           height = widgets.Autocomplete.height(m.inputsFruit, 5)
@@ -1923,7 +1932,7 @@ object Stage1ShowcaseApp:
         TextNode(2.x, 22.y, List("   ←/→ menu,  ↓ open,  Enter pick,  Esc close".text)),
         TextNode(2.x, 23.y, List("   [ shrink, ] grow, = reset, or drag the divider with the mouse".text)),
         TextNode(2.x, 25.y, List(" 6 Wizard / 7 Dashboard / 9 Editor (MultiLineInput)".themed(_.success))),
-        TextNode(2.x, 26.y, List("   editor: Enter inserts newline, ↑/↓ between rows".text)),
+        TextNode(2.x, 26.y, List("   editor: Enter newline, ↑/↓ between rows, Esc leaves the tab".text)),
         TextNode(2.x, 29.y, List("   q / Esc  open quit confirmation".text)),
         TextNode(2.x, 30.y, List("   click on Tabs bar  switch tab".text))
       )
@@ -1963,7 +1972,7 @@ object Stage1ShowcaseApp:
       val intro = TextNode(
         2.x,
         3.y,
-        List("Type to edit; ↑/↓/←/→ navigate; Enter inserts a newline.".themed(_.info))
+        List("Type to edit. ↑/↓/←/→ navigate. Enter newline. Esc leaves the tab.".themed(_.info))
       )
 
       // Reserve the full panel below the intro for the editor.

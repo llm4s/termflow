@@ -91,6 +91,21 @@ class WizardAppSpec extends AnyFunSuite:
     assert(d.model.currentFocus.current.contains(WizardApp.NameId))
   }
 
+  test("Enter on the Plan radio commits and advances focus to Next") {
+    val d = driver
+    typeText(d, "Alice")
+    d.send(WizardApp.Msg.NextFocus)
+    typeText(d, "alice@example.com")
+    d.send(WizardApp.Msg.NextFocus)           // focus the Next button
+    d.send(WizardApp.Msg.Key(InputKey.Enter)) // advance to Plan step
+    assert(d.model.step == WizardApp.Step.Plan)
+    assert(d.model.currentFocus.current.contains(WizardApp.PlanRadioId))
+    d.send(WizardApp.Msg.Key(InputKey.ArrowDown)) // pick Pro
+    d.send(WizardApp.Msg.Key(InputKey.Enter))     // commit + advance focus
+    assert(d.model.planIndex == 1, "Pro should still be selected")
+    assert(d.model.currentFocus.current.contains(WizardApp.NextPlanId), "focus should have moved to Next")
+  }
+
   test("Enter on the Next button submits Account → Plan when valid") {
     val d = driver
     typeText(d, "Alice")

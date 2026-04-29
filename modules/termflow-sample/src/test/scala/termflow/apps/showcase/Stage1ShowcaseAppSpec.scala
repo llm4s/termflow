@@ -810,6 +810,15 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     assert(d.model.themeName != themeBefore, "first-row click should fire CycleTheme")
   }
 
+  test("Esc on the Editor tab returns to the Showcase tab") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('9')))
+    assert(d.model.activeTab == 8)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Escape))
+    assert(d.model.activeTab == 0, "Esc should switch back to the Showcase tab, not open a dialog")
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None)
+  }
+
   test("Layout tab '=' resets the split ratio to 0.5") {
     val d = driver
     d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('5')))

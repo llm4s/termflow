@@ -96,3 +96,25 @@ class AutocompleteSpec extends AnyFunSuite:
     val empty = initial.copy(input = Prompt.State("xyz".toVector, cursor = 3))
     assert(Autocomplete.height(empty, maxVisible = 6) == 1)
   }
+
+  test("view scrolls the dropdown so the cursor row stays visible") {
+    val many     = Autocomplete.State.of((1 to 20).map(i => s"item-$i").toVector).copy(selectedIdx = 12)
+    val nodes    = Autocomplete.view(many, width = 16, maxVisible = 5)
+    val rowTexts = nodes.tail.map { case n: VNode.TextNode => n.txt.map(_.txt).mkString; case _ => "" }
+    // Cursor at 12 with maxVisible=5 should anchor so item-13 (index 12) is the last visible row.
+    assert(rowTexts.exists(_.contains("item-13")), s"expected 'item-13' visible — got $rowTexts")
+    // ...and items before the window should NOT appear.
+    assert(!rowTexts.exists(_.contains("item-1 ")), s"items above the scroll should not render — got $rowTexts")
+  }
+
+  test("view drops the primary-bar highlight when not focused") {
+    val state   = initial.copy(selectedIdx = 1) // some non-zero selection
+    val focused = Autocomplete.view(state, width = 16, maxVisible = 6, focused = true)
+    val blurred = Autocomplete.view(state, width = 16, maxVisible = 6, focused = false)
+    def rowStyle(nodes: List[VNode], i: Int): Style = nodes.tail(i) match
+      case t: VNode.TextNode => t.txt.head.style
+      case _                 => fail("expected TextNode")
+    // Focused selection has a primary background; unfocused only has a primary fg.
+    assert(rowStyle(focused, 1).bg != Color.Default, "focused row should have a bg")
+    assert(rowStyle(blurred, 1).bg == Color.Default, "unfocused row should drop the bg bar")
+  }

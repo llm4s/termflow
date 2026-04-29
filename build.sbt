@@ -298,3 +298,4 @@ addCommandAlias("dashboardDemo","termflowSample/runMain termflow.apps.dashboard.
 addCommandAlias("wizardDemo",   "termflowSample/runMain termflow.apps.wizard.WizardApp")
 addCommandAlias("treeDemo",     "termflowSample/runMain termflow.apps.tree.FileTreeApp")
 addCommandAlias("editorDemo",   "termflowSample/runMain termflow.apps.editor.EditorApp")
+addCommandAlias("chatDemo",     "termflowSample/runMain termflow.apps.chat.ChatStreamApp")

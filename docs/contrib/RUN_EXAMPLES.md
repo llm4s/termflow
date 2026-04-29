@@ -29,6 +29,7 @@ sbt sineDemo          # Animated sine wave
 sbt inputDemo         # Prompt / cursor regression repro (#73 / #74)
 sbt treeDemo          # File-tree explorer (Tree widget + Layout.Border)
 sbt editorDemo        # Multi-buffer editor (MultiLineInput + SplitPane + MenuBar)
+sbt chatDemo          # Streaming chat (LogView scrollback + Sub.Every token stream)
 ```
 
 Inside an `sbt` session you can chain them: `sbt> widgetsDemo`.

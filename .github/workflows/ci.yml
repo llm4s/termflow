@@ -35,6 +35,9 @@ jobs:
       - name: Scala 3 style syntax gate
         run: ./scripts/check_scala3_style.sh
 
+      - name: Widget docs coverage gate
+        run: ./scripts/check_widget_docs.sh
+
       - name: CI checks (format, scalafix, test)
         run: sbt --batch ciCheck
 

@@ -281,6 +281,59 @@ object Dialogs:
     )
 
   /**
+   * Centred action-list dialog. A vertical menu of `Choice` actions; the
+   * one with `focused = true` is highlighted in the theme's primary
+   * palette. Apps drive arrow-key navigation by toggling which `Choice`
+   * is focused in their own model and re-rendering.
+   *
+   * This is a thin convenience over [[listSelect]] tailored for "pick an
+   * action" menus: the items are `Choice` values (so they already carry
+   * a label and a focused flag), there is no OK / Cancel row, and the
+   * dialog auto-sizes to its longest label. Use [[listSelect]] when
+   * you're choosing a value (with explicit OK / Cancel) rather than
+   * triggering an action.
+   *
+   * Sizing: width is the max of (title + padding) and (longest label +
+   * padding) with a 30-cell floor. Height is `4 + actions.size`.
+   *
+   * @param title    Title rendered on the top border.
+   * @param actions  Action items. Exactly one should have
+   *                 `focused = true`; if none are focused, the first row
+   *                 still renders as the selection-target style.
+   * @param position Anchor (default [[OverlayPosition.Centered]]).
+   */
+  def actionList(
+    title: String,
+    actions: List[Choice],
+    position: OverlayPosition = OverlayPosition.Centered
+  )(using theme: Theme): Overlay =
+    val titleLen = title.length + 4
+    val itemLen  = (0 :: actions.map(_.label.length)).max + 6
+    val width    = math.max(30, math.max(titleLen, itemLen))
+    val height   = 4 + math.max(1, actions.size)
+
+    val box       = Theme.box(XCoord(1), YCoord(1), width, height)
+    val titleNode = TextNode(XCoord(3), YCoord(1), List(Text(s" $title ", Style(fg = theme.primary, bold = true))))
+
+    val rows: List[VNode] =
+      actions.zipWithIndex.map { case (action, i) =>
+        val sel    = action.focused
+        val marker = if sel then "▸ " else "  "
+        val style =
+          if sel then Style(fg = theme.background, bg = theme.primary, bold = true)
+          else Style(fg = theme.foreground)
+        TextNode(XCoord(3), YCoord(3 + i), List(Text(s"$marker${action.label}", style)))
+      }
+
+    Overlay(
+      position = position,
+      width = width,
+      height = height,
+      children = box :: titleNode :: rows,
+      inputCapture = InputCapture.Modal
+    )
+
+  /**
    * One row in a [[fileDialog]] / [[directoryDialog]] listing.
    *
    * The helpers are pure presentation: they don't touch the filesystem.

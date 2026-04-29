@@ -45,7 +45,7 @@ object KeySim:
   val ArrowLeft: InputKey  = InputKey.ArrowLeft
   val ArrowRight: InputKey = InputKey.ArrowRight
   val BackTab: InputKey    = InputKey.BackTab
-  val Tab: InputKey        = InputKey.CharKey('\t')
+  val Tab: InputKey        = InputKey.Tab
 
   // ---- Character + control ------------------------------------------------
 
@@ -151,6 +151,11 @@ object KeySim:
           if i + 1 < s.length && s.charAt(i + 1) == '\n' then i += 1
         case '\n' =>
           builder += InputKey.Enter
+        case '\t' =>
+          // Tab is a distinct InputKey, not a CharKey. Match what the
+          // real-terminal decoder produces so test inputs and
+          // production inputs agree.
+          builder += InputKey.Tab
         case other =>
           builder += InputKey.CharKey(other)
       i += 1

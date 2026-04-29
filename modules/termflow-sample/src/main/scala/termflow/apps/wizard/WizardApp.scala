@@ -200,9 +200,9 @@ object WizardApp:
     if isQuitKey then m // runtime handles Quit at the App layer
     else
       k match
-        case CharKey('\t') => step(m, NextFocus)
-        case BackTab       => step(m, PrevFocus)
-        case _             => stepKeyForStep(m, k)
+        case Tab     => step(m, NextFocus)
+        case BackTab => step(m, PrevFocus)
+        case _       => stepKeyForStep(m, k)
 
   private def stepKeyForStep(m: Model, k: KeyDecoder.InputKey): Model =
     import KeyDecoder.InputKey.*
@@ -228,7 +228,14 @@ object WizardApp:
             k match
               case ArrowUp   => step(m, PlanUp)
               case ArrowDown => step(m, PlanDown)
-              case _         => m
+              // Enter / Space commit the current selection (it's already
+              // chosen via arrow keys) and jump focus straight to the
+              // Next button — the user is committing to advance, not
+              // backing out, so we skip the Back button in the focus
+              // cycle.
+              case Enter | CharKey(' ') =>
+                m.copy(focus = m.focus.updated(m.step, m.currentFocus.focus(NextPlanId)))
+              case _ => m
           case Some(id) if id == BackPlanId =>
             k match
               case Enter | CharKey(' ') => step(m, PrevStep)

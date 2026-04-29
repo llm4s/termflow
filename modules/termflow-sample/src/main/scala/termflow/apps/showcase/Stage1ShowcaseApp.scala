@@ -11,22 +11,33 @@ import java.nio.file.Path
 import java.nio.file.Paths
 
 /**
- * Six-tab showcase of every shipped TermFlow widget and runtime feature.
+ * Nine-tab showcase of every shipped TermFlow widget and runtime feature.
  *
- * Tabs (switch with `1`..`6` or click the cell in the bar at row 2):
+ * Tabs (switch with `1`..`9` or click the cell in the bar at row 2):
  *
  *   - **1 Showcase** — Stage 1 + Stage 2 demo: capabilities, palette,
  *     themes (RadioGroup), borders (RadioGroup), styles (CheckBox),
- *     unicode width, LogView-driven live input, Tabs widget.
+ *     unicode width, LogView-driven live input, Tabs widget. The
+ *     Showcase tab also wires `a` for the new
+ *     [[Dialogs.actionList]] dialog (Stage 3 §6.1).
  *   - **2 Widgets** — the Tree widget over a sample file tree (arrow keys
  *     navigate, Space / Enter toggles).
  *   - **3 Inputs** — Form widget composing TextField, Select, Autocomplete,
  *     CheckBox, and Button. Tab/Shift+Tab cycles focus, Enter submits.
  *   - **4 Data** — ListView + Table side-by-side with an animated Spinner
- *     and ProgressBar in the header and a StatusBar pinned at the bottom.
+ *     and ProgressBar in the header, a vertical
+ *     [[widgets.ScrollBar]] (Stage 3 §6.2) tracking the ListView, and
+ *     a StatusBar pinned at the bottom.
  *   - **5 Layout** — SplitPane horizontal split with a MenuBar in the left
- *     pane; `[`/`]` resize the divider, ←/→/↓ drive the menu.
- *   - **6 Help** — keybinding reference + about.
+ *     pane; `[`/`]` or **drag the divider with the mouse**
+ *     ([[widgets.SplitPane.handleMouse]], Stage 3 §6.2) resize it,
+ *     ←/→/↓ drive the menu.
+ *   - **6 Wizard** / **7 Dashboard** — embedded sample apps.
+ *   - **8 Help** — keybinding reference, with the new
+ *     [[widgets.Separator]] (Stage 3 §6.2) used as section rules.
+ *   - **9 Editor** — [[widgets.MultiLineInput]] (Stage 3 §5.3) — type
+ *     to edit, Enter inserts a newline, ↑/↓/←/→ navigate, surrogate
+ *     pairs and combining marks edit by grapheme.
  *
  * Stage 1+2 features (Showcase tab):
  *
@@ -145,7 +156,8 @@ object Stage1ShowcaseApp:
       "5 Layout",
       "6 Wizard",
       "7 Dashboard",
-      "8 Help"
+      "8 Help",
+      "9 Editor"
     )
 
   /**
@@ -169,6 +181,7 @@ object Stage1ShowcaseApp:
   private val WizardTabIdx: Int    = 5
   private val DashboardTabIdx: Int = 6
   private val HelpTabIdx: Int      = 7
+  private val EditorTabIdx: Int    = 8
 
   // ---- Inputs tab (Form + TextField + Select + Autocomplete + CheckBox + Button) ----
   private val InpNameId: FocusId    = FocusId("inp-name")
@@ -322,12 +335,28 @@ object Stage1ShowcaseApp:
     case Files
     case Directories
 
+  /**
+   * Action items rendered by the [[Dialogs.actionList]] dialog opened
+   * via `a` on the Showcase tab. Each entry maps to a Msg dispatched
+   * when the user picks it.
+   */
+  enum ActionListItem:
+    case CycleTheme, CycleBorder, OpenListDialog
+
+  /** Vector form of [[ActionListItem]] so we can index by selection. */
+  private val actionListItems: Vector[ActionListItem] = Vector(
+    ActionListItem.CycleTheme,
+    ActionListItem.CycleBorder,
+    ActionListItem.OpenListDialog
+  )
+
   enum Dialog:
     case None
     case ConfirmQuit(yesFocused: Boolean)
     case TextInput(state: Prompt.State, okFocused: Boolean)
     case ListSelect(selectedIndex: Int)
     case Waiting(openedAtTick: Long, autoCloseAtTick: Long)
+    case ActionList(selectedIndex: Int)
     case FilePicker(
       mode: FilePickerMode,
       currentPath: Path,
@@ -378,8 +407,11 @@ object Stage1ShowcaseApp:
     dataProgress: Double,
     // ---- Layout tab state ----
     layoutSplitRatio: Double,
+    layoutSplitDrag: widgets.SplitPane.DragState,
     layoutMenu: widgets.MenuBar.State,
     layoutLastPick: Option[String],
+    // ---- Editor tab state ----
+    editorState: widgets.MultiLineInput.State,
     // ---- Embedded sub-apps ----
     wizardModel: WizardApp.Model,
     dashboardModel: DashboardApp.Model,
@@ -411,6 +443,9 @@ object Stage1ShowcaseApp:
     case OpenTextInput
     case OpenListSelect
     case OpenWaiting
+    case OpenActionList
+    case ActionListMove(delta: Int)
+    case ActionListAccept(index: Int)
     case OpenFileDialog
     case OpenDirectoryDialog
     case FilePickerMove(delta: Int)
@@ -422,6 +457,9 @@ object Stage1ShowcaseApp:
     case ListSelectAccept(index: Int)
     case InputsSubmit
     case LayoutMenuPick(menuTitle: String, item: String)
+    case LayoutMouse(ev: MouseEvent)
+    case EditorKey(k: KeyDecoder.InputKey)
+    case TreeMouse(ev: MouseEvent)
     case Quit
     case Key(k: KeyDecoder.InputKey)
     case KeyError(t: Throwable)
@@ -465,8 +503,16 @@ object Stage1ShowcaseApp:
         dataList = widgets.ListView.State.of(dataTasks, visibleRows = 8),
         dataProgress = 0.0,
         layoutSplitRatio = 0.55,
+        layoutSplitDrag = widgets.SplitPane.DragState.at(0.55),
         layoutMenu = widgets.MenuBar.State(layoutMenus),
         layoutLastPick = None,
+        editorState = widgets.MultiLineInput.State.of(
+          "MultiLineInput demo — Stage 3 §5.3.\n" +
+            "Enter inserts a newline.\n" +
+            "↑/↓ between rows; ←/→ within a row.\n" +
+            "Backspace at start of a row joins with the line above.\n" +
+            "Wide chars and emoji edit by grapheme: 你好 😀."
+        ),
         wizardModel = WizardApp.initialModel,
         dashboardModel = DashboardApp.initialModel,
         input = Sub.InputKey(k => Key(k), e => KeyError(e), ctx),
@@ -489,6 +535,24 @@ object Stage1ShowcaseApp:
           m.copy(dialog = Dialog.ListSelect(selectedIndex = 0)).tui
         case OpenWaiting =>
           m.copy(dialog = Dialog.Waiting(openedAtTick = m.tick, autoCloseAtTick = m.tick + waitingDurationTicks)).tui
+        case OpenActionList =>
+          m.copy(dialog = Dialog.ActionList(selectedIndex = 0)).tui
+        case ActionListMove(delta) =>
+          m.dialog match
+            case Dialog.ActionList(idx) =>
+              val next = math.max(0, math.min(actionListItems.size - 1, idx + delta))
+              m.copy(dialog = Dialog.ActionList(next)).tui
+            case _ => m.tui
+        case ActionListAccept(idx) =>
+          val pick   = actionListItems(clampIdx(idx, actionListItems.size))
+          val closed = m.copy(dialog = Dialog.None)
+          pick match
+            case ActionListItem.CycleTheme =>
+              closed.copy(themeIdx = (m.themeIdx + 1) % themePresets.size).tui
+            case ActionListItem.CycleBorder =>
+              closed.copy(borderIdx = (m.borderIdx + 1) % borderStyles.size).tui
+            case ActionListItem.OpenListDialog =>
+              closed.copy(dialog = Dialog.ListSelect(selectedIndex = 0)).tui
         case OpenFileDialog      => openFilePicker(m, FilePickerMode.Files)
         case OpenDirectoryDialog => openFilePicker(m, FilePickerMode.Directories)
         case FilePickerMove(delta) =>
@@ -532,6 +596,45 @@ object Stage1ShowcaseApp:
           m.copy(inputsSubmitted = Some(s"$name • $country • $fruit • $agree")).tui
         case LayoutMenuPick(menuTitle, item) =>
           m.copy(layoutLastPick = Some(s"$menuTitle › $item")).tui
+        case EditorKey(k) =>
+          val (next, _) = widgets.MultiLineInput.handleKey[Msg](m.editorState, k)
+          m.copy(editorState = next).tui
+        case TreeMouse(ev) =>
+          ev match
+            case MouseEvent.Press(MouseButton.Left, col, row, _) =>
+              val r      = widgetsTabRect(m)
+              val origin = Coord(XCoord(r.col + 1), YCoord(r.row + 4))
+              val rows   = widgets.Tree.visibleRows(demoTree, m.treeExpanded)
+              widgets.Tree.hitTest(rows, origin, indentWidth = 2, col = col, row = row, labelLength = 60) match
+                case Some(widgets.Tree.HitResult.Chevron(idx)) =>
+                  val r0  = rows(idx)
+                  val nxt = if r0.expanded then m.treeExpanded - r0.id else m.treeExpanded + r0.id
+                  m.copy(treeSelected = idx, treeExpanded = nxt).tui
+                case Some(widgets.Tree.HitResult.Label(idx)) =>
+                  m.copy(treeSelected = idx).tui
+                case None => m.tui
+            case MouseEvent.Scroll(dir, _, _, _) =>
+              val rows = widgets.Tree.visibleRows(demoTree, m.treeExpanded)
+              val step = dir match
+                case ScrollDirection.Up   => -1
+                case ScrollDirection.Down => +1
+                case _                    => 0
+              val next = math.max(0, math.min(rows.size - 1, m.treeSelected + step))
+              m.copy(treeSelected = next).tui
+            case _ => m.tui
+        case LayoutMouse(ev) =>
+          val (sw, sh, sx, sy) = layoutSplitGeom(m)
+          val state            = m.layoutSplitDrag.copy(splitRatio = m.layoutSplitRatio)
+          val drag = widgets.SplitPane.handleMouse(
+            state = state,
+            event = ev,
+            direction = widgets.SplitPane.Direction.Horizontal,
+            width = sw,
+            height = sh,
+            at = Coord(XCoord(sx), YCoord(sy)),
+            gap = 1
+          )
+          m.copy(layoutSplitDrag = drag, layoutSplitRatio = drag.splitRatio).tui
         case SelectListIdx(i) =>
           m.dialog match
             case Dialog.ListSelect(_) =>
@@ -584,6 +687,7 @@ object Stage1ShowcaseApp:
                 case LayoutTabIdx    => handleLayoutKey(withEvent, k, ctx)
                 case WizardTabIdx    => handleWizardKey(withEvent, k)
                 case DashboardTabIdx => handleDashboardKey(withEvent, k)
+                case EditorTabIdx    => handleEditorKey(withEvent, k)
                 case _               => Tui(withEvent, dispatch(withEvent, k))
             case _ => Tui(withEvent, dispatch(withEvent, k))
 
@@ -643,6 +747,25 @@ object Stage1ShowcaseApp:
               val nextDashboard = DashboardApp.step(m.dashboardModel, DashboardApp.Msg.Key(k))
               m.copy(dashboardModel = nextDashboard).tui
 
+    /**
+     * Forward keystrokes to the [[widgets.MultiLineInput]] on the
+     * Editor tab. Tab-switch digits stay routed to the showcase, and
+     * `Esc` opens the quit dialog so the user can leave the tab; every
+     * other key (including `q`, since the editor accepts text) is fed
+     * to the editor.
+     */
+    private def handleEditorKey(m: Model, k: KeyDecoder.InputKey): Tui[Model, Msg] =
+      import KeyDecoder.InputKey.*
+      // The editor consumes every printable key (digits included) so the
+      // showcase's normal `1..9` tab-switch is unavailable. Esc is the
+      // dedicated leave-the-editor key — it switches back to the
+      // Showcase tab so the user has a keyboard-only path out. Ctrl+C
+      // still closes the app at the runtime level.
+      k match
+        case Mouse(ev) => Tui(m, tabBarMouseDispatch(ev))
+        case Escape    => Tui(m, Cmd.GCmd(SelectTab(ShowcaseTabIdx)))
+        case _         => Tui(m, Cmd.GCmd(EditorKey(k)))
+
     private def clampIdx(i: Int, size: Int): Int = math.max(0, math.min(size - 1, i))
 
     /** Start path for the file pickers — `user.home`, defaulting to `.` if unset. */
@@ -681,7 +804,7 @@ object Stage1ShowcaseApp:
           k match
             // Esc cancels; Tab moves focus between OK and Cancel.
             case Escape => Cmd.GCmd(CloseDialog)
-            case CharKey('\t') | KeyDecoder.InputKey.BackTab =>
+            case Tab | BackTab =>
               Cmd.GCmd(ToggleDialogFocus)
             case _ => Cmd.NoCmd
 
@@ -704,6 +827,27 @@ object Stage1ShowcaseApp:
           k match
             case Escape => Cmd.GCmd(CloseDialog)
             case _      => Cmd.NoCmd
+
+        case Dialog.ActionList(_) =>
+          k match
+            case ArrowUp   => Cmd.GCmd(ActionListMove(-1))
+            case ArrowDown => Cmd.GCmd(ActionListMove(+1))
+            case Home      => Cmd.GCmd(ActionListMove(-actionListItems.size))
+            case End       => Cmd.GCmd(ActionListMove(actionListItems.size))
+            case Enter =>
+              m.dialog match
+                case Dialog.ActionList(i) => Cmd.GCmd(ActionListAccept(i))
+                case _                    => Cmd.NoCmd
+            case Escape                                                 => Cmd.GCmd(CloseDialog)
+            case Mouse(MouseEvent.Press(MouseButton.Left, col, row, _)) =>
+              // Route the click through the HitTest registry built for
+              // the dialog's rows. Demonstrates the Stage 3 §5.1 API
+              // end-to-end: zones registered, `hit(col, row)` looks up
+              // the topmost match, dispatch fires the matching Msg.
+              actionListHitTest(m).hit(col, row) match
+                case Some(idx) => Cmd.GCmd(ActionListAccept(idx))
+                case None      => Cmd.NoCmd
+            case _ => Cmd.NoCmd
 
         case Dialog.FilePicker(_, _, _, _) =>
           k match
@@ -736,6 +880,7 @@ object Stage1ShowcaseApp:
         case CharKey('i') | CharKey('I') => Cmd.GCmd(OpenTextInput)
         case CharKey('l') | CharKey('L') => Cmd.GCmd(OpenListSelect)
         case CharKey('w') | CharKey('W') => Cmd.GCmd(OpenWaiting)
+        case CharKey('a') | CharKey('A') => Cmd.GCmd(OpenActionList)
         case CharKey('f') | CharKey('F') => Cmd.GCmd(OpenFileDialog)
         case CharKey('g') | CharKey('G') => Cmd.GCmd(OpenDirectoryDialog)
         case CharKey('q') | CharKey('Q') => Cmd.GCmd(OpenDialog)
@@ -745,6 +890,7 @@ object Stage1ShowcaseApp:
 
     /** Key bindings for the Widgets tab — tree navigation. */
     private def widgetsTabKey(k: KeyDecoder.InputKey, m: Model): Cmd[Msg] =
+      val _ = m
       import KeyDecoder.InputKey.*
       k match
         case ArrowUp                     => Cmd.GCmd(TreeUp)
@@ -752,8 +898,16 @@ object Stage1ShowcaseApp:
         case Enter | CharKey(' ')        => Cmd.GCmd(ToggleTreeNode)
         case CharKey('q') | CharKey('Q') => Cmd.GCmd(OpenDialog)
         case Escape                      => Cmd.GCmd(OpenDialog)
-        case Mouse(ev)                   => tabBarMouseDispatch(ev)
-        case _                           => Cmd.NoCmd
+        case Mouse(ev)                   =>
+          // A press on the tab bar still switches tabs; everything else
+          // (clicks on the tree, scroll wheel) goes to the Tree handler.
+          ev match
+            case MouseEvent.Press(MouseButton.Left, col, row, _) =>
+              tabHitTest(col, row) match
+                case Some(idx) => Cmd.GCmd(SelectTab(idx))
+                case None      => Cmd.GCmd(TreeMouse(ev))
+            case _ => Cmd.GCmd(TreeMouse(ev))
+        case _ => Cmd.NoCmd
 
     /** Key bindings for the Help tab. */
     private def helpTabKey(k: KeyDecoder.InputKey): Cmd[Msg] =
@@ -796,7 +950,7 @@ object Stage1ShowcaseApp:
       // text focus so typing letters into a TextField stays unaffected;
       // digits collide with showcase tab shortcuts and are reserved.
       val pre: Option[Tui[Model, Msg]] = k match
-        case CharKey('\t')                               => Some(m.copy(inputsFocus = m.inputsFocus.next).tui)
+        case Tab                                         => Some(m.copy(inputsFocus = m.inputsFocus.next).tui)
         case BackTab                                     => Some(m.copy(inputsFocus = m.inputsFocus.previous).tui)
         case Escape                                      => Some(Tui(m, Cmd.GCmd(OpenDialog)))
         case CharKey('q') | CharKey('Q') if !textFocused => Some(Tui(m, Cmd.GCmd(OpenDialog)))
@@ -852,7 +1006,7 @@ object Stage1ShowcaseApp:
       val _ = ctx
       import KeyDecoder.InputKey.*
       val pre: Option[Tui[Model, Msg]] = k match
-        case CharKey('\t')               => Some(m.copy(dataFocus = m.dataFocus.next).tui)
+        case Tab                         => Some(m.copy(dataFocus = m.dataFocus.next).tui)
         case BackTab                     => Some(m.copy(dataFocus = m.dataFocus.previous).tui)
         case Escape                      => Some(Tui(m, Cmd.GCmd(OpenDialog)))
         case CharKey('q') | CharKey('Q') => Some(Tui(m, Cmd.GCmd(OpenDialog)))
@@ -880,11 +1034,27 @@ object Stage1ShowcaseApp:
       val pre: Option[Tui[Model, Msg]] = k match
         case CharKey('q') | CharKey('Q') => Some(Tui(m, Cmd.GCmd(OpenDialog)))
         case Escape if !menuActive       => Some(Tui(m, Cmd.GCmd(OpenDialog)))
-        case Mouse(ev)                   => Some(Tui(m, tabBarMouseDispatch(ev)))
+        case Mouse(ev)                   =>
+          // A Press on the tab bar still switches tabs; every other
+          // mouse event (including releases / drags) is forwarded to
+          // the SplitPane drag handler.
+          val tabPick = ev match
+            case MouseEvent.Press(MouseButton.Left, col, row, _) => tabHitTest(col, row)
+            case _                                               => None
+          tabPick match
+            case Some(idx) => Some(Tui(m, Cmd.GCmd(SelectTab(idx))))
+            case None      => Some(Tui(m, Cmd.GCmd(LayoutMouse(ev))))
         case CharKey('[') =>
-          Some(m.copy(layoutSplitRatio = math.max(widgets.SplitPane.MinSizeRatio, m.layoutSplitRatio - 0.05)).tui)
+          val next = math.max(widgets.SplitPane.MinSizeRatio, m.layoutSplitRatio - 0.05)
+          Some(m.copy(layoutSplitRatio = next, layoutSplitDrag = widgets.SplitPane.DragState.at(next)).tui)
         case CharKey(']') =>
-          Some(m.copy(layoutSplitRatio = math.min(1.0 - widgets.SplitPane.MinSizeRatio, m.layoutSplitRatio + 0.05)).tui)
+          val next = math.min(1.0 - widgets.SplitPane.MinSizeRatio, m.layoutSplitRatio + 0.05)
+          Some(m.copy(layoutSplitRatio = next, layoutSplitDrag = widgets.SplitPane.DragState.at(next)).tui)
+        case CharKey('=') | CharKey('/') =>
+          // Reset the split back to 50/50. `=` is the more conventional
+          // key (Vim-style window resize); `/` is the explicit "reset"
+          // documented in the help footer.
+          Some(m.copy(layoutSplitRatio = 0.5, layoutSplitDrag = widgets.SplitPane.DragState.at(0.5)).tui)
         case _ =>
           digitTabSwitch(k, allowDigits = !menuActive).map(idx => Tui(m, Cmd.GCmd(SelectTab(idx))))
 
@@ -984,6 +1154,36 @@ object Stage1ShowcaseApp:
      * Mouse handling while the listSelect dialog is open: clicks on a
      *  visible row commit that item, scroll-wheel cycles the selection.
      */
+    /**
+     * Build a [[HitTest]] registry for the actionList dialog's rows so
+     * mouse clicks can be mapped back to the underlying action index
+     * (Stage 3 §5.1 API). The dialog's geometry mirrors what
+     * [[Dialogs.actionList]] computes internally; the registry is
+     * rebuilt every frame so resizes / theme changes are picked up
+     * automatically.
+     */
+    private def actionListHitTest(m: Model): HitTest[Int] =
+      val title    = "Quick actions"
+      val labels   = Vector("Cycle theme", "Cycle border", "Open list dialog")
+      val titleLen = title.length + 4
+      val itemLen  = (0 +: labels.map(_.length)).max + 6
+      val width    = math.max(30, math.max(titleLen, itemLen))
+      val height   = 4 + math.max(1, labels.size)
+
+      val rootW    = math.max(60, m.width)
+      val rootH    = math.max(20, m.height)
+      val (ox, oy) = OverlayPosition.resolve(OverlayPosition.Centered, width, height, rootW, rootH)
+
+      // Each row sits at panel-local (3.x, (3 + i).y). Translate to
+      // absolute; click target is the full inner width of the row so
+      // users don't have to land precisely on the label.
+      labels.indices.foldLeft(HitTest.empty[Int]) { (reg, i) =>
+        val rowX  = ox.value + 1
+        val rowY  = oy.value + 2 + i
+        val rectW = math.max(1, width - 2)
+        reg.add(i, termflow.tui.Rect(rowX, rowY, rectW, 1))
+      }
+
     private def listSelectMouseDispatch(m: Model, currentIdx: Int, ev: MouseEvent): Cmd[Msg] =
       val (col, row) = ev.at
       val rect       = listSelectRect(m, currentIdx)
@@ -1168,11 +1368,26 @@ object Stage1ShowcaseApp:
             "menu  ".text,
             " ↓ ".themed(_.primary),
             "open  ".text,
-            " [ / ] ".themed(_.primary),
-            "split  ".text
+            " [ ".themed(_.primary),
+            "shrink ".text,
+            " ] ".themed(_.primary),
+            "grow ".text,
+            " = ".themed(_.primary),
+            "reset  ".text
           )
         case HelpTabIdx =>
-          List(" press 1..5 to leave Help ".themed(_.info), "  ".text)
+          List(" press 1..9 to leave Help ".themed(_.info), "  ".text)
+        case EditorTabIdx =>
+          List(
+            " type ".themed(_.primary),
+            "to edit  ".text,
+            " ↑/↓/←/→ ".themed(_.primary),
+            "navigate  ".text,
+            " Enter ".themed(_.primary),
+            "newline  ".text,
+            " Esc ".themed(_.primary),
+            "leave  ".text
+          )
         case _ =>
           List(
             " b ".themed(_.primary),
@@ -1212,6 +1427,7 @@ object Stage1ShowcaseApp:
         case WizardTabIdx    => wizardTabBody(m)
         case DashboardTabIdx => dashboardTabBody(m)
         case HelpTabIdx      => helpTabBody(m)
+        case EditorTabIdx    => editorTabBody(m)
         case _               => showcaseTabBody(m)
 
       val baseRoot = RootNode(
@@ -1249,6 +1465,18 @@ object Stage1ShowcaseApp:
           )
         case Dialog.ListSelect(idx) =>
           baseRoot.copy(overlays = List(buildListSelectOverlay(idx)))
+        case Dialog.ActionList(idx) =>
+          val labels = Vector("Cycle theme", "Cycle border", "Open list dialog")
+          val choices =
+            labels.zipWithIndex.map { case (lbl, i) => Dialogs.Choice(lbl, focused = i == idx) }.toList
+          baseRoot.copy(overlays =
+            List(
+              Dialogs.actionList(
+                title = "Quick actions",
+                actions = choices
+              )
+            )
+          )
         case Dialog.Waiting(openedAt, deadline) =>
           val remaining = math.max(0L, deadline - m.tick)
           baseRoot.copy(overlays =
@@ -1418,7 +1646,17 @@ object Stage1ShowcaseApp:
     private def widgetsTabBody(m: Model)(using theme: Theme): List[VNode] =
       val r     = widgetsTabRect(m)
       val title = TextNode(2.x, 1.y, List(" Tree widget demo ".themed(_.primary)))
-      val intro = TextNode(2.x, 3.y, List("Arrow keys move; Space/Enter toggles a node.".text))
+      val intro = TextNode(
+        2.x,
+        3.y,
+        List(
+          "↑/↓ move; Space/Enter toggle.  Click a row to select it.  Click ".text,
+          "[+]".themed(_.primary),
+          " or ".text,
+          "[-]".themed(_.primary),
+          " to expand/collapse.  Scroll wheel moves selection.".text
+        )
+      )
       val treeRows = widgets.Tree(
         roots = demoTree,
         expanded = m.treeExpanded,
@@ -1464,11 +1702,16 @@ object Stage1ShowcaseApp:
         widgets.Form.Row(
           InpFruitId,
           "Fruit:",
-          _ =>
-            // Autocomplete is always-open, so it doesn't take a `focused`
-            // parameter — wrap its node list into a BoxNode so the Form
-            // row can place a single VNode.
-            val parts = widgets.Autocomplete.view(m.inputsFruit, width = fieldWidth, maxVisible = 5)
+          focused =>
+            // Pass focus through so the dropdown drops the primary-bar
+            // highlight when another row owns focus — the static field
+            // shouldn't compete with the active widget visually.
+            val parts = widgets.Autocomplete.view(
+              m.inputsFruit,
+              width = fieldWidth,
+              maxVisible = 5,
+              focused = focused
+            )
             VNode.BoxNode(1.x, 1.y, fieldWidth, widgets.Autocomplete.height(m.inputsFruit, 5), parts, Style())
           ,
           height = widgets.Autocomplete.height(m.inputsFruit, 5)
@@ -1531,6 +1774,20 @@ object Stage1ShowcaseApp:
         focused = listFocused
       )
 
+      // Vertical ScrollBar pinned next to the list — driven by the
+      // ListView's selection / visibleRows / total. Hidden when there
+      // are fewer items than fit (the helper short-circuits).
+      val scrollBarNodes = widgets.ScrollBar(
+        state = widgets.ScrollBar.State(
+          offset = m.dataList.scrollOffset,
+          visible = m.dataList.visibleRows,
+          total = m.dataList.items.size
+        ),
+        length = m.dataList.visibleRows,
+        direction = widgets.ScrollBar.Direction.Vertical,
+        at = Coord(31.x, 7.y)
+      )
+
       // Table (right) — render rows from the same items + paired statuses.
       val tableRows: Vector[(String, String)] =
         m.dataList.items.zipWithIndex.map { case (t, i) =>
@@ -1557,7 +1814,14 @@ object Stage1ShowcaseApp:
         at = Coord(2.x, statusY.y)
       )
 
-      List(panel(r, theme, List(title, spinnerNode, progressNode, intro, listNode, tableNode, statusBar)))
+      List(
+        panel(
+          r,
+          theme,
+          (title :: spinnerNode :: progressNode :: intro :: listNode :: scrollBarNodes) ++
+            List(tableNode, statusBar)
+        )
+      )
 
     /**
      * Body content for the "Layout" tab — SplitPane horizontally split
@@ -1571,7 +1835,9 @@ object Stage1ShowcaseApp:
       val intro = TextNode(
         2.x,
         3.y,
-        List("←/→ move between menus.  ↓/Enter open.  Esc close.  [ / ] resize split.".themed(_.info))
+        List(
+          "←/→ menus.  ↓/Enter open.  Esc close.  [ shrink, ] grow, = reset.  Drag divider with mouse.".themed(_.info)
+        )
       )
 
       val splitTop    = 5
@@ -1601,10 +1867,10 @@ object Stage1ShowcaseApp:
             TextNode((at.x.value + 1).x, (at.y.value + 1).y, List(" Right pane ".themed(_.primary))),
             TextNode((at.x.value + 1).x, (at.y.value + 3).y, List("This pane is rendered by SplitPane.".text)),
             TextNode((at.x.value + 1).x, (at.y.value + 4).y, List(s"Width = $w cells.".themed(_.info))),
-            TextNode((at.x.value + 1).x, (at.y.value + 6).y, List("[ shrinks the left pane".text)),
-            TextNode((at.x.value + 1).x, (at.y.value + 7).y, List("] grows the left pane".text)),
-            TextNode((at.x.value + 1).x, (at.y.value + 9).y, List("Drag-resize is on the".text)),
-            TextNode((at.x.value + 1).x, (at.y.value + 10).y, List("Stage 3 mouse follow-up.".themed(_.info)))
+            TextNode((at.x.value + 1).x, (at.y.value + 6).y, List("[ shrink, ] grow,".text)),
+            TextNode((at.x.value + 1).x, (at.y.value + 7).y, List("= or / reset to 50/50.".text)),
+            TextNode((at.x.value + 1).x, (at.y.value + 9).y, List("…or drag the divider".text)),
+            TextNode((at.x.value + 1).x, (at.y.value + 10).y, List("with the mouse.".themed(_.info)))
           )
           rowNodes
         },
@@ -1639,32 +1905,38 @@ object Stage1ShowcaseApp:
     private def helpTabBody(m: Model)(using theme: Theme): List[VNode] =
       val r     = widgetsTabRect(m)
       val title = TextNode(2.x, 1.y, List(" Keybindings & help ".themed(_.primary)))
+
+      // Separator widget puts a labelled rule across the panel between
+      // the title and the tab list — also exercises the new
+      // `widgets.Separator` helper end-to-end.
+      val sepWidth  = math.max(20, r.width - 4)
+      val sepNodes  = widgets.Separator.horizontal(width = sepWidth, at = Coord(2.x, 2.y), title = "Tabs")
+      val sepNodes2 = widgets.Separator.horizontal(width = sepWidth, at = Coord(2.x, 28.y), title = "Anywhere")
+
       val rows = List(
-        TextNode(2.x, 3.y, List(" 1..8 ".themed(_.primary), "  switch tab".text)),
+        TextNode(2.x, 3.y, List(" 1..9 ".themed(_.primary), "  switch tab".text)),
         TextNode(2.x, 5.y, List(" 1 Showcase".themed(_.success))),
         TextNode(2.x, 6.y, List("   b  cycle border style".text)),
         TextNode(2.x, 7.y, List("   t  cycle theme".text)),
         TextNode(2.x, 8.y, List("   d / i / l / w  open dialogs".text)),
-        TextNode(2.x, 9.y, List("   f / g  open fileDialog / directoryDialog".text)),
-        TextNode(2.x, 10.y, List(" 2 Widgets (Tree)".themed(_.success))),
-        TextNode(2.x, 11.y, List("   ↑/↓ move,  Space/Enter toggle node".text)),
-        TextNode(2.x, 13.y, List(" 3 Inputs (Form)".themed(_.success))),
-        TextNode(2.x, 14.y, List("   Tab/Shift+Tab cycle focus,  Enter submit".text)),
-        TextNode(2.x, 15.y, List("   Space toggles the CheckBox / activates Button".text)),
-        TextNode(2.x, 17.y, List(" 4 Data (List + Table)".themed(_.success))),
-        TextNode(2.x, 18.y, List("   ↑/↓ move,  Tab focuses ListView vs Table".text)),
-        TextNode(2.x, 20.y, List(" 5 Layout (SplitPane + MenuBar)".themed(_.success))),
-        TextNode(2.x, 21.y, List("   ←/→ menu,  ↓ open,  Enter pick,  Esc close".text)),
-        TextNode(2.x, 22.y, List("   [ / ] resize the split".text)),
-        TextNode(2.x, 24.y, List(" 6 Wizard (3-step form)".themed(_.success))),
-        TextNode(2.x, 25.y, List("   Tab/Shift+Tab cycle focus,  Enter activates Next/Submit".text)),
-        TextNode(2.x, 26.y, List(" 7 Dashboard (live metrics)".themed(_.success))),
-        TextNode(2.x, 27.y, List("   ↑/↓ select service,  r restart,  p / Space pause".text)),
-        TextNode(2.x, 29.y, List(" Anywhere".themed(_.success))),
-        TextNode(2.x, 30.y, List("   q / Esc  open quit confirmation".text)),
-        TextNode(2.x, 31.y, List("   click on Tabs bar  switch tab".text))
+        TextNode(2.x, 9.y, List("   a  open actionList (click rows for HitTest demo)".text)),
+        TextNode(2.x, 10.y, List("   f / g  open fileDialog / directoryDialog".text)),
+        TextNode(2.x, 11.y, List(" 2 Widgets (Tree)".themed(_.success))),
+        TextNode(2.x, 12.y, List("   ↑/↓ move,  Space/Enter toggle node".text)),
+        TextNode(2.x, 14.y, List(" 3 Inputs (Form)".themed(_.success))),
+        TextNode(2.x, 15.y, List("   Tab/Shift+Tab cycle focus,  Enter submit".text)),
+        TextNode(2.x, 16.y, List("   Space toggles the CheckBox / activates Button".text)),
+        TextNode(2.x, 18.y, List(" 4 Data (List + Table + ScrollBar)".themed(_.success))),
+        TextNode(2.x, 19.y, List("   ↑/↓ move,  Tab focuses ListView vs Table".text)),
+        TextNode(2.x, 21.y, List(" 5 Layout (SplitPane + MenuBar)".themed(_.success))),
+        TextNode(2.x, 22.y, List("   ←/→ menu,  ↓ open,  Enter pick,  Esc close".text)),
+        TextNode(2.x, 23.y, List("   [ shrink, ] grow, = reset, or drag the divider with the mouse".text)),
+        TextNode(2.x, 25.y, List(" 6 Wizard / 7 Dashboard / 9 Editor (MultiLineInput)".themed(_.success))),
+        TextNode(2.x, 26.y, List("   editor: Enter newline, ↑/↓ between rows, Esc leaves the tab".text)),
+        TextNode(2.x, 29.y, List("   q / Esc  open quit confirmation".text)),
+        TextNode(2.x, 30.y, List("   click on Tabs bar  switch tab".text))
       )
-      List(panel(r, theme, title :: rows))
+      List(panel(r, theme, (title :: sepNodes) ++ sepNodes2 ++ rows))
 
     /**
      * Body content for the "Wizard" tab — embeds [[WizardApp]]'s view by
@@ -1688,6 +1960,52 @@ object Stage1ShowcaseApp:
       embedded.children.map(c => Layout.translate(c, dx = r.col - 1, dy = r.row - 1))
 
     /**
+     * Body content for the "Editor" tab — wraps the
+     * [[widgets.MultiLineInput]] in a bordered panel and pins a help
+     * footer underneath. The widget renders an [[InputNode]] for the
+     * cursor row internally, so the hardware cursor follows editing
+     * even when wide chars (CJK, emoji) are in the buffer.
+     */
+    private def editorTabBody(m: Model)(using theme: Theme): List[VNode] =
+      val r     = widgetsTabRect(m)
+      val title = TextNode(2.x, 1.y, List(" MultiLineInput (Stage 3 §5.3) ".themed(_.primary)))
+      val intro = TextNode(
+        2.x,
+        3.y,
+        List("Type to edit. ↑/↓/←/→ navigate. Enter newline. Esc leaves the tab.".themed(_.info))
+      )
+
+      // Reserve the full panel below the intro for the editor.
+      val editorTop    = 5
+      val editorWidth  = math.max(20, r.width - 6)
+      val editorHeight = math.max(4, r.height - editorTop - 4)
+      val editorNodes = widgets.MultiLineInput.render(
+        state = m.editorState,
+        width = editorWidth,
+        height = editorHeight,
+        at = Coord(3.x, editorTop.y)
+      )
+
+      val rowsCount = m.editorState.lines.size
+      val statusY   = math.max(editorTop + editorHeight, r.height - 2)
+      val status = TextNode(
+        2.x,
+        statusY.y,
+        List(
+          " row ".themed(_.secondary),
+          (m.editorState.cursorRow + 1).toString.themed(_.foreground),
+          " / ".themed(_.secondary),
+          rowsCount.toString.themed(_.foreground),
+          "  col ".themed(_.secondary),
+          (m.editorState.cursorCol + 1).toString.themed(_.foreground),
+          "  total chars ".themed(_.secondary),
+          m.editorState.text.length.toString.themed(_.foreground)
+        )
+      )
+
+      List(panel(r, theme, (title :: intro :: editorNodes) :+ status))
+
+    /**
      * Rect that fills the area below the Tabs bar to the help footer.
      *  Leaves a 1-cell margin on the right (matching the Showcase tab's
      *  rightmost panel layout) so the box's right border doesn't get
@@ -1698,6 +2016,21 @@ object Stage1ShowcaseApp:
       val bottom = math.max(top + 5, m.height - 2) // leave row m.height-1 for footer
       val width  = math.max(60, m.width) - 1
       Rect(col = 1, row = top, width = width, height = bottom - top + 1)
+
+    /**
+     * Absolute geometry of the Layout tab's SplitPane region:
+     *  `(width, height, absX, absY)`. Mirrors the constants used in
+     *  `layoutTabBody` so the mouse drag handler operates in the same
+     *  coordinate system the renderer uses.
+     */
+    private def layoutSplitGeom(m: Model): (Int, Int, Int, Int) =
+      val r           = widgetsTabRect(m)
+      val splitTop    = 5
+      val splitHeight = math.max(8, r.height - splitTop - 2)
+      val splitWidth  = math.max(40, r.width - 4)
+      val absX        = r.col + 2 - 1 // panel-local 2.x
+      val absY        = r.row + splitTop - 1
+      (splitWidth, splitHeight, absX, absY)
 
     /** Bordered panel positioned at `r` with the theme's border style. */
     private def panel(r: Rect, theme: Theme, children: List[VNode]): VNode =

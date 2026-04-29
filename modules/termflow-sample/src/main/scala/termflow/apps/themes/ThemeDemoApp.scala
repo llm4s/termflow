@@ -54,12 +54,12 @@ object ThemeDemoApp:
         case Key(k) =>
           import KeyDecoder.InputKey.*
           k match
-            case CharKey('\t') => Tui(m, Cmd.GCmd(Cycle))
-            case CharKey(' ')  => Tui(m, Cmd.GCmd(Cycle))
-            case CharKey('q')  => Tui(m, Cmd.GCmd(Quit))
-            case CharKey('Q')  => Tui(m, Cmd.GCmd(Quit))
-            case Escape        => Tui(m, Cmd.GCmd(Quit))
-            case _             => m.tui
+            case Tab          => Tui(m, Cmd.GCmd(Cycle))
+            case CharKey(' ') => Tui(m, Cmd.GCmd(Cycle))
+            case CharKey('q') => Tui(m, Cmd.GCmd(Quit))
+            case CharKey('Q') => Tui(m, Cmd.GCmd(Quit))
+            case Escape       => Tui(m, Cmd.GCmd(Quit))
+            case _            => m.tui
 
     override def view(m: Model): RootNode =
       val (name, theme)   = themes(m.themeIndex)

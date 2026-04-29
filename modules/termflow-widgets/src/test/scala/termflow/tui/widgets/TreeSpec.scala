@@ -67,7 +67,7 @@ class TreeSpec extends AnyFunSuite:
 
   // ---- apply --------------------------------------------------------------
 
-  test("apply renders one row per visible node with the right indentation + chevron") {
+  test("apply renders one row per visible node with the right indentation + glyph") {
     val nodes = Tree(
       roots = sampleTree,
       expanded = Set("src"),
@@ -75,13 +75,15 @@ class TreeSpec extends AnyFunSuite:
       render = (_: Node).name
     )
     val texts = textsOf(nodes)
-    assert(texts(0) == "▾ src")
-    assert(texts(1) == "    Main.scala", s"expected leaf indented + leaf glyph, got: '${texts(1)}'")
-    assert(texts(2) == "  ▸ util")
-    assert(texts(3) == "  README.md")
+    // `[-] ` for expanded internal, `[+] ` for collapsed, four spaces for leaves.
+    assert(texts(0) == "[-] src")
+    assert(texts(1) == "      Main.scala", s"expected depth-1 leaf indented + glyph, got: '${texts(1)}'")
+    assert(texts(2) == "  [+] util")
+    // README.md is at depth 0 — no per-depth pad, just the 4-cell leaf glyph.
+    assert(texts(3) == "    README.md")
   }
 
-  test("ASCII fallback uses v / > / `  ` markers") {
+  test("unicode flag is ignored — glyphs are now ASCII by default") {
     val nodes = Tree(
       roots = sampleTree,
       expanded = Set("src"),
@@ -90,8 +92,8 @@ class TreeSpec extends AnyFunSuite:
       unicode = false
     )
     val texts = textsOf(nodes)
-    assert(texts(0).startsWith("v src"))
-    assert(texts(2).contains("> util"), s"got: '${texts(2)}'")
+    assert(texts(0).startsWith("[-] src"))
+    assert(texts(2).contains("[+] util"), s"got: '${texts(2)}'")
   }
 
   test("selectedIndex highlights exactly one row in the theme primary slot") {
@@ -152,6 +154,40 @@ class TreeSpec extends AnyFunSuite:
   // ---- companions ---------------------------------------------------------
 
   test("Tree.rowWidth = depth*indent + marker + label") {
-    assert(Tree.rowWidth("name", depth = 0) == 0 + 2 + 4)
-    assert(Tree.rowWidth("name", depth = 2, indentWidth = 4) == 8 + 2 + 4)
+    // Marker is now 4 cells wide (`[+] ` / `[-] ` / four spaces).
+    assert(Tree.rowWidth("name", depth = 0) == 0 + 4 + 4)
+    assert(Tree.rowWidth("name", depth = 2, indentWidth = 4) == 8 + 4 + 4)
+  }
+
+  // ---- hitTest ------------------------------------------------------------
+
+  test("hitTest returns Chevron for a click on the [+] / [-] glyph cells") {
+    val rows = Tree.visibleRows(sampleTree, Set("src"))
+    // First row at (1,1) — chevron occupies cols 1..4. Try col 2.
+    val r = Tree.hitTest(rows, at = Coord(1.x, 1.y), indentWidth = 2, col = 2, row = 1)
+    assert(r.contains(Tree.HitResult.Chevron(0)), s"got $r")
+  }
+
+  test("hitTest returns Label for a click past the chevron") {
+    val rows = Tree.visibleRows(sampleTree, Set("src"))
+    // First row label starts at col 5 ("[-] " is 4 cells from col 1).
+    val r = Tree.hitTest(rows, at = Coord(1.x, 1.y), indentWidth = 2, col = 6, row = 1, labelLength = 30)
+    assert(r.contains(Tree.HitResult.Label(0)), s"got $r")
+  }
+
+  test("hitTest returns None for clicks outside any row") {
+    val rows = Tree.visibleRows(sampleTree, Set("src"))
+    val r    = Tree.hitTest(rows, at = Coord(1.x, 1.y), indentWidth = 2, col = 2, row = 99)
+    assert(r.isEmpty)
+  }
+
+  test("hitTest treats leaves as Label-only — no Chevron region") {
+    val rows = Tree.visibleRows(sampleTree, Set("src"))
+    // Row 1 = "Main.scala" leaf at depth 1; chevron region is empty.
+    val rChevron = Tree.hitTest(rows, at = Coord(1.x, 1.y), indentWidth = 2, col = 4, row = 2)
+    // Col 4 sits inside the leading padding of the leaf row, before the
+    // label column begins — so neither Chevron nor Label fires.
+    assert(rChevron.isEmpty || rChevron.exists(_.isInstanceOf[Tree.HitResult.Label]))
+    val rLabel = Tree.hitTest(rows, at = Coord(1.x, 1.y), indentWidth = 2, col = 8, row = 2, labelLength = 30)
+    assert(rLabel.contains(Tree.HitResult.Label(1)), s"got $rLabel")
   }

@@ -146,7 +146,8 @@ object Autocomplete:
     width: Int,
     maxVisible: Int = 6,
     at: Coord = Coord(XCoord(1), YCoord(1)),
-    prefix: String = ""
+    prefix: String = "",
+    focused: Boolean = true
   )(using theme: Theme): List[VNode] =
     val rendered = Prompt.renderWithPrefix(state.input, prefix)
     val inputNode = VNode.InputNode(
@@ -158,11 +159,34 @@ object Autocomplete:
       lineWidth = math.max(1, width),
       prefixLength = rendered.prefixLength
     )
-    val visible = state.filtered.take(maxVisible)
+
+    val all  = state.filtered
+    val size = all.size
+    // Keep the cursor visible: anchor the visible window so selectedIdx
+    // is always in `[anchor, anchor + maxVisible)`. Without this scroll
+    // the list silently truncates and a cursor past the fold disappears.
+    val visibleCount = math.max(1, math.min(maxVisible, math.max(1, size)))
+    val anchor =
+      if size == 0 then 0
+      else
+        val sel    = math.max(0, math.min(size - 1, state.selectedIdx))
+        val maxTop = math.max(0, size - visibleCount)
+        if sel < 0 then 0
+        else if sel >= visibleCount then math.min(maxTop, sel - (visibleCount - 1))
+        else 0
+    val visible = all.slice(anchor, anchor + visibleCount)
+
     val rows = visible.zipWithIndex.toList.map { case (item, i) =>
-      val isSelected = i == state.selectedIdx
+      val absIdx     = anchor + i
+      val isSelected = absIdx == state.selectedIdx
+      // When the widget is focused the cursor row uses the full
+      // primary-bar highlight (active-editing affordance). When the
+      // widget is unfocused we drop the bar and use a subtle
+      // foreground-only marker so the row doesn't compete for attention
+      // with the field that actually owns focus now.
       val style =
-        if isSelected then Style(fg = theme.background, bg = theme.primary, bold = true)
+        if isSelected && focused then Style(fg = theme.background, bg = theme.primary, bold = true)
+        else if isSelected then Style(fg = theme.primary, bold = true)
         else Style(fg = theme.foreground)
       val marker = if isSelected then "▸ " else "  "
       val label  = state.render(item)

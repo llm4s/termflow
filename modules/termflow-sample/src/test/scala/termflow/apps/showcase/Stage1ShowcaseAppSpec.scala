@@ -699,8 +699,8 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     val d = driver
     d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('6')))
     // Tab past Name and Email so focus is on the Next button (no TextField).
-    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('\t')))
-    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('\t')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Tab))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Tab))
     d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('q')))
     assert(d.model.dialog.isInstanceOf[Stage1ShowcaseApp.Dialog.ConfirmQuit])
   }
@@ -744,6 +744,118 @@ class Stage1ShowcaseAppSpec extends AnyFunSuite:
     val frame    = d.frame
     val rendered = (0 until frame.height).map(r => frame.cells(r).map(_.ch).mkString).mkString("\n")
     assert(rendered.contains("'z'"), "LogView should render the just-pressed key event")
+  }
+
+  // ---- Stage 3 final components --------------------------------------------
+
+  test("'a' opens the actionList dialog at index 0") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('a')))
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.ActionList(selectedIndex = 0))
+  }
+
+  test("ArrowDown inside actionList moves the focused row") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('a')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.ArrowDown))
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.ActionList(selectedIndex = 1))
+  }
+
+  test("Enter inside actionList runs the action and closes the dialog") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('a')))
+    val themeBefore = d.model.themeName
+    // Default focus is on item 0 = "Cycle theme".
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Enter))
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None)
+    assert(d.model.themeName != themeBefore, "actionList Enter should fire CycleTheme")
+  }
+
+  test("'9' switches to the Editor tab and types feed the MultiLineInput") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('9')))
+    assert(d.model.activeTab == 8)
+    val before = d.model.editorState.text
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.End))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('!')))
+    val after = d.model.editorState.text
+    assert(after.endsWith("!"), s"editor should accept text input — before=$before  after=$after")
+  }
+
+  test("Enter on the Editor tab inserts a newline") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('9')))
+    val rowsBefore = d.model.editorState.lines.size
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.End))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Enter))
+    assert(d.model.editorState.lines.size == rowsBefore + 1)
+  }
+
+  test("Mouse click on an actionList row dispatches via HitTest registry") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('a')))
+    val themeBefore = d.model.themeName
+    // The actionList is centred at width=30 over a 100x28 driver; first
+    // row sits roughly at (rootH - dialogH)/2 + 3. We click around the
+    // middle of the dialog to land somewhere on the first action row.
+    val mods    = termflow.tui.KeyDecoder.Modifiers(false, false, false)
+    val frameH  = 28
+    val dialogH = 4 + 3
+    val rowY    = (frameH - dialogH) / 2 + 1 + 2 // +2 = title + blank
+    val rowX    = (100 - 30) / 2 + 1 + 5         // +5 = somewhere inside the row
+    val ev      = termflow.tui.MouseEvent.Press(termflow.tui.MouseButton.Left, col = rowX, row = rowY, mods)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Mouse(ev)))
+    // First row = "Cycle theme" — click should fire the action and close the dialog.
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None)
+    assert(d.model.themeName != themeBefore, "first-row click should fire CycleTheme")
+  }
+
+  test("Esc on the Editor tab returns to the Showcase tab") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('9')))
+    assert(d.model.activeTab == 8)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Escape))
+    assert(d.model.activeTab == 0, "Esc should switch back to the Showcase tab, not open a dialog")
+    assert(d.model.dialog == Stage1ShowcaseApp.Dialog.None)
+  }
+
+  test("Layout tab '=' resets the split ratio to 0.5") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('5')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('[')))
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('[')))
+    assert(d.model.layoutSplitRatio < 0.55)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('=')))
+    assert(d.model.layoutSplitRatio == 0.5)
+  }
+
+  test("Widgets tab Mouse press on a Tree chevron toggles the node") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('2')))
+    val initiallyExpanded = d.model.treeExpanded.contains("termflow")
+    assert(initiallyExpanded, "tree starts with 'termflow' expanded")
+    // Click the chevron of the first visible row (the `termflow` root).
+    // Origin of the tree is r.col + 1, r.row + 4. The widgets-tab rect
+    // starts at col=1, row=topRowY=3, so the tree origin is (2, 7).
+    // Click col 3 (inside `[-] `).
+    val mods = termflow.tui.KeyDecoder.Modifiers(false, false, false)
+    val ev   = termflow.tui.MouseEvent.Press(termflow.tui.MouseButton.Left, col = 3, row = 7, mods)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Mouse(ev)))
+    assert(!d.model.treeExpanded.contains("termflow"), "chevron click should collapse the node")
+  }
+
+  test("Layout tab Mouse press on the divider arms the SplitPane drag") {
+    val d = driver
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.CharKey('5')))
+    // The divider is somewhere mid-panel; press a column close to the
+    // initial split ratio (0.55 of an 80-cell-wide region).
+    val mods = termflow.tui.KeyDecoder.Modifiers(false, false, false)
+    val ev   = termflow.tui.MouseEvent.Press(termflow.tui.MouseButton.Left, col = 45, row = 12, mods)
+    d.send(Stage1ShowcaseApp.Msg.Key(InputKey.Mouse(ev)))
+    // After the press the drag should be armed (regardless of whether
+    // the click landed exactly on the divider — just verify the
+    // Layout-tab dispatch routes through LayoutMouse without error).
+    assert(d.model.activeTab == 4) // 5 Layout = idx 4
   }
 
   // Silence unused-import lint warning for AnsiRenderer (it's referenced

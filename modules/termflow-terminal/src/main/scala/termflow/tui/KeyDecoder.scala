@@ -71,6 +71,13 @@ object KeyDecoder:
 
     /** Shift+Tab — produced by the `\u001b[Z` escape sequence on most terminals. */
     case BackTab
+
+    /**
+     * Tab — ASCII 9 (HT). On most terminals Ctrl+I produces the same
+     * byte; we surface that as `Tab` rather than `Ctrl('I')` so focus
+     * dispatchers don't have to know the encoding detail.
+     */
+    case Tab
     case F1
     case F2
     case F3
@@ -137,6 +144,7 @@ object KeyDecoder:
       // CR-to-LF translation is disabled) and LF (10) decode as Enter.
       // Ctrl+M produces byte 13 too — at this layer we cannot distinguish
       // it from Enter, so we standardise on the higher-level intent.
+      case 9       => Tab
       case 10 | 13 => Enter
       case 127     => Backspace
       case code if code >= 1 && code <= 26 =>

@@ -127,6 +127,28 @@ enum Layout:
    */
   case Fill(content: Layout)
 
+  /**
+   * Tag a layout subtree with a zone identifier so that the layout pass
+   * records its resolved rectangle in a [[HitTest]] cache.
+   *
+   * Pure presentation: the wrapped `content` is resolved exactly as it
+   * would be without the wrapper — the zone wrapping is invisible to the
+   * renderer. The id is only consulted by [[Layout.resolveTracked]],
+   * which threads a hit-test accumulator through the resolve pass.
+   *
+   * Apps that don't use mouse hit-testing can ignore this case
+   * altogether; it costs nothing in the regular `resolve` /
+   * `resolveTo` paths.
+   *
+   * @param id      Identifier to register under. The id type is
+   *                deliberately `Any` here so a single layout tree can
+   *                mix zone id types — the [[Layout.resolveTracked]]
+   *                call is what fixes the registry's id type.
+   * @param content Layout subtree whose resolved rectangle should be
+   *                registered.
+   */
+  case Zone(id: Any, content: Layout)
+
   /** Natural `(width, height)` of this layout, in cells. */
   def measure: (Int, Int) = Layout.measure(this)
 
@@ -184,15 +206,29 @@ object Layout:
   extension (v: VNode) def asLayout: Layout = Elem(v)
 
   /**
+   * Tag `content` with a hit-test `id`. Sugar for [[Zone]] that lets
+   * the wrapper read like a method call:
+   *
+   * {{{
+   * Layout.zone("submit", Layout.Elem(buttonNode))
+   * }}}
+   */
+  def zone(id: Any, content: Layout): Layout = Zone(id, content)
+
+  /** Tag a bare [[VNode]] with a hit-test id, lifting it into [[Elem]]. */
+  def zone(id: Any, vnode: VNode): Layout = Zone(id, Elem(vnode))
+
+  /**
    * Natural size of a layout, ignoring any container it will be placed in.
    *
    * Public for tests and for callers who want to size a surrounding box
    * from measured layout dimensions.
    */
   def measure(layout: Layout): (Int, Int) = layout match
-    case Elem(v)      => measureVNode(v)
-    case Spacer(w, h) => (math.max(0, w), math.max(0, h))
-    case Fill(inner)  => measure(inner)
+    case Elem(v)        => measureVNode(v)
+    case Spacer(w, h)   => (math.max(0, w), math.max(0, h))
+    case Fill(inner)    => measure(inner)
+    case Zone(_, inner) => measure(inner)
 
     case Row(gap, cs) =>
       if cs.isEmpty then (0, 0)
@@ -254,6 +290,11 @@ object Layout:
    */
   def resolveTo(layout: Layout, at: Coord, availableWidth: Int, availableHeight: Int): List[VNode] =
     layout match
+      case Zone(_, inner) =>
+        // Hit-test zones are transparent to the regular resolver — they
+        // only matter when callers use [[resolveTracked]].
+        resolveTo(inner, at, availableWidth, availableHeight)
+
       case Elem(v) =>
         val dx = at.x.value - v.x.value
         val dy = at.y.value - v.y.value
@@ -385,3 +426,117 @@ object Layout:
 
     case in: InputNode =>
       in.copy(x = in.x + dx, y = in.y + dy)
+
+  /**
+   * Resolve a layout into both `(VNode list, hit-test registry)`. The
+   * registry is populated from any [[Layout.Zone]] wrappers encountered
+   * during resolution, so apps wiring mouse interaction can map a click
+   * coordinate back to a logical zone without recomputing rectangles.
+   *
+   * Zones outside the resolver's wrapping always pick up a real
+   * rectangle regardless of `availableWidth` / `availableHeight`: the
+   * tracked rect uses each subtree's *resolved* size, so [[Layout.Fill]]
+   * children record their post-fill rectangle, not their natural size.
+   *
+   * Type parameter `Id` declares the registry's id type at the call
+   * site. Because of JVM erasure the cast is unchecked at runtime —
+   * apps are responsible for using uniform id types within a single
+   * tracked layout tree (sealed enums / strings / ints; not mixed).
+   * Mixing id types and recovering the right ones from the registry
+   * requires the caller to pattern-match on each entry's runtime
+   * value.
+   *
+   * @param layout          Layout to resolve.
+   * @param at              Top-left of the layout's allocated rectangle.
+   * @param availableWidth  Width budget along the major axis. `-1` =
+   *                        unbounded (same convention as [[resolveTo]]).
+   * @param availableHeight Height budget along the major axis. `-1` =
+   *                        unbounded.
+   */
+  def resolveTracked[Id](
+    layout: Layout,
+    at: Coord = Coord(XCoord(1), YCoord(1)),
+    availableWidth: Int = -1,
+    availableHeight: Int = -1
+  ): (List[VNode], HitTest[Id]) =
+    val builder = Vector.newBuilder[(Id, Rect)]
+    val nodes   = resolveTrackedImpl(layout, at, availableWidth, availableHeight, builder)
+    (nodes, HitTest(builder.result()))
+
+  private def resolveTrackedImpl[Id](
+    layout: Layout,
+    at: Coord,
+    availableWidth: Int,
+    availableHeight: Int,
+    builder: scala.collection.mutable.Builder[(Id, Rect), Vector[(Id, Rect)]]
+  ): List[VNode] = layout match
+    case Zone(id, inner) =>
+      val (w, h) = trackedSize(inner, availableWidth, availableHeight)
+      // Cast is unchecked at runtime due to erasure. Callers should use a
+      // uniform id type across a single tracked tree.
+      builder += id.asInstanceOf[Id] -> Rect(at.x.value, at.y.value, w, h)
+      resolveTrackedImpl(inner, at, availableWidth, availableHeight, builder)
+
+    case Elem(v) =>
+      val dx = at.x.value - v.x.value
+      val dy = at.y.value - v.y.value
+      if dx == 0 && dy == 0 then List(v)
+      else List(translate(v, dx, dy))
+
+    case Spacer(_, _) => Nil
+
+    case Fill(inner) =>
+      inner match
+        case Elem(v) if availableWidth >= 0 || availableHeight >= 0 =>
+          val resized = resizeForFill(v, availableWidth, availableHeight)
+          val dx      = at.x.value - resized.x.value
+          val dy      = at.y.value - resized.y.value
+          if dx == 0 && dy == 0 then List(resized)
+          else List(translate(resized, dx, dy))
+        case _ =>
+          resolveTrackedImpl(inner, at, availableWidth, availableHeight, builder)
+
+    case Row(gap, cs) =>
+      val g         = math.max(0, gap)
+      val n         = cs.size
+      val widths    = distributeMajor(cs, availableWidth, g, axisIsRow = true)
+      val rowHeight = if availableHeight >= 0 then availableHeight else cs.map(measure(_)._2).maxOption.getOrElse(0)
+      var xCursor   = at.x.value
+      val out       = List.newBuilder[VNode]
+      var i         = 0
+      while i < n do
+        val child = cs(i)
+        val cw    = widths(i)
+        out ++= resolveTrackedImpl(child, Coord(XCoord(xCursor), at.y), cw, rowHeight, builder)
+        xCursor += cw
+        if i < n - 1 then xCursor += g
+        i += 1
+      out.result()
+
+    case Column(gap, cs) =>
+      val g        = math.max(0, gap)
+      val n        = cs.size
+      val heights  = distributeMajor(cs, availableHeight, g, axisIsRow = false)
+      val colWidth = if availableWidth >= 0 then availableWidth else cs.map(measure(_)._1).maxOption.getOrElse(0)
+      var yCursor  = at.y.value
+      val out      = List.newBuilder[VNode]
+      var i        = 0
+      while i < n do
+        val child = cs(i)
+        val ch    = heights(i)
+        out ++= resolveTrackedImpl(child, Coord(at.x, YCoord(yCursor)), colWidth, ch, builder)
+        yCursor += ch
+        if i < n - 1 then yCursor += g
+        i += 1
+      out.result()
+
+  /**
+   * Tracked rectangle size for a layout subtree. Mirrors the budget
+   * semantics of [[resolveTo]] — passed-down budgets win over the
+   * subtree's natural size when present.
+   */
+  private def trackedSize(layout: Layout, availableWidth: Int, availableHeight: Int): (Int, Int) =
+    val (natW, natH) = measure(layout)
+    val w            = if availableWidth >= 0 then availableWidth else natW
+    val h            = if availableHeight >= 0 then availableHeight else natH
+    (w, h)

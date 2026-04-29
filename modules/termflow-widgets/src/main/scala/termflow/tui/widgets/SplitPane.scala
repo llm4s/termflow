@@ -127,15 +127,16 @@ object SplitPane:
    * Drag state for mouse-driven divider resize.
    *
    * Apps hold a single `DragState` per `SplitPane`, default
-   * [[DragState.idle]], and feed every [[InputKey.Mouse]] event into
-   * [[handleMouse]]. The `splitRatio` field is what the next frame
-   * should use; `dragging` is true while the user is mid-gesture so the
-   * app can render a focused divider style if it likes.
+   * [[DragState.idle]], and feed every `KeyDecoder.InputKey.Mouse`
+   * event into [[handleMouse]]. The `splitRatio` field is what the
+   * next frame should use; `dragging` is true while the user is
+   * mid-gesture so the app can render a focused divider style if
+   * it likes.
    *
    * @param splitRatio Current split ratio. Always clamped to
    *                   `[MinSizeRatio, 1 - MinSizeRatio]`.
-   * @param dragging   True between [[MouseEvent.Press]] on the divider
-   *                   and the next [[MouseEvent.Release]].
+   * @param dragging   True between a `MouseEvent.Press` on the divider
+   *                   and the next `MouseEvent.Release`.
    */
   final case class DragState(splitRatio: Double, dragging: Boolean):
     /** Reset back to the idle state at the supplied ratio. */

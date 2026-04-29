@@ -75,6 +75,10 @@ enum Layout:
   case Spacer(width: Int, height: Int)
   case Fill(content: Layout)
   case Zone(id: Any, content: Layout)
+  case Grid(columns: Int, rowGap: Int, colGap: Int, cells: List[GridCell])
+  case Border(top: Option[Layout], left: Option[Layout],
+              center: Option[Layout], right: Option[Layout],
+              bottom: Option[Layout], gap: Int)
 ```
 
 Concrete usage:
@@ -114,6 +118,55 @@ Layout.Row(gap = 1, children = List(
 
 Resolve `Fill` regions with `Layout.resolveTo(layout, at, w, h)` — the
 form that knows the available width / height.
+
+### `Grid` — fixed-column grid with optional span
+
+Cells flow left-to-right, top-to-bottom. Column widths split the
+available width evenly (with a budget) or fall back to per-column
+natural widths. `colSpan` / `rowSpan` reserve a rectangle of slots and
+the cursor skips past them.
+
+```scala
+Layout.grid(columns = 3, rowGap = 1, colGap = 2)(
+  TextNode(1.x, 1.y, List("a".text)),
+  TextNode(1.x, 1.y, List("b".text)),
+  TextNode(1.x, 1.y, List("c".text))
+)
+
+// With spans:
+Layout.Grid(columns = 2, rowGap = 0, colGap = 0, cells = List(
+  GridCell(Layout.Elem(headerNode), colSpan = 2),
+  GridCell(Layout.Elem(leftNode)),
+  GridCell(Layout.Elem(rightNode))
+))
+```
+
+Cells with `colSpan > 1` cover the spanned columns inside `resolveTo` /
+`resolveTracked`; their content can itself be a `Zone` so mouse clicks
+land back on a logical id.
+
+### `Border` — five-zone layout
+
+```scala
+Layout.border(
+  top    = Layout.Elem(headerNode),
+  left   = Layout.Elem(sidebar),
+  center = Layout.Elem(mainPanel),
+  right  = Layout.Elem(detailsPanel),
+  bottom = Layout.Elem(statusBar),
+  gap    = 1
+)
+```
+
+Sizing under a budget:
+
+- **Top / bottom** — natural height, full width.
+- **Left / right** — natural width, middle-band height.
+- **Center** — fills the remainder.
+
+Pass `null` (or omit the named argument) for any zone you don't need;
+its space collapses. Designed for "header / sidebar / main / footer"
+shells where you don't want to compute the band heights by hand.
 
 ### `Zone` — tag for hit-test
 

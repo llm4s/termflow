@@ -149,6 +149,74 @@ enum Layout:
    */
   case Zone(id: Any, content: Layout)
 
+  /**
+   * Fixed-column grid layout. Cells flow left-to-right, top-to-bottom in
+   * declaration order; cells with `colSpan > 1` or `rowSpan > 1` occupy a
+   * rectangle of grid slots and the cursor skips past them.
+   *
+   * **Sizing.** Column widths are equal and split the available width
+   * (minus gaps); row heights are equal and split the available height
+   * (minus gaps) when a budget is supplied. Without a budget, column width
+   * falls back to the maximum natural width across single-column cells and
+   * row height to the maximum natural height across single-row cells —
+   * sufficient for measuring containers, less useful for layout (pass an
+   * available size in production).
+   *
+   * **Wrapping.** Cells whose remaining grid row can't accommodate their
+   * `colSpan` advance to the next row's first column. The grid grows
+   * vertically as needed; rows are not pre-bounded.
+   *
+   * **Out of scope.** Per-column / per-row weights, alignment within a cell
+   * (cell content always anchors at the cell's top-left), automatic
+   * column-width compaction. Hit-test passthrough works because each cell's
+   * content can be a [[Zone]].
+   *
+   * @param columns Number of columns. Must be `>= 1`.
+   * @param rowGap  Empty rows between grid rows. Negative values clamp to 0.
+   * @param colGap  Empty columns between grid columns. Negative values clamp to 0.
+   * @param cells   Cells in declaration order.
+   */
+  case Grid(columns: Int, rowGap: Int, colGap: Int, cells: List[GridCell])
+
+  /**
+   * Five-zone border layout: top and bottom span the full width, left and
+   * right take their natural width and fill the middle band, center fills
+   * what's left. Any zone may be `None` and its space collapses.
+   *
+   * **Sizing.** Designed for a budgeted resolve. With a budget:
+   *   - `top` / `bottom` each take their natural height; full width.
+   *   - `left` / `right` each take their natural width; the middle band's
+   *     height is `availableHeight - top.h - bottom.h - 2*gap` (gap is only
+   *     subtracted when both border zones are present).
+   *   - `center` consumes the rest.
+   *
+   * Without a budget, every zone takes its natural size; the overall
+   * measure is `(max(top.w, left.w + gap + center.w + gap + right.w,
+   * bottom.w), top.h + gap + max(left.h, center.h, right.h) + gap +
+   * bottom.h)` with gap terms only when the adjacent zones are non-empty.
+   *
+   * **Out of scope.** Independent gaps for the four borders; alignment of
+   * shorter top/bottom strips against the left/right edges (today they
+   * span the full width even when adjacent corners are occupied by left/
+   * right zones). Hit-test passthrough works because any zone can be a
+   * [[Zone]].
+   *
+   * @param top    Optional top zone (full width, natural height).
+   * @param left   Optional left zone (natural width, middle-band height).
+   * @param center Optional center zone (fills remaining rectangle).
+   * @param right  Optional right zone (natural width, middle-band height).
+   * @param bottom Optional bottom zone (full width, natural height).
+   * @param gap    Cells between adjacent zones; clamps to 0.
+   */
+  case Border(
+    top: Option[Layout],
+    left: Option[Layout],
+    center: Option[Layout],
+    right: Option[Layout],
+    bottom: Option[Layout],
+    gap: Int
+  )
+
   /** Natural `(width, height)` of this layout, in cells. */
   def measure: (Int, Int) = Layout.measure(this)
 
@@ -178,6 +246,16 @@ enum Layout:
     at: Coord = Coord(XCoord(1), YCoord(1))
   ): RootNode =
     RootNode(width, height, resolve(at), input)
+
+/**
+ * A cell in a [[Layout.Grid]]: content plus optional row / column span.
+ *
+ * `colSpan` and `rowSpan` clamp to `>= 1`; spans larger than the grid's
+ * column count are clamped to the column count.
+ */
+final case class GridCell(content: Layout, colSpan: Int = 1, rowSpan: Int = 1):
+  def normalisedColSpan(columns: Int): Int = math.min(math.max(1, colSpan), math.max(1, columns))
+  def normalisedRowSpan: Int               = math.max(1, rowSpan)
 
 object Layout:
 
@@ -219,6 +297,56 @@ object Layout:
   def zone(id: Any, vnode: VNode): Layout = Zone(id, Elem(vnode))
 
   /**
+   * Fluent constructor for a [[Grid]] over bare [[VNode]]s. Every vnode
+   * becomes a 1×1 cell. Use the [[Grid]] case directly when you need
+   * `colSpan` / `rowSpan` control.
+   *
+   * {{{
+   * Layout.grid(columns = 3, rowGap = 1, colGap = 2)(
+   *   TextNode(1.x, 1.y, List("a".text)),
+   *   TextNode(1.x, 1.y, List("b".text)),
+   *   TextNode(1.x, 1.y, List("c".text)),
+   *   TextNode(1.x, 1.y, List("d".text))
+   * )
+   * }}}
+   */
+  def grid(columns: Int, rowGap: Int = 0, colGap: Int = 0)(children: VNode*): Layout =
+    Grid(
+      math.max(1, columns),
+      math.max(0, rowGap),
+      math.max(0, colGap),
+      children.toList.map(v => GridCell(Elem(v)))
+    )
+
+  /**
+   * Convenience constructor for a [[GridCell]] wrapping a bare [[VNode]].
+   * Equivalent to `GridCell(Elem(vnode), colSpan, rowSpan)`.
+   */
+  def cell(vnode: VNode, colSpan: Int = 1, rowSpan: Int = 1): GridCell =
+    GridCell(Elem(vnode), colSpan, rowSpan)
+
+  /**
+   * Fluent constructor for a [[Border]]. Pass `null` (or omit) any zone you
+   * don't need; non-`null` arguments are wrapped in `Some`.
+   */
+  def border(
+    top: Layout = null,
+    left: Layout = null,
+    center: Layout = null,
+    right: Layout = null,
+    bottom: Layout = null,
+    gap: Int = 0
+  ): Layout =
+    Border(
+      Option(top),
+      Option(left),
+      Option(center),
+      Option(right),
+      Option(bottom),
+      math.max(0, gap)
+    )
+
+  /**
    * Natural size of a layout, ignoring any container it will be placed in.
    *
    * Public for tests and for callers who want to size a surrounding box
@@ -247,6 +375,53 @@ object Layout:
         val width  = sizes.map(_._1).max
         val height = sizes.map(_._2).sum + g * (cs.size - 1)
         (width, height)
+
+    case g: Grid   => measureGrid(g)
+    case b: Border => measureBorder(b)
+
+  /** Measure a [[Grid]] at its natural size. */
+  private def measureGrid(grid: Grid): (Int, Int) =
+    val cols   = math.max(1, grid.columns)
+    val rg     = math.max(0, grid.rowGap)
+    val cg     = math.max(0, grid.colGap)
+    val placed = placeGrid(grid.cells, cols)
+    if placed.isEmpty then (0, 0)
+    else
+      val numRows = placed.map(p => p.row + p.rowSpan).max
+      // Per-column natural widths: max natural width of single-column cells
+      // in that column. Multi-span cells don't widen any column on their own.
+      val colNaturalWidth  = Array.fill(cols)(0)
+      val rowNaturalHeight = Array.fill(numRows)(0)
+      placed.foreach { p =>
+        val (w, h) = measure(p.cell.content)
+        if p.colSpan == 1 then colNaturalWidth(p.col) = math.max(colNaturalWidth(p.col), w)
+        if p.rowSpan == 1 then rowNaturalHeight(p.row) = math.max(rowNaturalHeight(p.row), h)
+      }
+      val totalW = colNaturalWidth.sum + cg * math.max(0, cols - 1)
+      val totalH = rowNaturalHeight.sum + rg * math.max(0, numRows - 1)
+      (totalW, totalH)
+
+  /** Measure a [[Border]] at its natural size. */
+  private def measureBorder(b: Border): (Int, Int) =
+    val g                  = math.max(0, b.gap)
+    val (topW, topH)       = b.top.fold((0, 0))(measure)
+    val (leftW, leftH)     = b.left.fold((0, 0))(measure)
+    val (centerW, centerH) = b.center.fold((0, 0))(measure)
+    val (rightW, rightH)   = b.right.fold((0, 0))(measure)
+    val (botW, botH)       = b.bottom.fold((0, 0))(measure)
+    val midH               = List(leftH, centerH, rightH).max
+    val midRowGap =
+      List(b.left, b.center, b.right).count(_.isDefined) match
+        case n if n >= 2 => g * (n - 1)
+        case _           => 0
+    val midRowW = leftW + centerW + rightW + midRowGap
+    val width   = List(topW, midRowW, botW).max
+    val verticalGap =
+      List(b.top.isDefined, midH > 0, b.bottom.isDefined).count(identity) match
+        case n if n >= 2 => g * (n - 1)
+        case _           => 0
+    val height = topH + midH + botH + verticalGap
+    (width, height)
 
   /** Natural `(width, height)` of a concrete [[VNode]]. */
   def measureVNode(v: VNode): (Int, Int) = v match
@@ -351,6 +526,228 @@ object Layout:
           if i < n - 1 then yCursor += g
           i += 1
         out.result()
+
+      case g: Grid =>
+        resolveGrid(g, at, availableWidth, availableHeight, builder = None)
+
+      case b: Border =>
+        resolveBorder(b, at, availableWidth, availableHeight, builder = None)
+
+  /**
+   * Internal placement record for a [[Grid]] cell — the resolved
+   * `(row, col)` plus the original cell and normalised spans.
+   */
+  final private case class PlacedGridCell(
+    cell: GridCell,
+    row: Int,
+    col: Int,
+    rowSpan: Int,
+    colSpan: Int
+  )
+
+  /**
+   * Walk `cells` left-to-right, top-to-bottom over a grid `cols` columns
+   * wide. Cells with colSpan / rowSpan reserve a rectangle in the
+   * occupancy mask; the cursor skips past occupied slots and wraps to the
+   * next row when the remaining row width can't fit the next cell.
+   */
+  private def placeGrid(cells: List[GridCell], cols: Int): Vector[PlacedGridCell] =
+    if cols <= 0 || cells.isEmpty then return Vector.empty
+    val occupied = scala.collection.mutable.Map.empty[(Int, Int), Boolean]
+    val out      = Vector.newBuilder[PlacedGridCell]
+    var row      = 0
+    var col      = 0
+    cells.foreach { cell =>
+      val colSpan = cell.normalisedColSpan(cols)
+      val rowSpan = cell.normalisedRowSpan
+      // Find next free slot that can fit `colSpan` consecutive columns.
+      var placed = false
+      while !placed do
+        if col + colSpan > cols then
+          col = 0
+          row += 1
+        else if (0 until colSpan).exists(c => occupied.contains((row, col + c))) then col += 1
+        else placed = true
+      // Mark the rectangle as occupied.
+      var r = 0
+      while r < rowSpan do
+        var c = 0
+        while c < colSpan do
+          occupied((row + r, col + c)) = true
+          c += 1
+        r += 1
+      out += PlacedGridCell(cell, row, col, rowSpan, colSpan)
+      col += colSpan
+    }
+    out.result()
+
+  /**
+   * Resolve a [[Grid]] at `at`, optionally tracking zone rectangles.
+   *
+   * When `availableWidth` / `availableHeight` are non-negative the grid
+   * splits the budget evenly across columns / rows respectively; without
+   * a budget it falls back to natural sizing.
+   */
+  private def resolveGrid[Id](
+    grid: Grid,
+    at: Coord,
+    availableWidth: Int,
+    availableHeight: Int,
+    builder: Option[scala.collection.mutable.Builder[(Id, Rect), Vector[(Id, Rect)]]]
+  ): List[VNode] =
+    val cols   = math.max(1, grid.columns)
+    val rg     = math.max(0, grid.rowGap)
+    val cg     = math.max(0, grid.colGap)
+    val placed = placeGrid(grid.cells, cols)
+    if placed.isEmpty then return Nil
+    val numRows = placed.map(p => p.row + p.rowSpan).max
+    // Compute per-column widths.
+    val colWidths = Array.fill(cols)(0)
+    if availableWidth >= 0 then
+      val totalGap = cg * math.max(0, cols - 1)
+      val budget   = math.max(0, availableWidth - totalGap)
+      val per      = budget / cols
+      val leftover = budget - per * cols
+      var c        = 0
+      while c < cols do
+        colWidths(c) = if c == cols - 1 then per + leftover else per
+        c += 1
+    else
+      placed.foreach { p =>
+        if p.colSpan == 1 then
+          val (w, _) = measure(p.cell.content)
+          colWidths(p.col) = math.max(colWidths(p.col), w)
+      }
+    // Compute per-row heights.
+    val rowHeights = Array.fill(numRows)(0)
+    if availableHeight >= 0 then
+      val totalGap = rg * math.max(0, numRows - 1)
+      val budget   = math.max(0, availableHeight - totalGap)
+      val per      = budget / math.max(1, numRows)
+      val leftover = budget - per * numRows
+      var r        = 0
+      while r < numRows do
+        rowHeights(r) = if r == numRows - 1 then per + leftover else per
+        r += 1
+    else
+      placed.foreach { p =>
+        if p.rowSpan == 1 then
+          val (_, h) = measure(p.cell.content)
+          rowHeights(p.row) = math.max(rowHeights(p.row), h)
+      }
+    // Cumulative origins.
+    val colX = Array.ofDim[Int](cols)
+    var xx   = at.x.value
+    var c0   = 0
+    while c0 < cols do
+      colX(c0) = xx
+      xx += colWidths(c0) + (if c0 < cols - 1 then cg else 0)
+      c0 += 1
+    val rowY = Array.ofDim[Int](numRows)
+    var yy   = at.y.value
+    var r0   = 0
+    while r0 < numRows do
+      rowY(r0) = yy
+      yy += rowHeights(r0) + (if r0 < numRows - 1 then rg else 0)
+      r0 += 1
+    // Resolve each placed cell at its origin with its allotted box.
+    val out = List.newBuilder[VNode]
+    placed.foreach { p =>
+      val cellW =
+        (p.col until p.col + p.colSpan).map(colWidths).sum +
+          cg * math.max(0, p.colSpan - 1)
+      val cellH =
+        (p.row until p.row + p.rowSpan).map(rowHeights).sum +
+          rg * math.max(0, p.rowSpan - 1)
+      val origin = Coord(XCoord(colX(p.col)), YCoord(rowY(p.row)))
+      builder match
+        case Some(b) => out ++= resolveTrackedImpl(p.cell.content, origin, cellW, cellH, b)
+        case None    => out ++= resolveTo(p.cell.content, origin, cellW, cellH)
+    }
+    out.result()
+
+  /**
+   * Resolve a [[Border]] at `at`. With a budget, top / bottom take their
+   * natural height across the full width; left / right take their natural
+   * width down the middle band; center fills the remainder. Without a
+   * budget every zone takes its natural size.
+   */
+  private def resolveBorder[Id](
+    b: Border,
+    at: Coord,
+    availableWidth: Int,
+    availableHeight: Int,
+    builder: Option[scala.collection.mutable.Builder[(Id, Rect), Vector[(Id, Rect)]]]
+  ): List[VNode] =
+    val gap                = math.max(0, b.gap)
+    val (topW, topH)       = b.top.fold((0, 0))(measure)
+    val (leftW, leftH)     = b.left.fold((0, 0))(measure)
+    val (centerW, centerH) = b.center.fold((0, 0))(measure)
+    val (rightW, rightH)   = b.right.fold((0, 0))(measure)
+    val (botW, botH)       = b.bottom.fold((0, 0))(measure)
+
+    val budgetW =
+      if availableWidth >= 0 then availableWidth
+      else
+        val midZones = List(b.left, b.center, b.right).count(_.isDefined)
+        val midGap   = if midZones >= 2 then gap * (midZones - 1) else 0
+        List(topW, leftW + centerW + rightW + midGap, botW).max
+    val budgetH =
+      if availableHeight >= 0 then availableHeight
+      else
+        val midH = List(leftH, centerH, rightH).max
+        val verticalGapCount =
+          List(b.top.isDefined, midH > 0, b.bottom.isDefined).count(identity)
+        val verticalGap = if verticalGapCount >= 2 then gap * (verticalGapCount - 1) else 0
+        topH + midH + botH + verticalGap
+
+    // Vertical band layout
+    val topActualH = if b.top.isDefined then topH else 0
+    val botActualH = if b.bottom.isDefined then botH else 0
+    val gapAboveMid =
+      if b.top.isDefined && (b.left.isDefined || b.center.isDefined || b.right.isDefined) then gap
+      else 0
+    val gapBelowMid =
+      if b.bottom.isDefined && (b.left.isDefined || b.center.isDefined || b.right.isDefined) then gap
+      else 0
+    val midH = math.max(0, budgetH - topActualH - botActualH - gapAboveMid - gapBelowMid)
+
+    // Horizontal band layout for the middle row.
+    val leftActualW  = if b.left.isDefined then leftW else 0
+    val rightActualW = if b.right.isDefined then rightW else 0
+    val gapLeftCenter =
+      if b.left.isDefined && b.center.isDefined then gap else 0
+    val gapCenterRight =
+      if b.center.isDefined && b.right.isDefined then gap else 0
+    val gapLeftRightOnly =
+      if b.left.isDefined && !b.center.isDefined && b.right.isDefined then gap else 0
+    val centerW2 = math.max(
+      0,
+      budgetW - leftActualW - rightActualW - gapLeftCenter - gapCenterRight - gapLeftRightOnly
+    )
+
+    val topY  = at.y.value
+    val midY  = topY + topActualH + gapAboveMid
+    val botY  = midY + midH + gapBelowMid
+    val leftX = at.x.value
+    val centerX =
+      leftX + leftActualW + gapLeftCenter + (if b.left.isDefined && !b.center.isDefined && b.right.isDefined then gap
+                                             else 0)
+    val rightX = leftX + budgetW - rightActualW
+
+    val out = List.newBuilder[VNode]
+    def emit(zone: Layout, origin: Coord, w: Int, h: Int): Unit =
+      builder match
+        case Some(bb) => out ++= resolveTrackedImpl(zone, origin, w, h, bb)
+        case None     => out ++= resolveTo(zone, origin, w, h)
+
+    b.top.foreach(z => emit(z, Coord(XCoord(leftX), YCoord(topY)), budgetW, topActualH))
+    if midH > 0 then
+      b.left.foreach(z => emit(z, Coord(XCoord(leftX), YCoord(midY)), leftActualW, midH))
+      b.center.foreach(z => emit(z, Coord(XCoord(centerX), YCoord(midY)), centerW2, midH))
+      b.right.foreach(z => emit(z, Coord(XCoord(rightX), YCoord(midY)), rightActualW, midH))
+    b.bottom.foreach(z => emit(z, Coord(XCoord(leftX), YCoord(botY)), budgetW, botActualH))
+    out.result()
 
   /**
    * Compute per-child major-axis sizes for a Row/Column under an optional
@@ -529,6 +926,12 @@ object Layout:
         if i < n - 1 then yCursor += g
         i += 1
       out.result()
+
+    case g: Grid =>
+      resolveGrid[Id](g, at, availableWidth, availableHeight, Some(builder))
+
+    case b: Border =>
+      resolveBorder[Id](b, at, availableWidth, availableHeight, Some(builder))
 
   /**
    * Tracked rectangle size for a layout subtree. Mirrors the budget

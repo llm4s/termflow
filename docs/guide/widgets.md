@@ -136,42 +136,70 @@ val state = Table.State(columns = cols, rows = Vector(Vector("alice","42")))
 
 ### Tree
 
-Recursive collapsible tree.
+Recursive collapsible tree. Stateless — the app owns `expanded:
+Set[Id]` and `selectedIndex: Int`; the renderer takes a typeclass
+`Children[A, Id]` describing how to traverse your data structure.
 
 - Expanded glyph: `[-] `
 - Collapsed glyph: `[+] `
 - Leaf glyph: `    ` (four spaces)
 
 ```scala
-val tree = Tree.State(root = Tree.Node("root", children = …))
-val nodes = Tree.view(tree, width = 32, focused = true)
+case class Node(name: String, kids: Vector[Node])
+given widgets.Tree.Children[Node, String] with
+  def id(n: Node):   String        = n.name
+  def kids(n: Node): Vector[Node]  = n.kids
+
+val nodes = widgets.Tree(
+  roots         = Vector(Node("src", Vector(Node("Main.scala", Vector.empty)))),
+  expanded      = Set("src"),
+  selectedIndex = 0,
+  render        = _.name,
+  at            = Coord(2.x, 2.y)
+)
 
 // Mouse: distinguish chevron clicks from label clicks
-Tree.hitTest(rows, at = Rect(...), indentWidth = 2, col, row, labelLength) match
-  case Tree.HitResult.Chevron(idx) => /* toggle expansion */
-  case Tree.HitResult.Label(idx)   => /* select */
-  case _                           => /* miss */
+val rows = widgets.Tree.visibleRows(roots, expanded)
+widgets.Tree.hitTest(rows, at = Coord(2.x, 2.y), indentWidth = 2, col, row) match
+  case Some(widgets.Tree.HitResult.Chevron(idx)) => /* toggle expansion */
+  case Some(widgets.Tree.HitResult.Label(idx))   => /* select */
+  case None                                      => /* miss */
 ```
 
 ### LogView
 
-Tail-following log buffer. Auto-scrolls until the user scrolls up,
-then pauses until they scroll back to the bottom.
+Stateless line-buffer viewer. The app owns the `Vector[String]`
+buffer and the current `scrollOffset`; `LogView` wraps and clips
+into the requested viewport.
 
 ```scala
-val log = LogView.State.empty
-val updated = LogView.append(log, "build started", Style(fg = Yellow))
-val node = LogView.view(updated, width = 80, height = 16)
+val node = widgets.LogView(
+  lines        = m.logBuffer,            // Seq[String]
+  width        = 80,
+  height       = 16,
+  scrollOffset = m.scrollOffset,
+  wrap         = true
+)
 ```
+
+Use `LogView.maxScroll(lines, width, height, wrap)` when the user
+scrolls so you clamp the offset correctly.
 
 ## Layout
 
 ### Tabs
 
+Stateless tab-header renderer — the app owns the active and focused
+indices and handles tab-switching keys itself.
+
 ```scala
-val state = Tabs.State(labels = Vector("Inputs", "Data", "Layout"), activeIdx = 0)
-val (next, _) = Tabs.handleKey[Msg](state, key)(_ => None)
-val node = Tabs.view(next, width = 80, focused = true)
+val node = widgets.Tabs(
+  labels       = Seq("Inputs", "Data", "Layout"),
+  activeIndex  = m.activeTab,
+  focusedIndex = if m.headerFocused then m.activeTab else -1,
+  at           = Coord(2.x, 1.y),
+  separator    = " │ "
+)
 ```
 
 ### SplitPane
@@ -244,13 +272,19 @@ widgets.StatusBar(
 Top-of-screen menu bar with dropdown items.
 
 ```scala
-val menus = Vector(
-  MenuBar.Menu("File", items = Vector("Open…", "Save", "Quit")),
-  MenuBar.Menu("Edit", items = Vector("Undo", "Redo"))
+val state = widgets.MenuBar.State(
+  menus = Vector(
+    widgets.MenuBar.Menu("File", items = Vector("Open…", "Save", "Quit")),
+    widgets.MenuBar.Menu("Edit", items = Vector("Undo", "Redo"))
+  )
 )
-val state = MenuBar.State(menus = menus, openIdx = None)
-val node  = MenuBar(state, width = 80)
+val widgets.MenuBar.KeyResult(next, picked) = widgets.MenuBar.handleKey(state, key)
+val node = widgets.MenuBar(next, at = Coord(1.x, 1.y), focused = true)
 ```
+
+`KeyResult.picked: Option[(menuIdx, itemIdx)]` is `Some(...)` only on
+the keystroke that committed a selection — fold it into your domain
+`Msg` and dispatch.
 
 ## Form
 

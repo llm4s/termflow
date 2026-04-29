@@ -28,6 +28,14 @@
 # Cookbook
 
 - [Index](cookbook/index.md)
+- [Show a confirm dialog](cookbook/confirm-dialog.md)
+- [Stream output into a scrollback view](cookbook/streaming-output.md)
+- [Pause and resume a timer](cookbook/timer-pause-resume.md)
+- [Open a file picker](cookbook/file-picker.md)
+- [Draggable splitter](cookbook/split-pane-drag.md)
+- [Mouse on a custom widget](cookbook/mouse-on-custom-widget.md)
+- [Wide-character input](cookbook/wide-character-input.md)
+- [Clean shutdown](cookbook/clean-shutdown.md)
 
 # Reference
 

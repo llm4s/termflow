@@ -296,3 +296,4 @@ addCommandAlias("showcase",     "termflowSample/runMain termflow.apps.showcase.S
 addCommandAlias("unicodeDemo",  "termflowSample/runMain termflow.apps.unicode.UnicodeDemoApp")
 addCommandAlias("dashboardDemo","termflowSample/runMain termflow.apps.dashboard.DashboardApp")
 addCommandAlias("wizardDemo",   "termflowSample/runMain termflow.apps.wizard.WizardApp")
+addCommandAlias("treeDemo",     "termflowSample/runMain termflow.apps.tree.FileTreeApp")

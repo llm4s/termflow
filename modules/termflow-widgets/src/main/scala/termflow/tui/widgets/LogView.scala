@@ -14,7 +14,8 @@ import termflow.tui.*
  *
  * Long lines are wrapped to fit `width` when `wrap = true` (default),
  * or truncated with a trailing `…` when `wrap = false`. Wrapping is
- * computed by [[wrap]]; the visible window is sliced by [[viewport]].
+ * computed by [[expand]] (which delegates per line to [[wrapLine]]);
+ * the visible window is sliced by [[viewport]].
  * Both helpers are public so apps can pre-compute display lines once
  * per buffer change instead of every frame.
  *

@@ -37,6 +37,7 @@
 - [Wide-character input](cookbook/wide-character-input.md)
 - [Clean shutdown](cookbook/clean-shutdown.md)
 - [Flag a session as needing attention](cookbook/notifications.md)
+- [Full-screen layouts that reflow on resize](cookbook/full-screen-layout.md)
 
 # Reference
 

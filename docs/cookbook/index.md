@@ -29,6 +29,9 @@ TermFlow APIs and (where possible) a sample app you can run.
 - **[Flag a session as needing attention](notifications.md)** —
   `Cmd.RequestAttention`, `Cmd.Notify`, terminal detection
   (iTerm2 / kitty / VTE), tmux caveats.
+- **[Full-screen layouts that reflow on resize](full-screen-layout.md)** —
+  `Layout.toBudgetedRootNode` vs. `toRootNode`, `Fill` semantics,
+  header/fill/footer pattern.
 
 ## Want more?
 

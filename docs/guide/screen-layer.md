@@ -117,7 +117,14 @@ Layout.Row(gap = 1, children = List(
 ```
 
 Resolve `Fill` regions with `Layout.resolveTo(layout, at, w, h)` — the
-form that knows the available width / height.
+form that knows the available width / height. For full-screen apps, the
+idiomatic shape is `layout.toBudgetedRootNode(width, height)`, which
+puts the layout into `RootNode.layout` so the renderer applies the
+budget at render time and the layout reflows on resize. The eager
+`layout.toRootNode(width, height)` form intentionally does *not* apply
+a budget — see the
+[full-screen layout cookbook](../cookbook/full-screen-layout.md) for
+when each form is appropriate.
 
 ### `Grid` — fixed-column grid with optional span
 

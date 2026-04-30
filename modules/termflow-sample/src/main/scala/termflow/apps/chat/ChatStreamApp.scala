@@ -34,6 +34,8 @@ import termflow.tui.widgets
  *     streams in.
  *   - `↑` / `↓`             — scroll the transcript by one line
  *   - `PageUp` / `PageDown` — scroll by a page
+ *   - mouse wheel           — scroll when the cursor is over the transcript
+ *                              (3 lines per detent; ignored elsewhere)
  *   - `End`                 — jump to the bottom and re-enable auto-tail
  *   - `Ctrl+L`              — clear the transcript
  *   - `Ctrl+C` / `Esc`      — quit
@@ -158,6 +160,13 @@ object ChatStreamApp:
 
   private def transcriptWidth(m: Model): Int = math.max(20, m.width - 2)
 
+  /** Origin (top-left) of the transcript pane in absolute terminal cells. */
+  private val transcriptOrigin: Coord = Coord(XCoord(2), YCoord(4))
+
+  /** Mouse-wheel viewport for the transcript pane — see `LogView.scrollDelta`. */
+  private def transcriptViewport(m: Model): widgets.LogView.Viewport =
+    widgets.LogView.Viewport(transcriptOrigin, transcriptWidth(m), transcriptCapacity(m))
+
   /** Flatten the entries to display lines. Wrapping is delegated to LogView. */
   def transcriptLines(m: Model): Vector[String] =
     m.entries
@@ -252,6 +261,14 @@ object ChatStreamApp:
           case End                => StepResult.StayInModel(m.copy(scrollOffset = maxScroll(m), autoTail = true))
           case Ctrl('L')          => step(m, Msg.Clear)
           case Ctrl('C') | Escape => StepResult.ExitNow(m)
+          case Mouse(ev)          =>
+            // Mouse-wheel inside the transcript drives scrollback; scrolls
+            // outside (over the prompt or status row) are dropped so the
+            // user's wheel doesn't accidentally page through history while
+            // hovering somewhere unrelated.
+            widgets.LogView.scrollDelta(ev, transcriptViewport(m)) match
+              case Some(d) => StepResult.StayInModel(scrollBy(m, d))
+              case None    => StepResult.StayInModel(m)
           case _ =>
             val (nextPrompt, maybeCmd) = Prompt.handleKey[Msg](m.prompt, k)(toMsgFromPrompt)
             val withPrompt             = m.copy(prompt = nextPrompt)
@@ -290,7 +307,7 @@ object ChatStreamApp:
       2.x,
       2.y,
       List(
-        " ↑/↓ ".text(fg = Theme.dark.primary),
+        " ↑/↓/wheel ".text(fg = Theme.dark.primary),
         "scroll  ".text,
         " End ".text(fg = Theme.dark.primary),
         "tail  ".text,
@@ -301,9 +318,8 @@ object ChatStreamApp:
       )
     )
 
-    val transcriptOrigin = Coord(2.x, 4.y)
-    val tCap             = transcriptCapacity(m)
-    val tWidth           = transcriptWidth(m)
+    val tCap   = transcriptCapacity(m)
+    val tWidth = transcriptWidth(m)
     val transcript = widgets.LogView(
       lines = transcriptLines(m),
       width = tWidth,

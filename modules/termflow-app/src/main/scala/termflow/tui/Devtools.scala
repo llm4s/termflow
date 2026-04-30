@@ -655,6 +655,8 @@ object Devtools:
       case Cmd.Exit                      => Cmd.Exit
       case Cmd.GCmd(innerMsg)            => Cmd.GCmd(WrapMsg.Inner(innerMsg))
       case Cmd.TermFlowErrorCmd(err)     => Cmd.TermFlowErrorCmd(err)
+      case Cmd.RequestAttention          => Cmd.RequestAttention
+      case n: Cmd.Notify                 => n
       case fc: Cmd.FCmd[a, ?] @unchecked =>
         // Erasure-safe: Cmd.FCmd's second type parameter is always the
         // enclosing Cmd[Ms]'s Msg type. The @unchecked suppresses the

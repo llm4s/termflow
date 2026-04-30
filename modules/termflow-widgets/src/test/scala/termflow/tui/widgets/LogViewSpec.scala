@@ -124,3 +124,49 @@ class LogViewSpec extends AnyFunSuite:
         assert(runs.head.style == custom)
       case _ => fail()
   }
+
+  // ---- Viewport / scrollDelta --------------------------------------------
+
+  private val Viewport = LogView.Viewport(at = Coord(XCoord(2), YCoord(4)), width = 10, height = 5)
+  private val NoMods   = KeyDecoder.Modifiers.none
+
+  test("Viewport.contains is true on every cell of the rectangle") {
+    assert(Viewport.contains(2, 4))   // top-left
+    assert(Viewport.contains(11, 8))  // bottom-right (inclusive)
+    assert(!Viewport.contains(1, 4))  // one column to the left
+    assert(!Viewport.contains(12, 4)) // one column past the right
+    assert(!Viewport.contains(2, 3))  // one row above
+    assert(!Viewport.contains(2, 9))  // one row below
+  }
+
+  test("scrollDelta returns -ticksPerDetent for an Up scroll inside the viewport") {
+    val ev = MouseEvent.Scroll(ScrollDirection.Up, col = 5, row = 6, mods = NoMods)
+    assert(LogView.scrollDelta(ev, Viewport) == Some(-3))
+  }
+
+  test("scrollDelta returns +ticksPerDetent for a Down scroll inside the viewport") {
+    val ev = MouseEvent.Scroll(ScrollDirection.Down, col = 5, row = 6, mods = NoMods)
+    assert(LogView.scrollDelta(ev, Viewport) == Some(3))
+  }
+
+  test("scrollDelta honours a custom ticksPerDetent") {
+    val ev = MouseEvent.Scroll(ScrollDirection.Down, col = 5, row = 6, mods = NoMods)
+    assert(LogView.scrollDelta(ev, Viewport, ticksPerDetent = 1) == Some(1))
+  }
+
+  test("scrollDelta drops scrolls that land outside the viewport") {
+    val outside = MouseEvent.Scroll(ScrollDirection.Up, col = 1, row = 4, mods = NoMods)
+    assert(LogView.scrollDelta(outside, Viewport).isEmpty)
+  }
+
+  test("scrollDelta ignores horizontal scroll directions") {
+    val left  = MouseEvent.Scroll(ScrollDirection.Left, col = 5, row = 6, mods = NoMods)
+    val right = MouseEvent.Scroll(ScrollDirection.Right, col = 5, row = 6, mods = NoMods)
+    assert(LogView.scrollDelta(left, Viewport).isEmpty)
+    assert(LogView.scrollDelta(right, Viewport).isEmpty)
+  }
+
+  test("scrollDelta ignores non-Scroll mouse events") {
+    val click = MouseEvent.Press(MouseButton.Left, col = 5, row = 6, mods = NoMods)
+    assert(LogView.scrollDelta(click, Viewport).isEmpty)
+  }

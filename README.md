@@ -5,128 +5,77 @@
 
 📖 **[User guide & tutorials → llm4s.github.io/termflow](https://llm4s.github.io/termflow)**
 
-`termflow` is a small, functional terminal UI (TUI) framework for Scala.
+`termflow` is a small, functional terminal UI (TUI) framework for Scala 3.
+It uses an Elm-style architecture: a pure `update`, a declarative `view`,
+async via `Cmd`, and event streams via `Sub`.
 
-It’s designed for building interactive CLIs with a simple architecture:
+The [docs site](https://llm4s.github.io/termflow) is the primary reference —
+elevator pitch, install, tutorials, layer guides, cookbook, and Scaladoc.
+This README focuses on building, releasing, and contributing to the repo
+itself.
 
-- a pure-ish `update` function (state transitions)
-- a `view` function (render a small virtual DOM)
-- `Cmd` for async work and `Sub` for event streams (keys, timers, etc.)
-
-The project started as the TUI layer for LLM4s sample applications, but it is
-usable on its own.
-
-## What You Can Build
-
-- prompt-driven apps (REPL-style, command palettes)
-- streaming output (e.g., LLM token streaming)
-- progress spinners and long-running tasks
-- simple dashboards (lists, panes, status bars)
-
-## Notes On Rendering
-
-Rendering is intentionally simple today. Virtual-DOM diffing and throttling to
-minimize flicker are work-in-progress topics we plan to iterate on (especially
-for high-frequency updates like spinners and streaming text).
-
-## Scala Versions
-
-This branch (`main`) is the Scala 3 line.
-The `legacy-213-track` branch is the Scala 2.13 maintenance line.
-We intend to regularly port applicable fixes and critical updates from `main` to `legacy-213-track`.
-
-## Modules
-
-- `modules/termflow`: the library (`org.llm4s:termflow_3`)
-- `modules/termflow-testkit`: deterministic test harness — `TuiTestDriver`,
-  golden-snapshot support, `TestRuntimeCtx` (`org.llm4s:termflow-testkit_3`,
-  depend on as `% Test`)
-- `modules/termflow-sample`: demo apps (not published)
-
-## Quick Start
-
-Add to your build (Scala 3):
+## Quick start
 
 ```scala
 libraryDependencies += "org.llm4s" %% "termflow" % "0.2.0"
 ```
 
-Run a sample app:
+Then follow [What is TermFlow?](https://llm4s.github.io/termflow/intro/what-is-termflow.html)
+and the [Hello, World tutorial](https://llm4s.github.io/termflow/tut/01-hello-world.html).
 
-- `sbt "termflowSample/runMain termflow.run.TermFlowMain"`
+To poke at the bundled samples:
 
-## Sample Apps
+```bash
+sbt hubDemo            # menu launcher for ~22 sample apps
+```
 
-The `termflow-sample` module contains a few small demo apps you can run with `runMain`.
+The full demo list lives in
+[Running sample apps](https://llm4s.github.io/termflow/contrib/RUN_EXAMPLES.html).
 
-- Echo: `sbt "termflowSample/runMain termflow.apps.echo.EchoApp"`
-- Counter (sync): `sbt "termflowSample/runMain termflow.apps.counter.SyncCounter"`
-- Counter (async + spinner): `sbt "termflowSample/runMain termflow.apps.counter.FutureCounter"`
-- Clock: `sbt "termflowSample/runMain termflow.apps.clock.DigitalClock"`
+## Repository layout
 
-Note: there are also small “inspector” utilities under `termflow.run.jline.*` to
-debug key sequences and line editing behaviour.
+Five published modules plus testkit and samples:
 
-## Build
+- `modules/termflow-terminal` — TTY backend, key decoding, capability detection.
+- `modules/termflow-screen` — character grid, layout, ANSI diff renderer.
+- `modules/termflow-app` — Elm-style runtime (`TuiApp`, `Cmd`, `Sub`, `Dialogs`).
+- `modules/termflow-widgets` — reusable components (`Button`, `Table`, `Tree`, …).
+- `modules/termflow` — umbrella artefact pulling in all four.
+- `modules/termflow-testkit` — `TuiTestDriver`, `KeySim`, `MouseSim`, golden-snapshot support (depend on as `% Test`).
+- `modules/termflow-sample` — demo apps (not published).
+- `modules/termflow-scalafix-rules` — internal scalafix rules for the build.
 
-- Compile: `sbt compile`
-- Format: `sbt scalafmtAll`
-- CI-equivalent local check: `sbt ciCheck`
-- Scalafix rewrite: `sbt scalafixAll`
-- Tests: `sbt test`
-- Library coverage report: `sbt coverageLib`
-- Pre-PR gate (format, scalafix, tests, coverage, sample smoke): `sbt prePR`
-- Publish locally (for integration testing): `sbt publishLocal`
+See [Architecture](https://llm4s.github.io/termflow/intro/architecture.html)
+for what each layer does and when to depend on a single one.
 
-## Scala 3 Conventions
+## Building
+
+```bash
+sbt compile           # Compile (Scala 3)
+sbt test              # Run tests
+sbt scalafmtAll       # Format
+sbt scalafixAll       # Scalafix rewrite
+sbt ciCheck           # CI-equivalent local check
+sbt prePR             # Format + scalafix + tests + coverage + sample smoke
+sbt coverageLib       # Library coverage report
+sbt publishLocal      # Publish to local Ivy cache
+```
+
+## Scala 3 conventions
 
 - Prefer `enum` for closed ADTs.
 - Prefer `given` / `using` over implicit parameters and values.
 - Prefer `extension` methods over implicit classes.
-- Avoid implicit conversions; return explicit `Tui` values (for example, `model.tui`).
-- Keep migration changes behavior-preserving unless a PR states otherwise.
+- Avoid implicit conversions; return explicit `Tui` values (e.g. `model.tui`).
+- Keep migration changes behaviour-preserving unless a PR states otherwise.
 
-## Async Work
+## Scala versions
 
-`termflow` stays effect-system-agnostic. Async commands use `scala.concurrent.Future`
-combined with the framework's `Result[A] = Either[TermFlowError, A]`, exposed as a
-type alias that mirrors the [llm4s](https://github.com/llm4s/llm4s) core 1:1 so values
-flow between the two libraries without an adapter:
+The `main` branch is **Scala 3 only**. The `legacy-213-track` branch is the
+Scala 2.13 maintenance line; applicable fixes and critical updates are ported
+from `main`.
 
-```scala
-type AsyncResult[+A] = Future[Result[A]]
-```
-
-Lift one onto the command bus with `Cmd.asyncResult`:
-
-```scala
-import termflow.tui.*
-import termflow.tui.TuiPrelude.*
-
-enum Msg:
-  case Loaded(value: User)
-  case Failed(err: TermFlowError)
-
-def fetch(id: UserId): AsyncResult[User] = ...
-
-Cmd.asyncResult(
-  task      = fetch(id),
-  onSuccess = Msg.Loaded.apply,
-  onError   = Msg.Failed.apply,
-  onEnqueue = Some(Msg.LoadingFlash)   // optional
-)
-```
-
-`Future` failures (network drops, JVM exceptions) surface through the runtime's
-standard `Cmd.TermFlowErrorCmd` path automatically; only domain errors need an
-explicit `onError`. `AsyncResult` ships a small companion with `success`,
-`failure`, `fromResult`, and `fromFuture` for lifting at the boundary.
-
-We do **not** ship cats-effect or ZIO adapter modules — apps that use `IO` /
-`ZIO` can bridge to a `Future` at the `Cmd` boundary in a couple of characters
-of glue.
-
-## Versioning
+## Releasing
 
 Versioning is fully driven by git tags via `sbt-dynver`; nothing is hand-edited
 in `build.sbt` or a `version.sbt` file.
@@ -153,9 +102,10 @@ The workflow runs `sbt ci-release`, which:
 
 1. Re-runs CI checks.
 2. Imports the GPG key from `PGP_SECRET` and signs all artifacts.
-3. Stages to the Sonatype Central Portal using `SONATYPE_USERNAME` / `SONATYPE_PASSWORD`
-   (these are the **portal user token** values, not your Sonatype account login).
-4. Releases the staged bundle automatically — no manual “close & release” step.
+3. Stages to the Sonatype Central Portal using `SONATYPE_USERNAME` /
+   `SONATYPE_PASSWORD` (these are the **portal user token** values, not your
+   Sonatype account login).
+4. Releases the staged bundle automatically — no manual "close & release" step.
 
 Artifacts land at `https://repo1.maven.org/maven2/org/llm4s/termflow_3/`
 within a few minutes of the workflow finishing.
@@ -170,3 +120,10 @@ depend on the locally-installed coordinate.
 > publishing through the new Sonatype Central Portal. Use
 > [central.sonatype.com](https://central.sonatype.com/artifact/org.llm4s/termflow_3)
 > or the raw repo URL above to verify a release.
+
+## Contributing
+
+- [Design](docs/contrib/DESIGN.md) — architectural rationale.
+- [Render pipeline](docs/contrib/RENDER_PIPELINE.md) — how a frame becomes ANSI.
+- [Roadmap](docs/contrib/ROADMAP.md) — what's left for 1.0 and beyond.
+- [Running sample apps](docs/contrib/RUN_EXAMPLES.md) — every demo and its `sbt` alias.

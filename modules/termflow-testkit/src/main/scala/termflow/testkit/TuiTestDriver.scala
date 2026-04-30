@@ -36,12 +36,14 @@ final class TuiTestDriver[Model, Msg](
   val ctx: TestRuntimeCtx[Msg]
 ):
 
-  private var _model: Model                              = uninitialized
-  private var _initialized: Boolean                      = false
-  private var _exited: Boolean                           = false
-  private val pending: mutable.Queue[Cmd[Msg]]           = mutable.Queue.empty
-  private val observed: mutable.ArrayBuffer[Cmd[Msg]]    = mutable.ArrayBuffer.empty
-  private val errors: mutable.ArrayBuffer[TermFlowError] = mutable.ArrayBuffer.empty
+  private var _model: Model                                        = uninitialized
+  private var _initialized: Boolean                                = false
+  private var _exited: Boolean                                     = false
+  private val pending: mutable.Queue[Cmd[Msg]]                     = mutable.Queue.empty
+  private val observed: mutable.ArrayBuffer[Cmd[Msg]]              = mutable.ArrayBuffer.empty
+  private val errors: mutable.ArrayBuffer[TermFlowError]           = mutable.ArrayBuffer.empty
+  private val attentionRequests: mutable.ArrayBuffer[Unit]         = mutable.ArrayBuffer.empty
+  private val notifications: mutable.ArrayBuffer[(String, String)] = mutable.ArrayBuffer.empty
 
   /** Current model. Throws if `init` hasn't been called yet. */
   def model: Model =
@@ -56,6 +58,16 @@ final class TuiTestDriver[Model, Msg](
 
   /** Every `TermFlowError` surfaced via `Cmd.TermFlowErrorCmd` since construction. */
   def observedErrors: List[TermFlowError] = errors.toList
+
+  /** Number of `Cmd.RequestAttention` commands the driver has processed. */
+  def attentionCount: Int = attentionRequests.size
+
+  /**
+   * Title / body pairs from every `Cmd.Notify` the driver has processed,
+   * in order. Useful for asserting that a flow surfaces the right
+   * notification at the right moment.
+   */
+  def observedNotifications: List[(String, String)] = notifications.toList
 
   /** Render the current model to a frame. Throws if `init` hasn't been called. */
   def frame: RenderFrame =
@@ -114,6 +126,10 @@ final class TuiTestDriver[Model, Msg](
       case Cmd.GCmd(msg) => dispatch(msg)
       case Cmd.TermFlowErrorCmd(e) =>
         errors += e
+      case Cmd.RequestAttention =>
+        attentionRequests += (())
+      case Cmd.Notify(title, body) =>
+        notifications += ((title, body))
       case fc: Cmd.FCmd[a, ?] =>
         // Mirror runtime: onEnqueue fires immediately (synchronously), then
         // resolve the future eagerly. Tests must supply Future.successful.

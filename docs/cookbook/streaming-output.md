@@ -82,6 +82,18 @@ def view(m: Model): RootNode =
   again — the convention every chat client uses.
 - **Dropping `wrap = true`** truncates rather than wrapping; the
   `maxScroll` math still works either way.
+- **Mouse-wheel scrollback.** Wire mouse events through
+  `LogView.scrollDelta(event, viewport, ticksPerDetent)` — it returns
+  `Some(delta)` only when the scroll lands inside the viewport rectangle
+  you describe with `LogView.Viewport(at, width, height)`. Reuse the
+  same `at` / `width` / `height` you passed to `LogView.apply`, and feed
+  the returned delta into the same scroll-update path the keyboard uses.
+  Outside-the-viewport events return `None` so a wheel hovering over the
+  prompt or the status row won't accidentally page through history.
+  Default `ticksPerDetent = 3` matches the speed terminal users expect;
+  pass `1` for one-line-per-detent. Keyboard equivalents (↑/↓, PageUp /
+  PageDown, End) keep working when mouse reporting is unavailable —
+  always wire both.
 
 For an end-to-end example, see
 [`apps.echo.EchoApp`](https://github.com/llm4s/termflow/blob/main/modules/termflow-sample/src/main/scala/termflow/apps/echo/EchoApp.scala),

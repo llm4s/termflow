@@ -256,6 +256,33 @@ Plus the screen-prelude conversions (`.x`, `.y`, `.text`).
 
 > File: `TuiPrelude.scala`.
 
+### How errors reach the user
+
+A `Cmd.TermFlowErrorCmd(err)` does not crash the app or block the runtime
+loop. The runtime captures `err` as the *pending error* for the next
+frame; `SimpleANSIRenderer` then overlays a single-line, red, bold banner
+across the top row of the rendered frame and clears it on the following
+render. Long messages are truncated with an ellipsis to fit the terminal
+width.
+
+```text
+┌──────────────────────────────────┐
+│ Invalid input: name must be set… │  ← banner, single frame, then gone
+│ Name: alice___                   │
+│ ...                              │
+```
+
+Apps don't need to do anything to opt in — return `Cmd.TermFlowErrorCmd`
+from `update` (or use `Cmd.asyncResult` and let the runtime fold a
+`Left(err)` for you), and the banner appears.
+
+For tests, `TuiTestDriver.observedErrors: List[TermFlowError]` records
+every error raised through this path without a real terminal.
+
+The wording used by the banner is exposed as
+`SimpleANSIRenderer.formatErrorBanner(err)` so custom renderers can stay
+consistent with the default.
+
 ## Where to next
 
 - **Widgets.** The component catalogue: [Widgets guide](widgets.md).

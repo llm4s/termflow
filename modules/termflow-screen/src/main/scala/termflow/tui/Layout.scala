@@ -232,7 +232,25 @@ enum Layout:
     Layout.resolve(this, at)
 
   /**
-   * Resolve this layout at `(1, 1)` and wrap the result in a [[RootNode]].
+   * Eagerly resolve this layout at `at` and wrap the resulting positioned
+   * vnodes in a [[RootNode.children]] list.
+   *
+   * '''Caveat — no size budget.''' This form calls [[Layout.resolve]],
+   * which uses each layout's natural size and ignores the `width` /
+   * `height` arguments for sizing. As a result:
+   *
+   *   - [[Layout.Fill]] regions collapse to their natural (zero) size.
+   *   - The frame does not reflow when the terminal resizes — children
+   *     are baked at the resolution time.
+   *
+   * Use this form for fixed-size sub-regions, dialogs, panels you have
+   * already sized by hand, and golden-snapshot tests where you want
+   * deterministic positions.
+   *
+   * For full-screen / resizable apps that want `Fill` and reflow,
+   * use [[toBudgetedRootNode]] instead — it puts the layout into
+   * [[RootNode.layout]] so the renderer resolves it against the actual
+   * frame size at render time.
    *
    * @param width Terminal width to advertise on the root.
    * @param height Terminal height to advertise on the root.
@@ -246,6 +264,32 @@ enum Layout:
     at: Coord = Coord(XCoord(1), YCoord(1))
   ): RootNode =
     RootNode(width, height, resolve(at), input)
+
+  /**
+   * Wrap this layout in a [[RootNode]] with `layout = Some(this)`, so the
+   * renderer resolves it at render time against the frame's full
+   * `(width, height)` budget.
+   *
+   * Prefer this form for full-screen apps and any layout containing
+   * [[Layout.Fill]] / [[Layout.Grid]] / [[Layout.Border]]: the resolved
+   * positions update with the terminal size, and `Fill` regions actually
+   * fill the available space instead of collapsing.
+   *
+   * Equivalent to:
+   * {{{
+   * RootNode(width, height, Nil, input, layout = Some(this))
+   * }}}
+   *
+   * @param width Frame width — the resolver's available width budget.
+   * @param height Frame height — the resolver's available height budget.
+   * @param input Optional focused input to attach to the root.
+   */
+  def toBudgetedRootNode(
+    width: Int,
+    height: Int,
+    input: Option[InputNode] = None
+  ): RootNode =
+    RootNode(width, height, Nil, input, layout = Some(this))
 
 /**
  * A cell in a [[Layout.Grid]]: content plus optional row / column span.

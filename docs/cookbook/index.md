@@ -26,6 +26,12 @@ TermFlow APIs and (where possible) a sample app you can run.
   — `WCWidth`, `Grapheme`, `RenderCell.width = 2`.
 - **[Clean shutdown on `Ctrl-C` and on resize](clean-shutdown.md)** —
   what the runtime does for you, where you still have to wire `Cmd.Exit`.
+- **[Flag a session as needing attention](notifications.md)** —
+  `Cmd.RequestAttention`, `Cmd.Notify`, terminal detection
+  (iTerm2 / kitty / VTE), tmux caveats.
+- **[Full-screen layouts that reflow on resize](full-screen-layout.md)** —
+  `Layout.toBudgetedRootNode` vs. `toRootNode`, `Fill` semantics,
+  header/fill/footer pattern.
 
 ## Want more?
 

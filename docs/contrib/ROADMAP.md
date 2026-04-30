@@ -1,8 +1,12 @@
 # TermFlow Roadmap
 
-> Status: 2026-04-29 · Current release: **0.2.0** · Working towards **1.0**.
+> Status: 2026-04-30 · Current release: **0.2.0** · Working towards **1.0**.
 >
-> Stages 1–3 are complete. Stage 4 (1.0 stabilisation) is in progress.
+> Stages 1–3 are complete. Stage 4 (1.0 stabilisation) is in progress —
+> §3.2 (sample apps) and §3.4 (Grid + Border layouts) have landed; the
+> killer demo, the migration guide, and the pre-1.0 release-hardening
+> checklist (§4) remain. MiMa (§3.1) was deferred to the post-1.0 cycle
+> (baseline = 1.0.0).
 > This document is forward-looking: it describes the work *left*, not the
 > history of the work *done*.
 
@@ -42,7 +46,8 @@ What ships today:
   downgrade.
 - **Capability detection** — true-colour / 256-colour / 16-colour /
   8-colour / mono, bracketed paste, mouse (SGR-1006), extended modifier
-  parsing, SIGWINCH-driven resize.
+  parsing, SIGWINCH-driven resize, terminal-attention notifications
+  (iTerm2 OSC 9 / 1337, kitty OSC 99, VTE OSC 777, BEL fallback).
 - **20+ widgets** — `TextField`, `MultiLineInput`, `Button`,
   `CheckBox`, `RadioGroup`, `Select`, `Autocomplete`, `ListView`,
   `Table`, `Tree`, `Tabs`, `SplitPane` (drag-resize), `Separator`,
@@ -56,14 +61,16 @@ What ships today:
   `BreakIterator`, wide-cell math via `WCWidth`.
 - **Testkit** — `TuiTestDriver`, `KeySim`, `MouseSim`,
   `GoldenSupport`. Published as `termflow-testkit`.
-- **~20 sample apps** — counter, async counter, clock, dashboard,
+- **~22 sample apps** — counter, async counter, clock, dashboard,
   echo, hello, forms, wizard, dialog, file-dialog, themes, unicode,
-  stress, sine, hub, input, tabs, task, catalog, widgets, showcase.
+  stress, sine, hub, input, tabs, task, catalog, widgets, showcase,
+  tree, editor, chat.
 - **Docs site** — live at `https://llm4s.github.io/termflow` with
-  Introduction, four tutorials, seven layer guides, eight cookbook
+  Introduction, four tutorials, seven layer guides, nine cookbook
   recipes, and aggregated Scaladoc.
 
-No outstanding architectural debts for 1.0. Remaining work is in §3.
+No outstanding architectural debts for 1.0. Remaining work is in §3
+and the pre-1.0 release-hardening checklist in §4.
 
 ---
 
@@ -72,28 +79,40 @@ No outstanding architectural debts for 1.0. Remaining work is in §3.
 The lock-in stage. Goal: produce an API stable enough to keep
 unchanged for years.
 
-### 3.1 MiMa for binary compatibility
+### 3.1 MiMa for binary compatibility — deferred to post-1.0
 
-Add `sbt-mima-plugin`. Configure each of `termflow-terminal`,
-`termflow-screen`, `termflow-app`, `termflow-widgets`, and
-`termflow-testkit` to check against the previous release. Fail CI on
-incompatible changes; require explicit `mimaBinaryIssueFilters` for
-accepted breaks.
+Originally planned as a 1.0 gate, but moved out of the critical path
+(decision: 2026-04-30). The simpler workflow is to ship 1.0 first, then
+wire `sbt-mima-plugin` against `1.0.0` as the baseline so every
+subsequent release (`1.0.x`, `1.1.0`, …) is checked.
 
-The decisions made via filters drive content for the migration guide
-(§3.5).
+Why the change:
 
-### 3.2 Sample app catalogue gaps
+- 0.2.0 is already API-stable, so the 0.2.0 → 1.0 filter list would
+  mostly be noise.
+- Avoids the bookkeeping cost of maintaining
+  `mimaBinaryIssueFilters` during the 0.2.x → 1.0 window.
+- Removes the chicken-and-egg between §3.1 and §3.5 — see §3.5 for
+  the simplified migration-guide stance.
 
-Target: 25 apps; close to 20 today. Specific gaps remaining:
+Plan once 1.0 ships:
 
-- **`tree/`** — file-tree explorer, natural fit on top of
-  `fileDialog` and the `Tree` widget.
-- **`editor/`** — minimal multi-file text editor, exercises
-  `MultiLineInput` + `SplitPane` + `MenuBar` together.
-- **`chat/` expansion** — extend the existing `chat` sample to use
-  streaming + scrollback (see the
-  [streaming-output cookbook recipe](../cookbook/streaming-output.md)).
+1. Add `sbt-mima-plugin` to `project/plugins.sbt`.
+2. Set `mimaPreviousArtifacts := Set("org.llm4s" %% name % "1.0.0")`
+   on each of `termflow-terminal`, `termflow-screen`, `termflow-app`,
+   `termflow-widgets`, `termflow`, and `termflow-testkit`.
+3. Append `mimaReportBinaryIssues` to the `ciCheck` alias.
+
+This becomes part of the 1.0.1 / 1.1.0 release prep, not 1.0.
+
+### 3.2 Sample app catalogue gaps — ☑ landed
+
+All three planned samples shipped (#188 / #189 / #190): `tree/`
+(file-tree explorer over the `Tree` widget), `editor/` (multi-buffer
+text editor exercising `MultiLineInput` + `SplitPane` + `MenuBar`),
+and `chat/` (streaming chat with scrollback per the
+[streaming-output cookbook recipe](../cookbook/streaming-output.md)).
+Catalogue now stands at 22 apps.
 
 ### 3.3 Killer demo
 
@@ -101,48 +120,173 @@ A working `llm4s` chat client in <200 lines of TermFlow, used as the
 README headline screenshot. Demonstrates streaming, dialogs, theming,
 mouse, async tool calls — every Stage 1–3 capability in one app.
 
-### 3.4 GridLayout + BorderLayout
+### 3.4 GridLayout + BorderLayout — ☑ landed
 
-Listed as Stage 1 work but never shipped — only `Row` / `Column` /
-`Fill` / `Zone` exist today. Add:
-
-- **`Layout.Grid(rows, cols, gap, children)`** — fixed-grid layout
-  with span support. Lanterna's `GridLayout` is the template.
-- **`Layout.Border(top, left, center, right, bottom)`** — five-zone
-  border layout. Useful for "header / sidebar / main / footer"
-  apps without manually computing heights.
-
-Both should fit cleanly behind `Layout.resolveTo` (the size-aware
-resolution) so existing `resolve` callers don't need changes.
+Shipped in #187. `Layout.Grid(columns, rowGap, colGap, cells)` with
+`GridCell` row/column spans, and `Layout.Border(top, left, center,
+right, bottom)` with five-zone resolution. Both flow through
+`Layout.resolveTo` so existing `resolve` callers are unchanged.
+`LayoutGridSpec` and `LayoutBorderSpec` cover sizing, gaps, spans,
+and zone omission.
 
 ### 3.5 Migration guide
 
-Currently a placeholder. Populate as MiMa filters accumulate:
+With MiMa deferred (§3.1), there is no automated source of breakage
+data for 0.2.0 → 1.0. The guide page stays useful as a hand-written
+record of any deliberate API changes during the run-up to 1.0.
 
-- One section per accepted incompatible change between 0.2.0 and 1.0.
-- Before / after code recipes for each.
-- A rationale paragraph for any non-obvious change.
+For 1.0:
 
-If we don't break anything between now and 1.0, the page becomes a
-one-liner ("no migration needed; 1.0 is binary-compatible with
-0.2.0"). That's a fine outcome.
+- Walk the public API by hand, note any intentional breaks, and write
+  before/after recipes for each.
+- If nothing broke, collapse the page to "no migration needed; 1.0 is
+  source-compatible with 0.2.0."
+- Once §3.1 is wired post-1.0, future entries are driven by MiMa
+  filters as originally intended.
 
 ### 3.6 Definition of done for 1.0
 
-- ☐ MiMa passes; published artefacts are stable.
 - ☑ Docs site live at `https://llm4s.github.io/termflow`.
 - ☑ Tutorial ladder complete (Hello World, Counter, Async, Forms).
-- ☐ Sample app count ≥ 20 (need ~5 more after §3.2).
-- ☐ README headline screenshot is the chat client.
-- ☐ Migration guide populated (or "no migration needed" confirmed).
+- ☑ Sample app count ≥ 20 (22 today, including `tree`, `editor`, `chat`).
+- ☑ `Layout.Grid` + `Layout.Border` shipped (§3.4).
+- ☐ README headline screenshot is the chat client (§3.3).
+- ☐ Migration guide populated (or "no migration needed" confirmed) (§3.5).
+- ☐ Pre-1.0 release-hardening checklist complete (§4).
+
+MiMa (§3.1) was originally on this list; it is now scheduled for the
+1.0.1 / 1.1.0 cycle with `1.0.0` as the baseline.
 
 ---
 
-## 4. Stage 5 — Alternative backends (post-1.0, speculative)
+## 4. Stage 5 — Pre-1.0 release requirements
 
-Each backend is an opt-in module. None are on the 1.0 critical path.
+Final hardening before tagging `v1.0.0`. These are not new feature
+tracks; they are release-quality gates for the current library surface.
 
-### 4.1 Telnet backend
+### 4.1 User-visible error path — ☑ landed
+
+`Cmd.TermFlowErrorCmd` now reaches the user. `SimpleANSIRenderer`
+overlays a red, bold banner across the top row of the next frame and
+clears it on the following render — long messages truncate with an
+ellipsis. `SimpleANSIRendererSpec` covers banner content, styling,
+truncation, and frame immutability. `TuiTestDriver.observedErrors`
+gives tests the same assertion path without a real terminal. The
+app-layer guide has a new "How errors reach the user" section that
+shows the rendered banner and the testkit hook.
+
+### 4.2 Version and release-doc sweep
+
+Before the final release branch/tag, every copy-pasteable coordinate
+and release statement should reflect the intended 1.0 release story.
+
+Acceptance:
+
+- README, install guide, API reference, migration notes, and roadmap
+  agree on the current released baseline and the next target.
+- Release instructions describe the exact tag/workflow path for
+  `v1.0.0`.
+- Any stale `0.2.0` / `0.3.0` examples are intentional and explained.
+
+### 4.3 Public API and docs example audit
+
+Do a final pass over the public-facing APIs and every tutorial/guide
+snippet. The goal is not to freeze internals forever; it is to remove
+surprise from the surface users will copy into their apps.
+
+Acceptance:
+
+- Public names, signatures, and examples line up (`Cmd.asyncResult`,
+  widget constructors, `Sub.TerminalResize`, layout helpers, etc.).
+- Any deliberately sharp/advanced APIs are marked as SPI or documented
+  with constraints.
+- Migration notes list every known user-visible API adjustment, or
+  explicitly say no migration is required.
+
+### 4.4 Layout ergonomics audit — ☑ landed
+
+`Layout.toBudgetedRootNode(width, height, input)` now expresses the
+deferred form alongside the existing eager `toRootNode`, putting the
+layout into `RootNode.layout` so the renderer resolves it against the
+frame's full budget at render time. `toRootNode` keeps its eager
+semantics; its Scaladoc flags the trap and points at the budgeted form.
+A new cookbook recipe (`full-screen-layout.md`) walks the header / fill
+/ footer pattern, the eager-vs-deferred trade-off, and the both-fields
+composition seam. `LayoutSpec` covers both forms with a Fill-collapses
+vs Fill-expands comparison.
+
+### 4.5 Rolling console / agent UI recipe
+
+TermFlow should make the Claude Code / Cursor-style transcript pattern
+obvious: execution history scrolls upward, new output auto-tails while
+the user is at the bottom, and the prompt remains fixed at the bottom
+of the viewport.
+
+Acceptance:
+
+- Add a cookbook recipe for a rolling console / agent UI built from
+  `widgets.LogView`, `Prompt`, and a bottom-row `InputNode`.
+- Document the supported model clearly: TermFlow owns an in-app
+  scrollback viewport in the alternate buffer; native terminal
+  scrollback is not the default runtime behaviour.
+- The recipe covers auto-tail, pausing auto-tail when the user scrolls
+  up, resuming with `End`, and bounding retained history.
+- Link the recipe from the install/intro path or widgets guide so LLM
+  and command-runner app authors can find it quickly.
+
+### 4.6 Mouse-wheel scrolling for LogView-style views — ☑ landed
+
+`LogView.scrollDelta(event, viewport, ticksPerDetent)` plus
+`LogView.Viewport(at, width, height)` map a `MouseEvent.Scroll` onto a
+clamp-friendly scroll delta when the wheel lands inside the viewport,
+returning `None` for outside-the-rect or non-scroll events. `chatDemo`
+wires it in (3 lines per detent, ignored over prompt / status row).
+`LogViewSpec` exercises every helper branch; `ChatStreamAppSpec` adds
+two `MouseSim.scrollUp` tests for the in-pane and out-of-pane paths.
+The streaming-output cookbook recipe documents the pattern next to the
+keyboard fallbacks.
+
+### 4.7 Test coverage review and quick wins
+
+Because TermFlow is mostly deterministic UI logic, coverage should be
+higher than a typical terminal integration project. Run `sbt --batch
+coverageLib`, inspect the lowest-covered files/branches, and take the
+low-risk wins before 1.0.
+
+Current local coverage snapshot (2026-04-30):
+
+- `termflow-terminal`: 66.04% statements / 63.32% branches.
+- `termflow-screen`: 71.81% statements / 65.22% branches.
+- `termflow-app`: 80.29% statements / 68.61% branches.
+- `termflow-widgets`: 92.63% statements / 85.00% branches.
+
+Acceptance:
+
+- Add focused tests for pure/render/update logic with obvious gaps.
+- Prefer deterministic tests over brittle real-terminal integration.
+- Record any accepted low-coverage areas with rationale (JLine/raw TTY
+  integration, shutdown-hook paths, genuinely platform-specific code).
+- Keep `coverageLib` green and ensure the combined trend moves up, with
+  particular attention to `termflow-terminal` and `termflow-screen`.
+
+### 4.8 Zero-warning build and Scaladoc polish
+
+The 1.0 branch should build cleanly enough that new warnings stand out.
+
+Acceptance:
+
+- `sbt --batch ciCheck` emits no Scala compiler warnings.
+- `sbt --batch unidoc` completes without unresolved-link warnings where
+  a simple Scaladoc link fix is available.
+- mdBook/linkcheck remain green.
+
+---
+
+## 5. Stage 6 — Alternative backends and renderers (post-1.0, speculative)
+
+Each backend or renderer is opt-in. None are on the 1.0 critical path.
+
+### 5.1 Telnet backend
 
 `termflow-backend-telnet`. Bind a port, accept connections, each
 connection becomes a `TerminalBackend`. Telnet option negotiation
@@ -153,7 +297,7 @@ effort.
 debug shells. **Not encrypted** — operators wrap it in stunnel /
 WireGuard / SSH-jumphost for production.
 
-### 4.2 Web backend (xterm.js over WebSocket)
+### 5.2 Web backend (xterm.js over WebSocket)
 
 `termflow-backend-web`. Serve `xterm.js` plus a WebSocket; the WS
 frames become the terminal stream. Run a TUI in a browser tab.
@@ -161,14 +305,42 @@ frames become the terminal stream. Run a TUI in a browser tab.
 **Effort.** Large but cleanly bounded. Probably the most
 "wow factor" of the bunch — a Scala TUI in the browser is unique.
 
-### 4.3 Explicitly *not* planned (third-party PRs welcome)
+### 5.3 Rolling console renderer
+
+A constrained normal-buffer renderer/runtime mode for agent and command
+runner apps that want native terminal scrollback: output appends to the
+terminal's real history while a live prompt/status area remains pinned
+near the bottom.
+
+This should not try to support arbitrary full-screen TermFlow VDOM. The
+current default runtime enters the alternate buffer and the default
+renderer diffs fixed frames by absolute coordinates; native scrollback
+needs a different contract built around append-only transcript events,
+prompt repainting, cursor save/restore, and possibly terminal scroll
+regions.
+
+**Use case.** Claude Code / Cursor-style agents, build runners, REPLs,
+and long-running command logs where users expect their terminal
+emulator's own scrollbar, copy/search behaviour, and shell history
+context to keep working.
+
+**Shape.** Likely a dedicated `RollingConsoleApp` or renderer API, not
+a flag on `SimpleANSIRenderer`. It should support bounded app-side
+history for replay/testing, normal-buffer append, fixed bottom prompt,
+keyboard input, resize handling, and a graceful fallback when terminals
+handle scroll regions poorly.
+
+**Effort.** Medium-large and compatibility-sensitive. Worth prototyping
+after 1.0, but too risky to make part of the 1.0 contract.
+
+### 5.4 Explicitly *not* planned (third-party PRs welcome)
 
 - **Swing / AWT emulator backend** — desktop window with a TUI
-  emulator inside. Skipped because §4.2 covers most of the same use
+  emulator inside. Skipped because §5.2 covers most of the same use
   cases at similar effort and reaches more users.
 - **SSH backend** — wrap Apache MINA SSHD or sshj. Skipped because
   key management, auth, and connection state are a perpetually-supported
-  surface area we don't want to own. Compose §4.1 Telnet behind an
+  surface area we don't want to own. Compose §5.1 Telnet behind an
   external SSH jump host instead.
 
 The `TerminalBackend` trait stays public so external contributors
@@ -176,7 +348,7 @@ can ship either as a separate artefact.
 
 ---
 
-## 5. Open questions
+## 6. Open questions
 
 1. **Native image.** `sbt-native-image` build for
    `graalvm-native-image`? The shutdown hook + JLine reflection make
@@ -197,7 +369,7 @@ can ship either as a separate artefact.
 
 ---
 
-## 6. Lanterna comparison reference
+## 7. Lanterna comparison reference
 
 The original 0.1.x roadmap was structured around a comparison with
 [Lanterna](https://github.com/mabe02/lanterna). That comparison drove
@@ -219,8 +391,37 @@ Two TermFlow-only wins worth preserving through 1.0:
 
 ---
 
-## 7. Recent decisions (rolling, last ~3 months)
+## 8. Recent decisions (rolling, last ~3 months)
 
+- *2026-04-30* — Stage 4 §4.1 closed: `SimpleANSIRenderer` now overlays
+  a red, bold banner for `Cmd.TermFlowErrorCmd` and clears it on the
+  next frame; testkit captures the same path via `observedErrors`.
+- *2026-04-30* — Stage 4 §4.4 closed: `Layout.toBudgetedRootNode` is the
+  deferred sibling to the eager `toRootNode`; new full-screen-layout
+  cookbook recipe explains when each form is appropriate.
+- *2026-04-30* — Stage 4 §4.6 closed: `LogView.scrollDelta` +
+  `LogView.Viewport` give apps a one-call hook for mouse-wheel
+  scrollback; wired into `chatDemo` and covered with `MouseSim`.
+- *2026-04-30* — Terminal-attention notifications shipped:
+  `Cmd.RequestAttention` and `Cmd.Notify(title, body)` with detection for
+  iTerm2 (OSC 9 / 1337), kitty (OSC 99), VTE (OSC 777), and a BEL
+  fallback. Override via `TERMFLOW_NOTIFICATIONS=off|bell|auto`. Wired
+  through the showcase Help tab and a new `notifications` cookbook recipe.
+- *2026-04-30* — Added rolling console renderer (§5.3) as a post-1.0
+  idea: native terminal scrollback for agent / command-runner UIs via a
+  constrained normal-buffer runtime, not the default full-screen renderer.
+- *2026-04-30* — Added Stage 5 (§4) as the pre-1.0 release-hardening
+  checklist: user-visible errors, release-doc accuracy, API/docs audit,
+  layout ergonomics, rolling-console UX, mouse-wheel scrollback, coverage
+  quick wins, and zero-warning builds.
+- *2026-04-30* — MiMa (§3.1) deferred to post-1.0; baseline becomes
+  `1.0.0`. Reason: 0.2.0 is already API-stable, so the 0.2.0 → 1.0
+  filter list would be mostly noise, and decoupling §3.1 from §3.5
+  removes a chicken-and-egg dependency.
+- *2026-04-30* — Stage 4 §3.2 closed: `tree/` (#188), `editor/` (#189),
+  and streaming `chat/` (#190) sample apps landed. Catalogue at 22.
+- *2026-04-30* — Stage 4 §3.4 closed: `Layout.Grid` + `Layout.Border`
+  shipped in #187 with `LayoutGridSpec` / `LayoutBorderSpec` coverage.
 - *2026-04-29* — Docs site launched (Stage 4 §3 complete except for
   migration guide). mdBook + sbt-unidoc on GitHub Pages.
 - *2026-04-28* — Stage 3 final components landed: `actionList`
@@ -233,4 +434,4 @@ Two TermFlow-only wins worth preserving through 1.0:
 - *2026-04-27* — Stages 1 and 2 closed. Module split shipped early
   as Stage 4 prep so MiMa filters can be wired per-module on day one.
 - *2026-04-26* — Decision to deprioritise Swing/AWT and SSH backends
-  (now §4.3); Telnet (§4.1) and Web (§4.2) remain.
+  (now §5.4); Telnet (§5.1) and Web (§5.2) remain.

@@ -8,6 +8,11 @@ package termflow.tui
  * decides per call whether to emit a diff or a full repaint, threading
  * the result through the supplied [[RenderMetrics]].
  *
+ * When the runtime supplies a non-empty `err`, the renderer overlays a
+ * red, bold banner across the top row of the frame *before* diffing, so
+ * the banner participates in the normal diff/repaint pipeline. The next
+ * frame without `err` paints over the banner with the app's own view.
+ *
  * Lives in `termflow-app` because it depends on the app-layer types
  * `TuiRenderer`, `TermFlowError`, and `RenderMetrics`. The pure
  * `AnsiRenderer.{buildFrame, diff}` primitives stay in
@@ -24,10 +29,13 @@ final case class SimpleANSIRenderer() extends TuiRenderer:
     terminal: TerminalBackend,
     renderMetrics: RenderMetrics
   ): Unit =
-    val currentFrame = AnsiRenderer.buildFrame(textNode)
-    val resized      = lastFrame.exists(prev => prev.width != currentFrame.width || prev.height != currentFrame.height)
-    val depth        = terminal.capabilities.colorDepth
-    val ext          = terminal.capabilities.extendedStyles
+    val baseFrame = AnsiRenderer.buildFrame(textNode)
+    val currentFrame = err match
+      case Some(e) => SimpleANSIRenderer.overlayErrorBanner(baseFrame, e)
+      case None    => baseFrame
+    val resized = lastFrame.exists(prev => prev.width != currentFrame.width || prev.height != currentFrame.height)
+    val depth   = terminal.capabilities.colorDepth
+    val ext     = terminal.capabilities.extendedStyles
     val initialDiff =
       if resized then AnsiRenderer.diff(None, currentFrame, depth, ext)
       else AnsiRenderer.diff(lastFrame, currentFrame, depth, ext)
@@ -46,4 +54,49 @@ final case class SimpleANSIRenderer() extends TuiRenderer:
       val bytes = ansi.getBytes("UTF-8").length
       renderMetrics.recordRender(diffResult.changedCells, bytes)
     lastFrame = Some(currentFrame)
-    val _ = err
+
+object SimpleANSIRenderer:
+
+  /**
+   * Format a [[TermFlowError]] as the short, single-line text shown in the
+   * runtime's error banner. Public so apps that ship a custom
+   * [[TuiRenderer]] can match the default's wording.
+   */
+  def formatErrorBanner(err: TermFlowError): String = err match
+    case TermFlowError.ConfigError(msg)    => s"Config error: $msg"
+    case TermFlowError.ModelNotFound       => "Model not found"
+    case TermFlowError.Unexpected(msg, _)  => s"Error: $msg"
+    case TermFlowError.Validation(msg)     => s"Invalid input: $msg"
+    case TermFlowError.CommandError(input) => s"Unrecognised command: $input"
+    case TermFlowError.UnknownApp(name)    => s"Unknown app: $name"
+
+  /**
+   * Return a copy of `frame` with the top row replaced by a red, bold
+   * banner that surfaces `err`. Wide-cell-safe: writes single-width cells
+   * across the row and truncates long messages with an ellipsis. If the
+   * frame has no rows or zero width the original frame is returned
+   * unchanged.
+   */
+  def overlayErrorBanner(
+    frame: AnsiRenderer.RenderFrame,
+    err: TermFlowError
+  ): AnsiRenderer.RenderFrame =
+    if frame.height <= 0 || frame.width <= 0 then frame
+    else
+      val text = formatErrorBanner(err)
+      // Reserve one leading space; truncate with an ellipsis when the
+      // message is wider than the remaining banner width.
+      val budget = math.max(0, frame.width - 1)
+      val body =
+        if text.length <= budget then text
+        else if budget <= 1 then text.take(budget)
+        else text.take(budget - 1) + "…"
+      val padded = (" " + body).padTo(frame.width, ' ').take(frame.width)
+      val style  = Style(fg = Color.White, bg = Color.Red, bold = true)
+      val newRow = Array.tabulate(frame.width) { col =>
+        val ch = if col < padded.length then padded.charAt(col) else ' '
+        AnsiRenderer.RenderCell(ch, style, 1)
+      }
+      val newCells = frame.cells.clone()
+      newCells(0) = newRow
+      frame.copy(cells = newCells)

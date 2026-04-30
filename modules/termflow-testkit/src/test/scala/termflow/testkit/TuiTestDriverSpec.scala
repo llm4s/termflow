@@ -22,6 +22,8 @@ class TuiTestDriverSpec extends AnyFunSuite:
       case Async(value: Int)
       case AsyncUnresolved
       case ReportError(text: String)
+      case Bell
+      case Notify(title: String, body: String)
       case Quit
       case Noop
 
@@ -61,8 +63,10 @@ class TuiTestDriverSpec extends AnyFunSuite:
           )
         case Msg.ReportError(text) =>
           Tui(model, Cmd.TermFlowErrorCmd(TermFlowError.Validation(text)))
-        case Msg.Quit => Tui(model, Cmd.Exit)
-        case Msg.Noop => Tui(model, Cmd.NoCmd)
+        case Msg.Bell                => Tui(model, Cmd.RequestAttention)
+        case Msg.Notify(title, body) => Tui(model, Cmd.Notify(title, body))
+        case Msg.Quit                => Tui(model, Cmd.Exit)
+        case Msg.Noop                => Tui(model, Cmd.NoCmd)
 
     override def view(model: Int): RootNode =
       RootNode(
@@ -149,6 +153,19 @@ class TuiTestDriverSpec extends AnyFunSuite:
     val d = driver()
     d.send(TinyApp.Msg.Noop)
     assert(d.model == 0)
+
+  test("Cmd.RequestAttention is recorded by attentionCount"):
+    val d = driver()
+    d.send(TinyApp.Msg.Bell)
+    d.send(TinyApp.Msg.Bell)
+    assert(d.attentionCount == 2)
+    assert(!d.exited)
+
+  test("Cmd.Notify is recorded as (title, body) in order"):
+    val d = driver()
+    d.send(TinyApp.Msg.Notify("Build", "done"))
+    d.send(TinyApp.Msg.Notify("Tests", "green"))
+    assert(d.observedNotifications == List(("Build", "done"), ("Tests", "green")))
 
   test("cmds records every applied Cmd in order"):
     val d = driver()

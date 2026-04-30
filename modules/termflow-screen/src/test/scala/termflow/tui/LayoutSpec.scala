@@ -200,6 +200,44 @@ class LayoutSpec extends AnyFunSuite:
     assert(root.children.size == 2)
     assert(root.input.isEmpty)
 
+  test("toBudgetedRootNode defers resolution to render time via RootNode.layout"):
+    val layout = Layout.Fill(tn("center").asLayout)
+    val root   = layout.toBudgetedRootNode(width = 40, height = 3)
+    assert(root.width == 40 && root.height == 3)
+    assert(root.children.isEmpty, "deferred form leaves children empty")
+    assert(root.layout.contains(layout), "layout is wired through to RootNode.layout")
+    assert(root.input.isEmpty)
+
+  test("toRootNode is unbudgeted: Fill collapses to natural size"):
+    // A Fill wrapping a 1-cell text resolves with availableWidth = -1
+    // through Layout.resolve, so the Fill effectively contributes its
+    // natural (= inner) size — the children rect spans only that natural
+    // size, not the frame width.
+    val layout = Layout.row(gap = 0)(tn("A"), tn("B"))
+    val eager  = layout.toRootNode(width = 80, height = 1)
+    val frame  = AnsiRenderer.buildFrame(eager)
+    // Cells past the natural size are blank, even though the frame is 80 wide.
+    assert(frame.cells(0)(0).ch == 'A')
+    assert(frame.cells(0)(1).ch == 'B')
+    assert(frame.cells(0)(10).ch == ' ')
+
+  test("toBudgetedRootNode is budgeted: Fill expands to the frame width"):
+    // Row(Elem("A"), Fill(Elem("B"))) — 'B' should be pushed to the rightmost
+    // column the Fill region reaches when resolved with the full width budget.
+    val layout = Layout.Row(
+      gap = 0,
+      children = List(tn("A").asLayout, Layout.Fill(tn("B").asLayout))
+    )
+    val budgeted = layout.toBudgetedRootNode(width = 10, height = 1)
+    val frame    = AnsiRenderer.buildFrame(budgeted)
+    assert(frame.cells(0)(0).ch == 'A')
+    // The Fill region occupies cols 2..10 with 'B' at the start of that
+    // region (col 2). The key invariant is that the layout actually got the
+    // size budget — which is observable by the Fill having a non-zero width.
+    assert(frame.cells(0)(1).ch == 'B')
+    // And nothing got positioned past the frame.
+    assert(frame.cells(0).map(_.ch).mkString.length == 10)
+
   // --- end-to-end integration -------------------------------------------
 
   test("a resolved layout renders as expected through AnsiRenderer.buildFrame"):

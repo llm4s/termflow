@@ -109,6 +109,27 @@ class ChatStreamAppSpec extends AnyFunSuite:
     assert(tailed.autoTail)
     assert(tailed.scrollOffset == drained.scrollOffset)
 
+  test("mouse-wheel up over the transcript scrolls back and disables auto-tail"):
+    val m       = freshModel
+    val full    = (1 to 20).foldLeft(m)((acc, _) => submit(acc, "long"))
+    val drained = (1 to 1000).foldLeft(full)((acc, _) => tick(acc))
+    assert(drained.autoTail)
+    // Origin is (col=2, row=4); scroll inside the transcript pane.
+    val wheelEvents = termflow.testkit.MouseSim.scrollUp(col = 5, row = 8, ticks = 1)
+    val scrolled    = wheelEvents.foldLeft(drained)((acc, ev) => stepKey(acc, ev))
+    assert(!scrolled.autoTail)
+    assert(scrolled.scrollOffset < drained.scrollOffset)
+
+  test("mouse-wheel scroll outside the transcript pane is a no-op"):
+    val m       = freshModel
+    val full    = (1 to 20).foldLeft(m)((acc, _) => submit(acc, "long"))
+    val drained = (1 to 1000).foldLeft(full)((acc, _) => tick(acc))
+    // Wheel over the prompt row (last line) — should not affect scroll state.
+    val outsideEvents = termflow.testkit.MouseSim.scrollUp(col = 5, row = drained.height, ticks = 3)
+    val unchanged     = outsideEvents.foldLeft(drained)((acc, ev) => stepKey(acc, ev))
+    assert(unchanged.autoTail)
+    assert(unchanged.scrollOffset == drained.scrollOffset)
+
   // ---- Clear / Quit -------------------------------------------------------
 
   test("Ctrl+L clears the transcript back to the welcome entries"):

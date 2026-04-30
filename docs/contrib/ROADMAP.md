@@ -116,9 +116,38 @@ Catalogue now stands at 22 apps.
 
 ### 3.3 Killer demo
 
-A working `llm4s` chat client in <200 lines of TermFlow, used as the
-README headline screenshot. Demonstrates streaming, dialogs, theming,
-mouse, async tool calls — every Stage 1–3 capability in one app.
+A working `llm4s` chat client in ~200 lines of TermFlow that surfaces
+streaming, dialogs (tool-call confirmation), theming, mouse-wheel
+scrollback, `Cmd.RequestAttention`, and `Cmd.asyncResult` for tool
+execution. The demo lives in **`llm4s`**, not in this repo: llm4s already
+depends on termflow for its samples, and pulling in an llm4s dependency
+here — even at the demo-module level — would introduce a sibling cycle
+that bites at release time. Decision: 2026-04-30.
+
+For the 1.0 deliverable, termflow's README gets the screenshot and a
+"Built with TermFlow — source at `llm4s/llm4s/.../chat`" link. The
+acceptance criteria stay the same; what moves is *where the source
+lives*, not *what the screenshot shows*.
+
+App shape (sketch):
+
+- `Layout.Border` shell — header, transcript filling the centre,
+  prompt + status row pinned to the bottom; wrapped in
+  `toBudgetedRootNode` so it reflows on resize.
+- `Cmd.asyncResult` kicks the chat completion; a `Sub.Every` drains
+  streamed tokens into the live assistant entry. Mouse-wheel scroll via
+  `LogView.scrollDelta` (§4.6).
+- One narrow tool — e.g. `read_file(path)`. When the stream emits a
+  tool-call delta, a `Dialogs.confirm("Allow read of <path>?")` modal
+  pauses the run; on accept, the tool runs through `Cmd.asyncResult`
+  and the result feeds back into the model.
+- `Ctrl+T` light/dark toggle, `Cmd.RequestAttention` when a long reply
+  finishes while the user has scrolled away, slash commands
+  (`/quit`, `/clear`, `/model`, `/theme`).
+
+Coordination: open an issue on `llm4s/llm4s` once the §4 hardening
+checklist is closed, so the demo lands against a 1.0-RC of termflow
+rather than a moving target.
 
 ### 3.4 GridLayout + BorderLayout — ☑ landed
 
@@ -150,7 +179,8 @@ For 1.0:
 - ☑ Tutorial ladder complete (Hello World, Counter, Async, Forms).
 - ☑ Sample app count ≥ 20 (22 today, including `tree`, `editor`, `chat`).
 - ☑ `Layout.Grid` + `Layout.Border` shipped (§3.4).
-- ☐ README headline screenshot is the chat client (§3.3).
+- ☐ README headline screenshot is the llm4s chat client (§3.3 — demo
+  hosted in `llm4s`, screenshot + link in this README).
 - ☐ Migration guide populated (or "no migration needed" confirmed) (§3.5).
 - ☐ Pre-1.0 release-hardening checklist complete (§4).
 
@@ -393,6 +423,11 @@ Two TermFlow-only wins worth preserving through 1.0:
 
 ## 8. Recent decisions (rolling, last ~3 months)
 
+- *2026-04-30* — Killer demo (§3.3) will live in `llm4s`, not in this
+  repo. Reason: llm4s already depends on termflow for samples, so
+  hosting an llm4s-backed demo here would create a sibling cycle even
+  if the published-artifact graph stays acyclic. Termflow's README will
+  link to the demo and show its screenshot.
 - *2026-04-30* — Stage 4 §4.1 closed: `SimpleANSIRenderer` now overlays
   a red, bold banner for `Cmd.TermFlowErrorCmd` and clears it on the
   next frame; testkit captures the same path via `observedErrors`.

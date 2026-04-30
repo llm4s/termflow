@@ -293,9 +293,9 @@ Acceptance:
 
 ---
 
-## 5. Stage 6 — Alternative backends (post-1.0, speculative)
+## 5. Stage 6 — Alternative backends and renderers (post-1.0, speculative)
 
-Each backend is an opt-in module. None are on the 1.0 critical path.
+Each backend or renderer is opt-in. None are on the 1.0 critical path.
 
 ### 5.1 Telnet backend
 
@@ -316,7 +316,35 @@ frames become the terminal stream. Run a TUI in a browser tab.
 **Effort.** Large but cleanly bounded. Probably the most
 "wow factor" of the bunch — a Scala TUI in the browser is unique.
 
-### 5.3 Explicitly *not* planned (third-party PRs welcome)
+### 5.3 Rolling console renderer
+
+A constrained normal-buffer renderer/runtime mode for agent and command
+runner apps that want native terminal scrollback: output appends to the
+terminal's real history while a live prompt/status area remains pinned
+near the bottom.
+
+This should not try to support arbitrary full-screen TermFlow VDOM. The
+current default runtime enters the alternate buffer and the default
+renderer diffs fixed frames by absolute coordinates; native scrollback
+needs a different contract built around append-only transcript events,
+prompt repainting, cursor save/restore, and possibly terminal scroll
+regions.
+
+**Use case.** Claude Code / Cursor-style agents, build runners, REPLs,
+and long-running command logs where users expect their terminal
+emulator's own scrollbar, copy/search behaviour, and shell history
+context to keep working.
+
+**Shape.** Likely a dedicated `RollingConsoleApp` or renderer API, not
+a flag on `SimpleANSIRenderer`. It should support bounded app-side
+history for replay/testing, normal-buffer append, fixed bottom prompt,
+keyboard input, resize handling, and a graceful fallback when terminals
+handle scroll regions poorly.
+
+**Effort.** Medium-large and compatibility-sensitive. Worth prototyping
+after 1.0, but too risky to make part of the 1.0 contract.
+
+### 5.4 Explicitly *not* planned (third-party PRs welcome)
 
 - **Swing / AWT emulator backend** — desktop window with a TUI
   emulator inside. Skipped because §5.2 covers most of the same use
@@ -381,6 +409,9 @@ Two TermFlow-only wins worth preserving through 1.0:
   iTerm2 (OSC 9 / 1337), kitty (OSC 99), VTE (OSC 777), and a BEL
   fallback. Override via `TERMFLOW_NOTIFICATIONS=off|bell|auto`. Wired
   through the showcase Help tab and a new `notifications` cookbook recipe.
+- *2026-04-30* — Added rolling console renderer (§5.3) as a post-1.0
+  idea: native terminal scrollback for agent / command-runner UIs via a
+  constrained normal-buffer runtime, not the default full-screen renderer.
 - *2026-04-30* — Added Stage 5 (§4) as the pre-1.0 release-hardening
   checklist: user-visible errors, release-doc accuracy, API/docs audit,
   layout ergonomics, rolling-console UX, mouse-wheel scrollback, coverage
@@ -405,4 +436,4 @@ Two TermFlow-only wins worth preserving through 1.0:
 - *2026-04-27* — Stages 1 and 2 closed. Module split shipped early
   as Stage 4 prep so MiMa filters can be wired per-module on day one.
 - *2026-04-26* — Decision to deprioritise Swing/AWT and SSH backends
-  (now §5.3); Telnet (§5.1) and Web (§5.2) remain.
+  (now §5.4); Telnet (§5.1) and Web (§5.2) remain.

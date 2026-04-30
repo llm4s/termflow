@@ -128,3 +128,60 @@ object LogView:
    */
   def maxScroll(lines: Seq[String], width: Int, height: Int, wrap: Boolean): Int =
     math.max(0, displayLineCount(lines, width, wrap) - math.max(1, height))
+
+  /**
+   * Map a `MouseEvent.Scroll` to a `LogView` scroll delta (negative for
+   * up / older lines, positive for down / newer lines), provided the
+   * scroll happened inside the viewport rectangle. Horizontal scroll
+   * (`Left` / `Right`) is ignored.
+   *
+   * Apps wire this into their `update`:
+   *
+   * {{{
+   * case Msg.Key(InputKey.Mouse(ev)) =>
+   *   val viewportRect = LogView.Viewport(at, width, height)
+   *   LogView.scrollDelta(ev, viewportRect) match
+   *     case Some(d) => Tui(scrollBy(model, d))
+   *     case None    => model.tui
+   * }}}
+   *
+   * @param event           The decoded mouse event.
+   * @param viewport        Viewport rectangle the scroll must land in.
+   * @param ticksPerDetent  Lines moved per wheel detent. Defaults to
+   *                        `3`, which roughly matches the OS-level
+   *                        scroll-acceleration users expect from a real
+   *                        terminal log pane. Pass `1` for one-line-per-
+   *                        detent semantics.
+   * @return `Some(delta)` if the event is a vertical scroll inside the
+   *         viewport, `None` otherwise.
+   */
+  def scrollDelta(
+    event: MouseEvent,
+    viewport: Viewport,
+    ticksPerDetent: Int = 3
+  ): Option[Int] =
+    event match
+      case MouseEvent.Scroll(direction, col, row, _) if viewport.contains(col, row) =>
+        val step = math.max(1, ticksPerDetent)
+        direction match
+          case ScrollDirection.Up    => Some(-step)
+          case ScrollDirection.Down  => Some(+step)
+          case ScrollDirection.Left  => None
+          case ScrollDirection.Right => None
+      case _ => None
+
+  /**
+   * Rectangle in absolute terminal cells the viewport occupies. Used by
+   * [[scrollDelta]] to decide whether a mouse-wheel event should drive
+   * the LogView; sized identically to the `width` / `height` / `at`
+   * arguments passed to `LogView.apply`.
+   */
+  final case class Viewport(at: Coord, width: Int, height: Int):
+    private val left: Int   = at.x.value
+    private val top: Int    = at.y.value
+    private val right: Int  = left + math.max(0, width) - 1
+    private val bottom: Int = top + math.max(0, height) - 1
+
+    /** True if the absolute `(col, row)` lies within the viewport. */
+    def contains(col: Int, row: Int): Boolean =
+      col >= left && col <= right && row >= top && row <= bottom

@@ -92,7 +92,7 @@ object SimpleANSIRenderer:
         else if budget <= 1 then text.take(budget)
         else text.take(budget - 1) + "…"
       val padded = (" " + body).padTo(frame.width, ' ').take(frame.width)
-      val style = Style(fg = Color.White, bg = Color.Red, bold = true)
+      val style  = Style(fg = Color.White, bg = Color.Red, bold = true)
       val newRow = Array.tabulate(frame.width) { col =>
         val ch = if col < padded.length then padded.charAt(col) else ' '
         AnsiRenderer.RenderCell(ch, style, 1)

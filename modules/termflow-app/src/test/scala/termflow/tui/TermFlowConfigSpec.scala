@@ -42,3 +42,73 @@ class TermFlowConfigSpec extends AnyFunSuite:
 
     assert(loaded.isSuccess)
     assert(loaded.get.metrics.enabled)
+
+  test("accessibility.reducedMotion defaults to false when neither config nor env are set"):
+    val loaded = TermFlowConfigLoader.loadFrom(
+      ConfigSource
+        .string("""
+          |termflow {
+          |  logging { path = "/tmp/termflow.log" }
+          |  metrics { enabled = false }
+          |  accessibility { reduced-motion = false }
+          |}
+          |""".stripMargin)
+        .at("termflow")
+    )
+
+    assert(loaded.isSuccess)
+    assert(!loaded.get.accessibility.reducedMotion)
+
+  test("accessibility env-override flips reducedMotion on for truthy values"):
+    val loaded = TermFlowConfigLoader.loadFrom(
+      ConfigSource
+        .string("""
+          |termflow {
+          |  logging { path = "/tmp/termflow.log" }
+          |  metrics { enabled = false }
+          |  accessibility {
+          |    reduced-motion = false
+          |    env-override = "1"
+          |  }
+          |}
+          |""".stripMargin)
+        .at("termflow")
+    )
+
+    assert(loaded.isSuccess)
+    assert(loaded.get.accessibility.reducedMotion)
+
+  test("accessibility env-override of \"0\" or \"false\" leaves reducedMotion off"):
+    val zero = TermFlowConfigLoader.loadFrom(
+      ConfigSource
+        .string("""
+          |termflow {
+          |  logging { path = "/tmp/termflow.log" }
+          |  metrics { enabled = false }
+          |  accessibility {
+          |    reduced-motion = true
+          |    env-override = "0"
+          |  }
+          |}
+          |""".stripMargin)
+        .at("termflow")
+    )
+
+    assert(zero.isSuccess)
+    assert(!zero.get.accessibility.reducedMotion)
+
+  test("accessibility config respects explicit reduced-motion = true when env unset"):
+    val loaded = TermFlowConfigLoader.loadFrom(
+      ConfigSource
+        .string("""
+          |termflow {
+          |  logging { path = "/tmp/termflow.log" }
+          |  metrics { enabled = false }
+          |  accessibility { reduced-motion = true }
+          |}
+          |""".stripMargin)
+        .at("termflow")
+    )
+
+    assert(loaded.isSuccess)
+    assert(loaded.get.accessibility.reducedMotion)

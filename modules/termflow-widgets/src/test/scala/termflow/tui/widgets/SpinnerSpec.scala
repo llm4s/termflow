@@ -47,3 +47,17 @@ class SpinnerSpec extends AnyFunSuite:
     val v     = Spinner(Spinner.Braille, frame = 3)
     val cells = AnsiRenderer.buildFrame(RootNode(1, 1, List(v), None)).cells
     assert(cells(0)(0).ch == Spinner.Braille(3).charAt(0))
+
+  test("reducedMotion = true pins the spinner to frame 0 regardless of tick"):
+    val v0 = Spinner(Spinner.Line, frame = 0, reducedMotion = true)
+    val v3 = Spinner(Spinner.Line, frame = 3, reducedMotion = true)
+    val v9 = Spinner(Spinner.Line, frame = 9, reducedMotion = true)
+    assert(firstChar(v0) == Spinner.Line(0).charAt(0))
+    assert(firstChar(v3) == Spinner.Line(0).charAt(0))
+    assert(firstChar(v9) == Spinner.Line(0).charAt(0))
+
+  test("reducedMotion = false (default) preserves the existing animation"):
+    val animated = firstChar(Spinner(Spinner.Line, frame = 1))
+    val still    = firstChar(Spinner(Spinner.Line, frame = 1, reducedMotion = true))
+    assert(animated != still)
+    assert(still == Spinner.Line(0).charAt(0))

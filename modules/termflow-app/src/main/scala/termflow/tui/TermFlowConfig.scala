@@ -34,7 +34,8 @@ object LogPath:
 
 final case class TermFlowConfig(
   logging: LoggingConfig,
-  metrics: MetricsConfig
+  metrics: MetricsConfig,
+  accessibility: AccessibilityConfig = AccessibilityConfig(reducedMotion = false)
 )
 
 object TermFlowConfig:
@@ -45,16 +46,33 @@ final case class LoggingConfig(path: LogPath)
 
 final case class MetricsConfig(enabled: Boolean)
 
+/**
+ * Accessibility-related runtime preferences.
+ *
+ * @param reducedMotion When `true`, cosmetic animation (spinners, pulse
+ *                      effects, indeterminate-style progress) should be
+ *                      suppressed in favour of static rendering. Resolved
+ *                      from the `TERMFLOW_REDUCED_MOTION` env var; default
+ *                      `false`.
+ */
+final case class AccessibilityConfig(reducedMotion: Boolean)
+
 private[tui] object TermFlowConfigLoader:
   final private case class RawTermFlowConfig(
     logging: RawLoggingConfig,
-    metrics: RawMetricsConfig
+    metrics: RawMetricsConfig,
+    accessibility: Option[RawAccessibilityConfig] = None
   ) derives ConfigReader
 
   final private case class RawLoggingConfig(path: Path) derives ConfigReader
 
   final private case class RawMetricsConfig(
     enabled: Boolean,
+    envOverride: Option[String] = None
+  ) derives ConfigReader
+
+  final private case class RawAccessibilityConfig(
+    reducedMotion: Boolean = false,
     envOverride: Option[String] = None
   ) derives ConfigReader
 
@@ -67,18 +85,20 @@ private[tui] object TermFlowConfigLoader:
       .fold(
         failures => scala.util.Failure(IllegalStateException(failures.prettyPrint())),
         raw =>
+          val a11y = raw.accessibility.getOrElse(RawAccessibilityConfig())
           scala.util.Success(
             TermFlowConfig(
               logging = LoggingConfig(path = LogPath(raw.logging.path)),
-              metrics = MetricsConfig(enabled = resolveMetricsEnabled(raw.metrics))
+              metrics = MetricsConfig(enabled = resolveBool(raw.metrics.envOverride, raw.metrics.enabled)),
+              accessibility = AccessibilityConfig(
+                reducedMotion = resolveBool(a11y.envOverride, a11y.reducedMotion)
+              )
             )
           )
       )
 
-  private def resolveMetricsEnabled(raw: RawMetricsConfig): Boolean =
-    raw.envOverride
-      .map(parseBoolean)
-      .getOrElse(raw.enabled)
+  private def resolveBool(envOverride: Option[String], default: Boolean): Boolean =
+    envOverride.map(parseBoolean).getOrElse(default)
 
   private def parseBoolean(value: String): Boolean =
     value.nonEmpty && value != "0" && !value.equalsIgnoreCase("false")

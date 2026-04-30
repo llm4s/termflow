@@ -192,8 +192,8 @@ For 1.0:
   additive-changes catalogue (§3.5 / §4.3).
 - ☐ README headline screenshot is the llm4s chat client (§3.3 — demo
   hosted in `llm4s`, screenshot + link in this README).
-- ☐ Pre-1.0 release-hardening checklist complete (§4) — §4.2, §4.5,
-  §4.9, §4.10, §4.11 still open.
+- ☐ Pre-1.0 release-hardening checklist complete (§4) — §4.2, §4.5
+  still open.
 
 MiMa (§3.1) was originally on this list; it is now scheduled for the
 1.0.1 / 1.1.0 cycle with `1.0.0` as the baseline.
@@ -344,36 +344,7 @@ upstream if it becomes load-bearing.
 
 mdBook/linkcheck stay green; the docs site builds unchanged.
 
-### 4.9 Layout v2 close-out — horizontal scroll
-
-`Layout.Scroll` is currently Y-axis only. Closing out Layout v2 before
-the 1.0 lock-in means making it a true 2-D viewport so apps can scroll
-wide content (log lines, code, tables) horizontally as well as
-vertically.
-
-The blocker is `Layout.Clip`: today it trims `TextNode` content past
-the **right** edge of the clip band, but `TextNode`s starting to the
-**left** of the band are dropped outright. That's fine for vertical
-scroll (top-of-line is always at `x=0` inside the clip) but breaks
-horizontally. Fix the Clip pass first (#117), then add `offsetX` to
-`Scroll` (#116).
-
-Acceptance:
-
-- `Layout.Clip` trims leading cells of `TextNode` / `BoxNode` /
-  `InputNode` on partial left-edge overlap, mirroring the existing
-  right-edge truncation. Wide-codepoint cells handled.
-- `Layout.Scroll` accepts `offsetX` alongside `offsetY` with mirror
-  semantics; resolver translates inner by `(-offsetX, -offsetY)` and
-  relies on Clip to trim both edges.
-- `LayoutSpec` covers partial left/right/both clipping plus 2-D scroll
-  (X-only, Y-only, both, edge cases).
-- Cookbook updated with an X-scroll recipe.
-- No regression in existing Y-scroll snapshots.
-
-Tracked as #117 (prerequisite) → #116 (the scroll change itself).
-
-### 4.10 Reduced-motion flag
+### 4.9 Reduced-motion flag — ☑ landed
 
 A `TERMFLOW_REDUCED_MOTION=1` env var (and `TermFlowConfig` field
 defaulting to it) that disables cosmetic animation: `Spinner` renders
@@ -393,7 +364,7 @@ Acceptance:
 
 Tracked as #139.
 
-### 4.11 Thread-model documentation
+### 4.10 Thread-model documentation — ☑ landed
 
 A `docs/reference/thread-model.md` (or a new section in the app-layer
 guide) explaining the runtime's thread topology — runtime thread,
@@ -521,15 +492,32 @@ Two TermFlow-only wins worth preserving through 1.0:
 
 ## 8. Recent decisions (rolling, last ~3 months)
 
+- *2026-04-30* — Stage 4 §4.9 closed: reduced-motion flag landed.
+  `TERMFLOW_REDUCED_MOTION` env var (and HOCON
+  `termflow.accessibility.reduced-motion`) flows through
+  `RuntimeCtx.config.accessibility.reducedMotion`; `Spinner` accepts
+  `reducedMotion: Boolean` and pins to `frames(0)` when true. New
+  `docs/guide/accessibility.md` page covers the colour, motion, and
+  predictable-structure stance.
+- *2026-04-30* — Stage 4 §4.10 closed: thread-model documentation
+  landed at `docs/reference/thread-model.md`. Diagrams the topology
+  (runtime thread, InputKey producer, Sub.Every scheduler, FCmd
+  executor, resize listener, shutdown hook) and the invariants apps
+  can rely on (\`update\` / \`view\` always on the runtime thread,
+  FCmd continuations come back via the bus, subs lazy-start, CmdBus
+  serialises, etc.).
 - *2026-04-30* — Issue triage: 25 completed issues closed; #154
-  (relative-coordinate VDom) and #119 (Layout v1→v2 migration guide)
-  closed as superseded — Layout DSL already supplies the relative-
-  coordinate tree, and there are no v1 users. Three new entries added
-  to §4 as 1.0 scope: §4.9 (horizontal scroll close-out — #117 + #116),
-  §4.10 (reduced-motion flag — #139), §4.11 (thread-model documentation
-  — #134). #141 (TuiRuntime error-path tests) scoped down to two
-  remaining gaps (Sub mid-stream exception, CmdBus overflow); not a
-  1.0 blocker.
+  (relative-coordinate VDom), #119 (Layout v1→v2 migration guide),
+  #116 (horizontal scroll), and #117 (partial left-edge clip) all
+  closed as superseded — the first two because the current Layout DSL
+  already supplies the relative-coordinate tree and there are no v1
+  users; the latter two because `Layout.Scroll` / `Layout.Clip` only
+  ever existed on the abandoned `feature/layout-cookbook` branch and
+  never shipped publicly. Two new entries added to §4 as 1.0 scope:
+  §4.9 (reduced-motion flag — #139) and §4.10 (thread-model
+  documentation — #134). #141 (TuiRuntime error-path tests) scoped
+  down to two remaining gaps (Sub mid-stream exception, CmdBus
+  overflow); not a 1.0 blocker.
 - *2026-04-30* — Stage 4 §4.7 closed: coverage-uplift branch merged
   (`a971a94`). `termflow-terminal` 66% → 88% stmts / 63% → 90% branches,
   `termflow-screen` 72% → 91% stmts / 65% → 77% branches,

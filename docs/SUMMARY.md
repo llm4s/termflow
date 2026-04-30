@@ -23,6 +23,7 @@
 - [Widgets](guide/widgets.md)
 - [Keymap and chords](guide/keymap.md)
 - [Theming](guide/theming.md)
+- [Accessibility](guide/accessibility.md)
 - [Testing](guide/testing.md)
 
 # Cookbook
@@ -43,6 +44,7 @@
 
 - [API (Scaladoc)](reference/api.md)
 - [Migration notes](reference/migration.md)
+- [Thread model](reference/thread-model.md)
 
 # Contributing
 
@@ -50,4 +52,3 @@
 - [Render pipeline](contrib/RENDER_PIPELINE.md)
 - [Roadmap](contrib/ROADMAP.md)
 - [Running sample apps](contrib/RUN_EXAMPLES.md)
-- [Killer demo spec (handover to llm4s)](contrib/KILLER_DEMO_SPEC.md)

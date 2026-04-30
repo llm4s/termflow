@@ -30,6 +30,39 @@ trait TerminalBackend extends TerminalInfo:
   def capabilities: Capabilities = Capabilities.default
 
   /**
+   * Ring the terminal bell or pop the iTerm2 "request attention" indicator.
+   *
+   * Most terminals translate the BEL byte (`U+0007`) into a tab-bar activity
+   * flag; tmux / screen translate it into a window-bell indicator (subject to
+   * `monitor-bell`). iTerm2 also accepts an explicit `OSC 1337` request that
+   * bounces the dock icon.
+   *
+   * No-ops when [[Capabilities.notifications]] is `Disabled`.
+   *
+   * The default trait implementation routes through
+   * [[NotificationEscapes.attentionFor]]; tests can override.
+   */
+  def requestAttention(): Unit =
+    NotificationEscapes.attentionFor(capabilities.notifications).foreach { seq =>
+      writer.write(seq)
+      writer.flush()
+    }
+
+  /**
+   * Show a desktop notification (iTerm2 / kitty / VTE) or fall back to BEL.
+   *
+   * The body is interpreted as plain text. Carets, semicolons, and ESC bytes
+   * inside `title` / `body` are stripped to avoid breaking the OSC sequence.
+   *
+   * No-ops when [[Capabilities.notifications]] is `Disabled`.
+   */
+  def notify(title: String, body: String): Unit =
+    NotificationEscapes.notifyFor(capabilities.notifications, title, body).foreach { seq =>
+      writer.write(seq)
+      writer.flush()
+    }
+
+  /**
    * Register a listener to be invoked when the terminal is resized.
    *
    * Returns `Some(unregister)` if the backend supports event-based resize

@@ -124,3 +124,49 @@ class CapabilitiesSpec extends AnyFunSuite:
     assert(!Capabilities.detect(Map("TERM" -> "vt100")).bracketedPaste)
     assert(!Capabilities.detect(Map.empty).bracketedPaste)
   }
+
+  test("notifications: TERM_PROGRAM=iTerm.app → ITerm2") {
+    val caps = Capabilities.detect(Map("TERM" -> "xterm-256color", "TERM_PROGRAM" -> "iTerm.app"))
+    assert(caps.notifications == NotificationKind.ITerm2)
+  }
+
+  test("notifications: KITTY_WINDOW_ID set → Kitty") {
+    val caps = Capabilities.detect(Map("TERM" -> "xterm-kitty", "KITTY_WINDOW_ID" -> "1"))
+    assert(caps.notifications == NotificationKind.Kitty)
+  }
+
+  test("notifications: VTE_VERSION set → Vte") {
+    val caps = Capabilities.detect(Map("TERM" -> "xterm-256color", "VTE_VERSION" -> "6800"))
+    assert(caps.notifications == NotificationKind.Vte)
+  }
+
+  test("notifications: plain xterm falls back to BellOnly") {
+    assert(Capabilities.detect(Map("TERM" -> "xterm-256color")).notifications == NotificationKind.BellOnly)
+  }
+
+  test("notifications: dumb TERM disables notifications") {
+    assert(Capabilities.detect(Map("TERM" -> "dumb")).notifications == NotificationKind.Disabled)
+    assert(Capabilities.detect(Map.empty).notifications == NotificationKind.Disabled)
+  }
+
+  test("notifications: TERMFLOW_NOTIFICATIONS=off forces Disabled even on iTerm2") {
+    val caps = Capabilities.detect(
+      Map(
+        "TERM"                   -> "xterm-256color",
+        "TERM_PROGRAM"           -> "iTerm.app",
+        "TERMFLOW_NOTIFICATIONS" -> "off"
+      )
+    )
+    assert(caps.notifications == NotificationKind.Disabled)
+  }
+
+  test("notifications: TERMFLOW_NOTIFICATIONS=bell forces BellOnly even on kitty") {
+    val caps = Capabilities.detect(
+      Map(
+        "TERM"                   -> "xterm-kitty",
+        "KITTY_WINDOW_ID"        -> "1",
+        "TERMFLOW_NOTIFICATIONS" -> "bell"
+      )
+    )
+    assert(caps.notifications == NotificationKind.BellOnly)
+  }

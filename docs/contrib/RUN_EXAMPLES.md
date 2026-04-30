@@ -70,6 +70,9 @@ sbt "termflowSample/runMain termflow.apps.chat.ProviderChatRenderReproMain"
 | `stressDemo` | `RenderStressApp` | High-frequency updates — useful for spotting flicker |
 | `sineDemo` | `SineWaveApp` | Animated sine wave; same purpose as `stressDemo` with smoother motion |
 | `inputDemo` | `InputLineReproApp` | Pinned reproduction of the prompt/cursor regressions behind #73 and #74 |
+| `treeDemo` | `FileTreeApp` | File-tree explorer over the `Tree` widget on a `Layout.Border` shell |
+| `editorDemo` | `EditorApp` | Multi-buffer text editor combining `MultiLineInput` + `SplitPane` + `MenuBar` |
+| `chatDemo` | `ChatStreamApp` | Streaming chat with `LogView` scrollback and `Sub.Every` token streaming |
 
 ## Widgets demo keys
 
@@ -124,10 +127,10 @@ If you'd rather have shell-level shortcuts, drop this in `~/.zshrc` /
 termflow-run() {
   local app="$1"
   case "$app" in
-    hub|widgets|form|catalog|echo|counter|future|clock|tabs|task|stress|sine|input)
+    hub|widgets|form|catalog|echo|counter|future|clock|tabs|task|stress|sine|input|tree|editor|chat)
       sbt "${app}Demo" ;;
     *)
-      echo "Usage: termflow-run {hub|widgets|form|catalog|echo|counter|future|clock|tabs|task|stress|sine|input}"
+      echo "Usage: termflow-run {hub|widgets|form|catalog|echo|counter|future|clock|tabs|task|stress|sine|input|tree|editor|chat}"
       return 1
       ;;
   esac

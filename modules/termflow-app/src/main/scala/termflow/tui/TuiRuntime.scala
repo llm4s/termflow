@@ -256,6 +256,12 @@ object TuiRuntime:
               case Some(msg) => bus.publish(Cmd.GCmd(msg))
               case None      => bus.publish(Cmd.NoCmd)
 
+          case Cmd.RequestAttention =>
+            terminalBackend.requestAttention()
+
+          case Cmd.Notify(title, body) =>
+            terminalBackend.notify(title, body)
+
       while !shouldExit do
         val cmd = bus.take()
         processCommand(cmd)

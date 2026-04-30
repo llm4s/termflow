@@ -18,6 +18,29 @@ enum ColorDepth:
   def supports(other: ColorDepth): Boolean = this.ordinal >= other.ordinal
 
 /**
+ * How an attention / notification request from the app reaches the user.
+ *
+ * `BellOnly` is the universal fallback — emits `` (BEL), which most
+ * terminals translate into a tab-bar activity flag and tmux/screen translate
+ * into a window-bell indicator.
+ *
+ * The richer kinds also emit a desktop notification when supported:
+ *   - `ITerm2` uses iTerm2's `OSC 9` banner + `OSC 1337 RequestAttention`.
+ *   - `Kitty` uses kitty's `OSC 99` desktop notification protocol.
+ *   - `Vte` uses the `OSC 777 ; notify` sequence (GNOME Terminal,
+ *     xfce4-terminal, Tilix, …).
+ *
+ * `Disabled` suppresses notifications entirely — used when the user sets
+ * `TERMFLOW_NOTIFICATIONS=off` or when running on a `dumb` terminal.
+ */
+enum NotificationKind:
+  case Disabled
+  case BellOnly
+  case ITerm2
+  case Kitty
+  case Vte
+
+/**
  * Best-effort terminal capabilities, populated either from environment
  * variables (see [[Capabilities.detect]]) or supplied explicitly by tests.
  *
@@ -41,13 +64,16 @@ enum ColorDepth:
  *                       parser will see the pasted bytes as a stream of
  *                       individual keypresses, just as if the user had typed
  *                       them.
+ * @param notifications  How `Cmd.RequestAttention` and `Cmd.Notify` reach the
+ *                       user. See [[NotificationKind]].
  */
 final case class Capabilities(
   colorDepth: ColorDepth,
   unicode: Boolean,
   mouse: Boolean,
   extendedStyles: Boolean = true,
-  bracketedPaste: Boolean = true
+  bracketedPaste: Boolean = true,
+  notifications: NotificationKind = NotificationKind.BellOnly
 )
 
 object Capabilities:
@@ -62,7 +88,8 @@ object Capabilities:
     unicode = true,
     mouse = false,
     extendedStyles = true,
-    bracketedPaste = true
+    bracketedPaste = true,
+    notifications = NotificationKind.BellOnly
   )
 
   /**
@@ -116,7 +143,30 @@ object Capabilities:
     // because the start/end markers would otherwise echo as literal text.
     val bracketedPaste = isXtermFamily(term)
 
-    Capabilities(colorDepth, unicode, mouse, extendedStyles, bracketedPaste)
+    val notifications = detectNotificationKind(env, term)
+
+    Capabilities(colorDepth, unicode, mouse, extendedStyles, bracketedPaste, notifications)
+
+  /**
+   * Resolve which notification protocol (if any) to use for the current
+   * terminal. Honours an explicit `TERMFLOW_NOTIFICATIONS` override
+   * (`off` / `bell` / `auto`); otherwise sniffs `TERM_PROGRAM`,
+   * `KITTY_WINDOW_ID`, and `VTE_VERSION` to pick the richest available kind.
+   *
+   * `dumb` and unknown TERMs disable notifications entirely so primitive
+   * backends don't echo escape sequences as literal text.
+   */
+  private def detectNotificationKind(env: Map[String, String], term: String): NotificationKind =
+    val override_ = env.getOrElse("TERMFLOW_NOTIFICATIONS", "").toLowerCase
+    if override_ == "off" then NotificationKind.Disabled
+    else if override_ == "bell" then NotificationKind.BellOnly
+    else if term.isEmpty || term == "dumb" then NotificationKind.Disabled
+    else
+      val termProgram = env.getOrElse("TERM_PROGRAM", "").toLowerCase
+      if termProgram == "iterm.app" then NotificationKind.ITerm2
+      else if env.contains("KITTY_WINDOW_ID") || term == "xterm-kitty" then NotificationKind.Kitty
+      else if env.contains("VTE_VERSION") then NotificationKind.Vte
+      else NotificationKind.BellOnly
 
   private def isXtermFamily(term: String): Boolean =
     term.startsWith("xterm")

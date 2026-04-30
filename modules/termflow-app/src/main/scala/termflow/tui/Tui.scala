@@ -143,6 +143,32 @@ enum Cmd[+Msg]:
    */
   case TermFlowErrorCmd(msg: TermFlowError) extends Cmd[Msg]
 
+  /**
+   * Ring the terminal bell or pop the iTerm2 "request attention" indicator.
+   *
+   * The runtime delegates to `TerminalBackend.requestAttention()`, which
+   * picks the right sequence based on `Capabilities.notifications` (BEL,
+   * `OSC 1337 RequestAttention=yes`, …). Apps typically fire this when an
+   * async result is ready while the user is likely focused elsewhere.
+   *
+   * No-op when notifications are disabled (`TERMFLOW_NOTIFICATIONS=off` or
+   * `TERM=dumb`).
+   */
+  case RequestAttention extends Cmd[Nothing]
+
+  /**
+   * Show a desktop notification (iTerm2, kitty, GNOME Terminal / VTE) or
+   * fall back to BEL on terminals without a notification protocol.
+   *
+   * The runtime delegates to `TerminalBackend.notify`, which selects the
+   * right OSC sequence from `Capabilities.notifications`. The `body` is
+   * sanitised to remove control bytes that would terminate the OSC envelope.
+   *
+   * Apps should use this sparingly — most terminals rate-limit notifications
+   * and aggressive use will get the user to silence the app.
+   */
+  case Notify(title: String, body: String) extends Cmd[Nothing]
+
 object Cmd:
 
   /**

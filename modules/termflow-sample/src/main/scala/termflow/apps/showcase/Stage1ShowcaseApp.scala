@@ -415,6 +415,10 @@ object Stage1ShowcaseApp:
     // ---- Embedded sub-apps ----
     wizardModel: WizardApp.Model,
     dashboardModel: DashboardApp.Model,
+    /** Number of `Cmd.Notify` test fires from the Help tab. */
+    notifyCount: Int,
+    /** Number of `Cmd.RequestAttention` test fires from the Help tab. */
+    attentionCount: Int,
     input: Sub[Msg],
     resize: Sub[Msg],
     tickSub: Sub[Msg]
@@ -460,6 +464,8 @@ object Stage1ShowcaseApp:
     case LayoutMouse(ev: MouseEvent)
     case EditorKey(k: KeyDecoder.InputKey)
     case TreeMouse(ev: MouseEvent)
+    case TestNotification
+    case TestAttention
     case Quit
     case Key(k: KeyDecoder.InputKey)
     case KeyError(t: Throwable)
@@ -515,6 +521,8 @@ object Stage1ShowcaseApp:
         ),
         wizardModel = WizardApp.initialModel,
         dashboardModel = DashboardApp.initialModel,
+        notifyCount = 0,
+        attentionCount = 0,
         input = Sub.InputKey(k => Key(k), e => KeyError(e), ctx),
         resize = Sub.TerminalResize[Msg](200, (w, h) => Resize(w, h), ctx),
         tickSub = Sub.Every(tickPeriodMs, () => Tick, ctx)
@@ -658,6 +666,13 @@ object Stage1ShowcaseApp:
         case TreeDown =>
           val rows = widgets.Tree.visibleRows(demoTree, m.treeExpanded)
           m.copy(treeSelected = math.min(math.max(0, rows.size - 1), m.treeSelected + 1)).tui
+        case TestNotification =>
+          Tui(
+            m.copy(notifyCount = m.notifyCount + 1),
+            Cmd.Notify("TermFlow showcase", s"Test notification #${m.notifyCount + 1}")
+          )
+        case TestAttention =>
+          Tui(m.copy(attentionCount = m.attentionCount + 1), Cmd.RequestAttention)
         case Quit        => Tui(m, Cmd.Exit)
         case KeyError(_) => m.tui
         case Key(k)      =>
@@ -915,6 +930,9 @@ object Stage1ShowcaseApp:
       k match
         case CharKey('q') | CharKey('Q') => Cmd.GCmd(OpenDialog)
         case Escape                      => Cmd.GCmd(OpenDialog)
+        // Notifications demo — exercises Cmd.Notify and Cmd.RequestAttention.
+        case CharKey('n') => Cmd.GCmd(TestNotification)
+        case CharKey('N') => Cmd.GCmd(TestAttention)
         // Route mouse so clicks on the Tabs bar still switch tabs from
         // here — without this, the Help tab traps the user.
         case Mouse(ev) => tabBarMouseDispatch(ev)
@@ -1912,6 +1930,7 @@ object Stage1ShowcaseApp:
       val sepWidth  = math.max(20, r.width - 4)
       val sepNodes  = widgets.Separator.horizontal(width = sepWidth, at = Coord(2.x, 2.y), title = "Tabs")
       val sepNodes2 = widgets.Separator.horizontal(width = sepWidth, at = Coord(2.x, 28.y), title = "Anywhere")
+      val sepNotify = widgets.Separator.horizontal(width = sepWidth, at = Coord(2.x, 33.y), title = "Notifications")
 
       val rows = List(
         TextNode(2.x, 3.y, List(" 1..9 ".themed(_.primary), "  switch tab".text)),
@@ -1934,9 +1953,37 @@ object Stage1ShowcaseApp:
         TextNode(2.x, 25.y, List(" 6 Wizard / 7 Dashboard / 9 Editor (MultiLineInput)".themed(_.success))),
         TextNode(2.x, 26.y, List("   editor: Enter newline, ↑/↓ between rows, Esc leaves the tab".text)),
         TextNode(2.x, 29.y, List("   q / Esc  open quit confirmation".text)),
-        TextNode(2.x, 30.y, List("   click on Tabs bar  switch tab".text))
+        TextNode(2.x, 30.y, List("   click on Tabs bar  switch tab".text)),
+        TextNode(
+          2.x,
+          34.y,
+          List(
+            " kind ".themed(_.secondary),
+            notificationKindLabel(m.capabilities.notifications).themed(_.success)
+          )
+        ),
+        TextNode(
+          2.x,
+          35.y,
+          List(
+            " n ".themed(_.primary),
+            "  send a desktop notification (Cmd.Notify) — fired ".text,
+            m.notifyCount.toString.themed(_.success),
+            " time(s)".text
+          )
+        ),
+        TextNode(
+          2.x,
+          36.y,
+          List(
+            " N ".themed(_.primary),
+            "  request attention (Cmd.RequestAttention) — fired ".text,
+            m.attentionCount.toString.themed(_.success),
+            " time(s)".text
+          )
+        )
       )
-      List(panel(r, theme, (title :: sepNodes) ++ sepNodes2 ++ rows))
+      List(panel(r, theme, (title :: sepNodes) ++ sepNodes2 ++ sepNotify ++ rows))
 
     /**
      * Body content for the "Wizard" tab — embeds [[WizardApp]]'s view by
@@ -2062,3 +2109,10 @@ object Stage1ShowcaseApp:
       case ColorDepth.Ansi16     => "Ansi16"
       case ColorDepth.Indexed256 => "Indexed256"
       case ColorDepth.Truecolor  => "Truecolor"
+
+    private def notificationKindLabel(k: NotificationKind): String = k match
+      case NotificationKind.Disabled => "Disabled"
+      case NotificationKind.BellOnly => "BellOnly (BEL)"
+      case NotificationKind.ITerm2   => "iTerm2 (OSC 9 / 1337)"
+      case NotificationKind.Kitty    => "kitty (OSC 99)"
+      case NotificationKind.Vte      => "VTE (OSC 777)"

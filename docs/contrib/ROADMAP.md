@@ -149,6 +149,12 @@ Coordination: open an issue on `llm4s/llm4s` once the §4 hardening
 checklist is closed, so the demo lands against a 1.0-RC of termflow
 rather than a moving target.
 
+Full handover spec — UI sketch, `Model` / `Msg`, streaming pipeline,
+tool-call flow, termflow API surface used, acceptance criteria, file
+layout, testing strategy, and open questions — lives at
+[`KILLER_DEMO_SPEC.md`](KILLER_DEMO_SPEC.md). Hand that to the llm4s
+implementer when 1.0-RC1 is tagged.
+
 ### 3.4 GridLayout + BorderLayout — ☑ landed
 
 Shipped in #187. `Layout.Grid(columns, rowGap, colGap, cells)` with

@@ -99,7 +99,7 @@ object Keymap:
   /**
    * Conventional focus bindings: `Tab` advances, `Shift+Tab` retreats.
    *
-   * `Tab` is a distinct [[InputKey.Tab]] (decoded from ASCII 9); `Shift+Tab` arrives
+   * `Tab` is a distinct [[KeyDecoder.InputKey.Tab]] (decoded from ASCII 9); `Shift+Tab` arrives
    * as `InputKey.BackTab` (decoded from the `[Z` escape sequence).
    *
    * @param next     Message dispatched on `Tab`.
@@ -231,6 +231,7 @@ object Keymap:
     case InputKey.Mouse(_)     => "Mouse"
     case InputKey.Unknown(seq) => s"?($seq)"
     case InputKey.EndOfInput   => "EOF"
+    case InputKey.NoOp         => "NoOp"
 
 /**
  * One step in a [[ChordKeymap]] dispatch.
@@ -265,7 +266,7 @@ final case class ChordState(prefix: Vector[InputKey] = Vector.empty):
 /**
  * Keymap supporting multi-key chord sequences.
  *
- * A chord is a [[Vector]] of [[InputKey]]s that, when typed in sequence,
+ * A chord is a [[Vector]] of [[KeyDecoder.InputKey]]s that, when typed in sequence,
  * dispatches a single message. Chords can share a prefix
  * (`Ctrl+X Ctrl+C` and `Ctrl+X Ctrl+S` both start with `Ctrl+X`) — the
  * dispatcher tracks how far through a chord the user is and only fires

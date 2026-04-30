@@ -283,19 +283,27 @@ two `MouseSim.scrollUp` tests for the in-pane and out-of-pane paths.
 The streaming-output cookbook recipe documents the pattern next to the
 keyboard fallbacks.
 
-### 4.7 Test coverage review and quick wins
+### 4.7 Test coverage review and quick wins — ☑ landed
 
 Because TermFlow is mostly deterministic UI logic, coverage should be
 higher than a typical terminal integration project. Run `sbt --batch
 coverageLib`, inspect the lowest-covered files/branches, and take the
 low-risk wins before 1.0.
 
-Current local coverage snapshot (2026-04-30):
+Current local coverage snapshot (2026-04-30, post `a971a94`):
 
-- `termflow-terminal`: 66.04% statements / 63.32% branches.
-- `termflow-screen`: 71.81% statements / 65.22% branches.
-- `termflow-app`: 80.29% statements / 68.61% branches.
-- `termflow-widgets`: 92.63% statements / 85.00% branches.
+- `termflow-terminal`: 87.79% statements / 90.48% branches.
+- `termflow-screen`: 90.76% statements / 77.45% branches.
+- `termflow-app`: 86.99% statements / 81.20% branches.
+- `termflow-widgets`: 92.69% statements / 85.23% branches.
+
+The coverage-uplift branch (`a971a94`) lifted `termflow-terminal` from
+66.04% → 87.79% statements (63.32% → 90.48% branches), `termflow-screen`
+from 71.81% → 90.76% statements (65.22% → 77.45% branches), and
+`termflow-app` from 80.29% → 86.99% statements (68.61% → 81.20%
+branches). All four published modules are now ≥87% statement coverage,
+with `termflow-terminal` and `termflow-screen` — the §4.7 priority
+targets — both above 87%.
 
 Acceptance:
 
@@ -444,6 +452,12 @@ Two TermFlow-only wins worth preserving through 1.0:
 
 ## 8. Recent decisions (rolling, last ~3 months)
 
+- *2026-04-30* — Stage 4 §4.7 closed: coverage-uplift branch merged
+  (`a971a94`). `termflow-terminal` 66% → 88% stmts / 63% → 90% branches,
+  `termflow-screen` 72% → 91% stmts / 65% → 77% branches,
+  `termflow-app` 80% → 87% stmts / 69% → 81% branches. All four
+  published modules now ≥87% statement coverage; the priority targets
+  (`-terminal`, `-screen`) are both above 87%.
 - *2026-04-30* — Stage 4 §4.8 closed: `ciCheck` is warning-free and
   `unidoc` clean of unresolved-link warnings. Five Scaladoc `[[…]]`
   references rewritten to qualified forms; a non-exhaustive

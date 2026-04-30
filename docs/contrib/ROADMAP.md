@@ -116,38 +116,20 @@ Catalogue now stands at 22 apps.
 
 ### 3.3 Killer demo
 
-A working `llm4s` chat client in ~200 lines of TermFlow that surfaces
-streaming, dialogs (tool-call confirmation), theming, mouse-wheel
-scrollback, `Cmd.RequestAttention`, and `Cmd.asyncResult` for tool
-execution. The demo lives in **`llm4s`**, not in this repo: llm4s already
-depends on termflow for its samples, and pulling in an llm4s dependency
-here — even at the demo-module level — would introduce a sibling cycle
-that bites at release time. Decision: 2026-04-30.
+A working `llm4s` chat client in ~200 lines of TermFlow, used as the
+README headline screenshot. Demonstrates streaming, dialogs, theming,
+mouse-wheel scrollback, async tool calls, and the recoverable-error
+banner — every Stage 1–4 capability in one app.
 
-For the 1.0 deliverable, termflow's README gets the screenshot and a
-"Built with TermFlow — source at `llm4s/llm4s/.../chat`" link. The
-acceptance criteria stay the same; what moves is *where the source
-lives*, not *what the screenshot shows*.
+The implementation lives in `llm4s/llm4s` (not in this repo) to avoid
+a sibling-cycle on llm4s's existing termflow dependency. Termflow's
+README links to the source and embeds the screenshot.
 
-App shape (sketch):
-
-- `Layout.Border` shell — header, transcript filling the centre,
-  prompt + status row pinned to the bottom; wrapped in
-  `toBudgetedRootNode` so it reflows on resize.
-- `Cmd.asyncResult` kicks the chat completion; a `Sub.Every` drains
-  streamed tokens into the live assistant entry. Mouse-wheel scroll via
-  `LogView.scrollDelta` (§4.6).
-- One narrow tool — e.g. `read_file(path)`. When the stream emits a
-  tool-call delta, a `Dialogs.confirm("Allow read of <path>?")` modal
-  pauses the run; on accept, the tool runs through `Cmd.asyncResult`
-  and the result feeds back into the model.
-- `Ctrl+T` light/dark toggle, `Cmd.RequestAttention` when a long reply
-  finishes while the user has scrolled away, slash commands
-  (`/quit`, `/clear`, `/model`, `/theme`).
-
-Coordination: open an issue on `llm4s/llm4s` once the §4 hardening
-checklist is closed, so the demo lands against a 1.0-RC of termflow
-rather than a moving target.
+Full handover spec — UI sketch, model/msg, streaming pipeline,
+tool-call flow, termflow API surface used, acceptance criteria, file
+layout, testing strategy, and open questions — lives at
+[`KILLER_DEMO_SPEC.md`](KILLER_DEMO_SPEC.md). Hand that to the llm4s
+implementer when 1.0-RC1 is tagged.
 
 ### 3.4 GridLayout + BorderLayout — ☑ landed
 

@@ -56,7 +56,7 @@ Grapheme-aware navigation across all four arrows, Backspace, Delete.
 
 ```scala
 val state = MultiLineInput.State(lines = Vector("hello", "world"))
-val (next, _) = MultiLineInput.handleKey[Msg](state, key)(_ => None)
+val (next, _) = MultiLineInput.handleKey[Msg](state, key)
 val node = MultiLineInput.view(next, width = 60, height = 12, focused = true)
 ```
 

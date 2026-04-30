@@ -80,16 +80,22 @@ defaults so apps that ignore it still work:
 
 ```scala
 final case class Capabilities(
-  colorDepth:    ColorDepth, // Mono | Ansi8 | Ansi16 | Indexed256 | Truecolor
-  unicode:       Boolean,
-  mouse:         Boolean,
-  extendedStyles: Boolean,   // italic / dim / strike / blink
-  bracketedPaste: Boolean
+  colorDepth:     ColorDepth, // Mono | Ansi8 | Ansi16 | Indexed256 | Truecolor
+  unicode:        Boolean,
+  mouse:          Boolean,
+  extendedStyles: Boolean = true,    // italic / dim / strike / blink
+  bracketedPaste: Boolean = true,
+  notifications:  NotificationKind = NotificationKind.BellOnly
 )
 
 object Capabilities:
   def detect(env: Map[String, String]): Capabilities
 ```
+
+`notifications` controls how `Cmd.RequestAttention` and `Cmd.Notify`
+reach the user — values: `Disabled`, `BellOnly`, `ITerm2`, `Kitty`,
+`Vte`. The runtime resolves the right OSC sequence per kind; see the
+[notifications cookbook](../cookbook/notifications.md).
 
 `Capabilities.detect(sys.env)` honours `NO_COLOR`, `COLORTERM`, `TERM`,
 and `LANG` / `LC_*`. The `AnsiRenderer` calls this for you and

@@ -58,8 +58,9 @@ Loop, repeat.
 ## What runs where
 
 - **Update is synchronous and pure.** No I/O. If you need async work,
-  return a `Cmd.FCmd[Future[A], Msg]` and the runtime will run the
-  `Future`, deliver the result back as a `Msg`.
+  return a `Cmd.FCmd[A, Msg]` (or the friendlier `Cmd.asyncResult`) and
+  the runtime will await the `Future`, then deliver the result back as
+  a `Msg`.
 - **View is pure.** It returns a `RootNode` from a `Model`. The renderer
   takes care of cursor placement, colour emission, and clipping.
 - **Subscriptions live outside `update`.** `Sub.InputKey` reads from JLine

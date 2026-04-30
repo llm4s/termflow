@@ -218,20 +218,21 @@ Acceptance:
   `v1.0.0`.
 - Any stale `0.2.0` / `0.3.0` examples are intentional and explained.
 
-### 4.3 Public API and docs example audit
+### 4.3 Public API and docs example audit — ☑ landed
 
-Do a final pass over the public-facing APIs and every tutorial/guide
-snippet. The goal is not to freeze internals forever; it is to remove
-surprise from the surface users will copy into their apps.
-
-Acceptance:
-
-- Public names, signatures, and examples line up (`Cmd.asyncResult`,
-  widget constructors, `Sub.TerminalResize`, layout helpers, etc.).
-- Any deliberately sharp/advanced APIs are marked as SPI or documented
-  with constraints.
-- Migration notes list every known user-visible API adjustment, or
-  explicitly say no migration is required.
+Walked the public-facing APIs and every tutorial / guide / cookbook
+snippet against the source. Eight signature drifts and dead-code blocks
+in the docs were corrected (`Cmd.asyncResult`, `Sub.TerminalResize`,
+`Cmd.FCmd` type params, `MultiLineInput.handleKey` curried form,
+`Capabilities.notifications`, missing `RootNode.input` arg, mistyped
+`Cmd.FCmd` in the file-picker recipe, orphaned `Layout.column` block
+in the full-screen-layout recipe). `Cmd.RequestAttention` and
+`Cmd.Notify` are now reflected in the app-layer Cmd table.
+`docs/reference/migration.md` is populated with the explicit
+no-migration-required statement plus a catalogue of additive changes
+since 0.2.0. `mdbook build` (with linkcheck) is green. SPI markers on
+`TuiRenderer` / `CmdConsumer` / `CmdBus` / `EventSink` / `EventSource`
+were already in place; any further Scaladoc polish belongs in §4.8.
 
 ### 4.4 Layout ergonomics audit — ☑ landed
 
@@ -423,6 +424,11 @@ Two TermFlow-only wins worth preserving through 1.0:
 
 ## 8. Recent decisions (rolling, last ~3 months)
 
+- *2026-04-30* — Stage 4 §4.3 closed: public-API and docs-example audit
+  swept eight signature drifts out of the tutorials, guides, and cookbook;
+  `docs/reference/migration.md` populated with the explicit "no migration
+  required for 0.2.x → 1.0" statement plus a catalogue of additive
+  changes. `mdbook build` (with linkcheck) clean.
 - *2026-04-30* — Killer demo (§3.3) will live in `llm4s`, not in this
   repo. Reason: llm4s already depends on termflow for samples, so
   hosting an llm4s-backed demo here would create a sibling cycle even

@@ -53,6 +53,8 @@ enum Cmd[+Msg]:
   case GCmd(msg: Msg)                                              extends Cmd[Msg]
   case FCmd[A, M](task: Future[A], toCmd: A => Cmd[M], onEnqueue: Option[M] = None) extends Cmd[M]
   case TermFlowErrorCmd(msg: TermFlowError)                        extends Cmd[Msg]
+  case RequestAttention                                            extends Cmd[Nothing]
+  case Notify(title: String, body: String)                         extends Cmd[Nothing]
 ```
 
 | Cmd | When |
@@ -62,20 +64,29 @@ enum Cmd[+Msg]:
 | `GCmd(msg)` | Dispatch a follow-up `Msg` through `update`. Used to chain transitions. |
 | `FCmd(task, toCmd, onEnqueue)` | Bridge a `Future[A]` into the runtime — covered in the [async tutorial](../tut/03-async.md). |
 | `TermFlowErrorCmd(err)` | Surface a `TermFlowError` to the renderer (logged, not fatal). |
+| `RequestAttention` | Ring the bell / pop the terminal's "needs attention" indicator. |
+| `Notify(title, body)` | Send a desktop notification (iTerm2/kitty/VTE OSC, BEL fallback). |
+
+`RequestAttention` and `Notify` are documented end-to-end in the
+[notifications cookbook](../cookbook/notifications.md), including the
+`TERMFLOW_NOTIFICATIONS` opt-out.
 
 Plus the helper:
 
 ```scala
 def Cmd.asyncResult[A, Msg](
   task:      AsyncResult[A],
-  toCmd:     A => Cmd[Msg],
+  onSuccess: A => Msg,
+  onError:   TermFlowError => Msg,
   onEnqueue: Option[Msg] = None
 ): Cmd[Msg]
 ```
 
-`AsyncResult[A]` is `Future[Result[A]]`. Wrap fallible async work in
-this and the runtime will fold a `Left(err)` into a
-`TermFlowErrorCmd`.
+`AsyncResult[A]` is `Future[Result[A]]`. Use `asyncResult` whenever the
+async work has a domain failure mode: `Right(a)` is mapped through
+`onSuccess`, `Left(err)` through `onError`. `Future` failures (network
+drops, JVM exceptions) still surface via the runtime's standard
+`TermFlowErrorCmd` overlay — there's no need to recover them here.
 
 ## Sub — subscriptions
 
@@ -101,14 +112,23 @@ Sub.InputKey(
   ctx:     RuntimeCtx[Msg]
 ): Sub[Msg]
 
-Sub.TerminalResize(msg: () => Msg, sink: EventSink[Msg]): Sub[Msg]
+Sub.TerminalResize(
+  millis: Long,
+  mkMsg:  (Int, Int) => Msg,
+  ctx:    RuntimeCtx[Msg]
+): Sub[Msg]
 
 val Sub.NoSub: Sub[Nothing]   // inert placeholder for model fields
 ```
 
-When the third argument is a `RuntimeCtx[Msg]`, the sub
+When the sink/ctx argument is a `RuntimeCtx[Msg]`, the sub
 **auto-registers** for cleanup on `Cmd.Exit`. When it's a bare
 `EventSink`, you're responsible for the lifecycle.
+
+`Sub.TerminalResize` prefers the backend's resize signal (e.g.
+SIGWINCH on Unix) and only falls back to polling at `millis` for
+backends without signal support — typically the testkit's virtual
+backend.
 
 `.cancel()` is idempotent — safe to call on `NoSub` or on an
 already-cancelled sub.

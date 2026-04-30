@@ -218,7 +218,8 @@ object HelloApp:
         height   = 3,
         children = List(
           TextNode(2.x, 1.y, List(m.message.text))
-        )
+        ),
+        input    = None
       )
 
     def toMsg(input: PromptLine): Result[Msg] = Right(Msg.Quit)

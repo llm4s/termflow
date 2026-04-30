@@ -156,7 +156,7 @@ case Increment =>
 | Parameter | What |
 |---|---|
 | `task` | The `Future[A]` you want the runtime to await. |
-| `onComplete` | A function from the future's result to the next `Cmd`. |
+| `toCmd` | A function from the future's result to the next `Cmd`. |
 | `onEnqueue` | An optional `Msg` to dispatch *immediately* when the FCmd is enqueued — before the future completes. |
 
 What happens at runtime:
@@ -165,14 +165,18 @@ What happens at runtime:
 2. The runtime sees the `FCmd`, registers a callback on the future, and
    if `onEnqueue` was supplied, immediately dispatches that `Msg`.
 3. When the future completes (after ~5 seconds here),
-   `onComplete(result)` runs and the resulting `Cmd` (here
+   `toCmd(result)` runs and the resulting `Cmd` (here
    `Cmd.GCmd(UpdateWith(c))`) is enqueued.
 
 The result: `Busy("incrementing::...")` arrives within microseconds of
 pressing Enter, and `UpdateWith(newCount)` arrives ~5 seconds later.
 
-> If your future could fail, use `Cmd.FCmd` together with the `Result[A]`
-> alias. The Cookbook has a recipe for the pattern.
+> If your future already returns `Result[A]` (i.e. it can fail with a
+> `TermFlowError`), reach for `Cmd.asyncResult(task, onSuccess, onError,
+> onEnqueue)` instead — it folds the `Either` for you so the call site
+> stays one expression. Future-level exceptions still surface as a
+> `TermFlowErrorCmd` overlay automatically. See the [app-layer
+> guide](../guide/app-layer.md#cmd--effects) for the full signature.
 
 ## 5. Starting a `Sub.Every`
 

@@ -50,3 +50,4 @@
 - [Render pipeline](contrib/RENDER_PIPELINE.md)
 - [Roadmap](contrib/ROADMAP.md)
 - [Running sample apps](contrib/RUN_EXAMPLES.md)
+- [Killer demo spec (handover to llm4s)](contrib/KILLER_DEMO_SPEC.md)

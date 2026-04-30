@@ -105,10 +105,10 @@ final class JLineTerminalBackend extends TerminalBackend:
     Capabilities.detect(System.getenv().asScala.toMap)
 
   /**
-   * Hook into JLine's SIGWINCH delivery. JLine raises [[Terminal.Signal.WINCH]]
+   * Hook into JLine's SIGWINCH delivery. JLine raises `Terminal.Signal.WINCH`
    * when the underlying tty resizes (or, on Windows, when its emulator reports
    * a console-buffer change). The listener is invoked on JLine's signal
-   * dispatch path; we adapt it through a Java [[Terminal.SignalHandler]] and
+   * dispatch path; we adapt it through a JLine `Terminal.SignalHandler` and
    * return the previous handler so callers can restore it on unregister.
    */
   override def onResize(listener: () => Unit): Option[() => Unit] =

@@ -99,6 +99,21 @@ class KeymapSpec extends AnyFunSuite:
     assert(k.lookup(InputKey.ArrowLeft).contains(DemoMsg.NextFocus))
     assert(k.lookup(InputKey.ArrowRight).contains(DemoMsg.Quit))
 
+  test("renderKey covers every InputKey case (incl. NoOp / EndOfInput)"):
+    // Spot-check the cases that don't share a common shape, so the match
+    // stays exhaustive: bare singletons, parameterised cases, the synthetic
+    // NoOp / EndOfInput sinks, and a Modified wrapper.
+    assert(Keymap.renderKey(InputKey.Tab) == "Tab")
+    assert(Keymap.renderKey(InputKey.BackTab) == "S-Tab")
+    assert(Keymap.renderKey(InputKey.CharKey(' ')) == "Space")
+    assert(Keymap.renderKey(InputKey.CharKey('q')) == "q")
+    assert(Keymap.renderKey(InputKey.Ctrl('C')) == "C-c")
+    assert(Keymap.renderKey(InputKey.NoOp) == "NoOp")
+    assert(Keymap.renderKey(InputKey.EndOfInput) == "EOF")
+    assert(Keymap.renderKey(InputKey.Unknown("xyz")) == "?(xyz)")
+    val mods = KeyDecoder.Modifiers(shift = true, alt = false, ctrl = true, meta = false)
+    assert(Keymap.renderKey(InputKey.Modified(InputKey.Tab, mods)) == "S-C-Tab")
+
   test("layered keymaps form a baseline plus app-specific overrides"):
     val baseline = Keymap.quit(DemoMsg.Quit) ++
       Keymap.focus(next = DemoMsg.NextFocus, previous = DemoMsg.A)

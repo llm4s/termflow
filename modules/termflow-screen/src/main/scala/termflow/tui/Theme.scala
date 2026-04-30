@@ -225,8 +225,8 @@ object Theme:
       Text(txt, Style(fg = select(t)))
 
   /**
-   * Build a [[VNode.BoxNode]] using the ambient theme's [[chars]] and
-   * [[border]] slot.
+   * Build a [[VNode.BoxNode]] using the ambient theme's [[Theme.chars]] and
+   * [[Theme.border]] slot.
    *
    * This is the idiomatic way to draw a themed bordered container — apps
    * stay free of any direct reference to `BorderChars`, and the visual

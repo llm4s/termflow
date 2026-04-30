@@ -24,9 +24,10 @@ enum ScrollDirection:
  * library — `col=1, row=1` is the top-left cell.
  *
  * The capture mode (xterm "any-event tracking", `CSI ?1003h`) decides
- * whether [[Move]] events without a held button arrive at all; today the
- * runtime enables button-event tracking only (`CSI ?1002h`), so apps will
- * see [[Press]] / [[Release]] / [[Drag]] / [[Scroll]] but no bare moves.
+ * whether [[MouseEvent.Move]] events without a held button arrive at all;
+ * today the runtime enables button-event tracking only (`CSI ?1002h`), so
+ * apps will see [[MouseEvent.Press]] / [[MouseEvent.Release]] /
+ * [[MouseEvent.Drag]] / [[MouseEvent.Scroll]] but no bare moves.
  * The enum is wired up regardless so a future "track everything" toggle
  * doesn't change the public API.
  */

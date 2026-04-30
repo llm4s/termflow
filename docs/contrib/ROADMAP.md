@@ -306,16 +306,30 @@ Acceptance:
 - Keep `coverageLib` green and ensure the combined trend moves up, with
   particular attention to `termflow-terminal` and `termflow-screen`.
 
-### 4.8 Zero-warning build and Scaladoc polish
+### 4.8 Zero-warning build and Scaladoc polish — ☑ landed
 
-The 1.0 branch should build cleanly enough that new warnings stand out.
+`sbt --batch ciCheck` is warning-free across all published modules and
+the sample/testkit projects.
 
-Acceptance:
+`sbt --batch unidoc` is clean of unresolved-link warnings: five Scaladoc
+`[[…]]` references that pointed at out-of-scope or unqualified members
+were corrected — `[[InputKey]]` / `[[InputKey.Tab]]` now spell
+`KeyDecoder.InputKey…`, `Theme.box`'s `[[chars]]` / `[[border]]`
+references the slot via `[[Theme.chars]]` / `[[Theme.border]]`,
+`[[Move]]` and friends in `MouseEvent` are qualified as
+`[[MouseEvent.Move]]` etc., and `TerminalBackend.onResize`'s JLine
+`Terminal.Signal.WINCH` reference dropped its broken `[[…]]` wrapper
+(JLine is on the runtime classpath but not a unidoc target). A
+non-exhaustive `match` warning in `Keymap.renderKey` (missing the
+`InputKey.NoOp` case) was closed at the same time.
 
-- `sbt --batch ciCheck` emits no Scala compiler warnings.
-- `sbt --batch unidoc` completes without unresolved-link warnings where
-  a simple Scaladoc link fix is available.
-- mdBook/linkcheck remain green.
+The remaining `[warn] Flag -classpath set repeatedly` is a structural
+sbt-unidoc / Scala-3-doctool quirk (the doc invocation receives
+`-classpath` once from sbt-unidoc and once from the dotty front-end).
+It is not an unresolved-link warning and there is no in-tree fix; track
+upstream if it becomes load-bearing.
+
+mdBook/linkcheck stay green; the docs site builds unchanged.
 
 ---
 
@@ -430,6 +444,12 @@ Two TermFlow-only wins worth preserving through 1.0:
 
 ## 8. Recent decisions (rolling, last ~3 months)
 
+- *2026-04-30* — Stage 4 §4.8 closed: `ciCheck` is warning-free and
+  `unidoc` clean of unresolved-link warnings. Five Scaladoc `[[…]]`
+  references rewritten to qualified forms; a non-exhaustive
+  `Keymap.renderKey` match closed by adding the `InputKey.NoOp` arm.
+  The remaining `Flag -classpath set repeatedly` is a structural
+  sbt-unidoc / Scala-3-doctool warning with no in-tree fix.
 - *2026-04-30* — Stage 4 §4.3 closed: public-API and docs-example audit
   swept eight signature drifts out of the tutorials, guides, and cookbook;
   `docs/reference/migration.md` populated with the explicit "no migration

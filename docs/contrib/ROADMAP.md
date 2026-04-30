@@ -164,19 +164,16 @@ MiMa (§3.1) was originally on this list; it is now scheduled for the
 Final hardening before tagging `v1.0.0`. These are not new feature
 tracks; they are release-quality gates for the current library surface.
 
-### 4.1 User-visible error path
+### 4.1 User-visible error path — ☑ landed
 
-`Cmd.TermFlowErrorCmd` must be visible in the default runtime/renderer
-path. Validation failures, rejected prompt input, and async failures
-should render a deterministic transient error view (or documented
-equivalent) instead of disappearing.
-
-Acceptance:
-
-- Default `TuiRuntime.run(..., SimpleANSIRenderer())` surfaces
-  `TermFlowError` to the user.
-- Testkit can assert the same error path without a real terminal.
-- Docs describing validation/error behaviour match the implementation.
+`Cmd.TermFlowErrorCmd` now reaches the user. `SimpleANSIRenderer`
+overlays a red, bold banner across the top row of the next frame and
+clears it on the following render — long messages truncate with an
+ellipsis. `SimpleANSIRendererSpec` covers banner content, styling,
+truncation, and frame immutability. `TuiTestDriver.observedErrors`
+gives tests the same assertion path without a real terminal. The
+app-layer guide has a new "How errors reach the user" section that
+shows the rendered banner and the testkit hook.
 
 ### 4.2 Version and release-doc sweep
 
@@ -206,20 +203,17 @@ Acceptance:
 - Migration notes list every known user-visible API adjustment, or
   explicitly say no migration is required.
 
-### 4.4 Layout ergonomics audit
+### 4.4 Layout ergonomics audit — ☑ landed
 
-Review the final layout API for common misuse before 1.0 locks it in.
-In particular, make the distinction between eager `Layout.resolve` /
-`toRootNode` and budget-aware `RootNode(layout = Some(...))` obvious
-enough that users do not accidentally disable `Fill`/resize behaviour.
-
-Acceptance:
-
-- Either `Layout.toRootNode` preserves budget-aware layout semantics,
-  or docs/examples make the eager-vs-deferred distinction explicit.
-- At least one tutorial or cookbook recipe demonstrates the preferred
-  full-screen/resizable layout pattern.
-- Golden or unit tests cover the intended public pattern.
+`Layout.toBudgetedRootNode(width, height, input)` now expresses the
+deferred form alongside the existing eager `toRootNode`, putting the
+layout into `RootNode.layout` so the renderer resolves it against the
+frame's full budget at render time. `toRootNode` keeps its eager
+semantics; its Scaladoc flags the trap and points at the budgeted form.
+A new cookbook recipe (`full-screen-layout.md`) walks the header / fill
+/ footer pattern, the eager-vs-deferred trade-off, and the both-fields
+composition seam. `LayoutSpec` covers both forms with a Fill-collapses
+vs Fill-expands comparison.
 
 ### 4.5 Rolling console / agent UI recipe
 
@@ -240,22 +234,17 @@ Acceptance:
 - Link the recipe from the install/intro path or widgets guide so LLM
   and command-runner app authors can find it quickly.
 
-### 4.6 Mouse-wheel scrolling for LogView-style views
+### 4.6 Mouse-wheel scrolling for LogView-style views — ☑ landed
 
-Mouse wheel input is already decoded as `InputKey.Mouse(MouseEvent.Scroll(...))`.
-The rolling-console path should demonstrate and, where useful, smooth
-over the app wiring needed to turn that into `scrollOffset` changes.
-
-Acceptance:
-
-- `chatDemo` handles mouse-wheel up/down over the transcript pane.
-- Add a small helper or documented pattern for mapping
-  `MouseEvent.Scroll` to `LogView` scroll deltas while ignoring scrolls
-  outside the target viewport.
-- Add deterministic test coverage using `MouseSim.scrollUp` /
-  `MouseSim.scrollDown`.
-- The docs mention keyboard equivalents for environments where mouse
-  reporting is unavailable.
+`LogView.scrollDelta(event, viewport, ticksPerDetent)` plus
+`LogView.Viewport(at, width, height)` map a `MouseEvent.Scroll` onto a
+clamp-friendly scroll delta when the wheel lands inside the viewport,
+returning `None` for outside-the-rect or non-scroll events. `chatDemo`
+wires it in (3 lines per detent, ignored over prompt / status row).
+`LogViewSpec` exercises every helper branch; `ChatStreamAppSpec` adds
+two `MouseSim.scrollUp` tests for the in-pane and out-of-pane paths.
+The streaming-output cookbook recipe documents the pattern next to the
+keyboard fallbacks.
 
 ### 4.7 Test coverage review and quick wins
 
@@ -404,6 +393,15 @@ Two TermFlow-only wins worth preserving through 1.0:
 
 ## 8. Recent decisions (rolling, last ~3 months)
 
+- *2026-04-30* — Stage 4 §4.1 closed: `SimpleANSIRenderer` now overlays
+  a red, bold banner for `Cmd.TermFlowErrorCmd` and clears it on the
+  next frame; testkit captures the same path via `observedErrors`.
+- *2026-04-30* — Stage 4 §4.4 closed: `Layout.toBudgetedRootNode` is the
+  deferred sibling to the eager `toRootNode`; new full-screen-layout
+  cookbook recipe explains when each form is appropriate.
+- *2026-04-30* — Stage 4 §4.6 closed: `LogView.scrollDelta` +
+  `LogView.Viewport` give apps a one-call hook for mouse-wheel
+  scrollback; wired into `chatDemo` and covered with `MouseSim`.
 - *2026-04-30* — Terminal-attention notifications shipped:
   `Cmd.RequestAttention` and `Cmd.Notify(title, body)` with detection for
   iTerm2 (OSC 9 / 1337), kitty (OSC 99), VTE (OSC 777), and a BEL

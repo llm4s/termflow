@@ -118,8 +118,8 @@ def view(m: Model): RootNode =
   never shows them. Adding a `showHidden: Boolean` to `PickerState`
   is straightforward.
 - **Read the file inside `FileChosen`** if it's small. For larger
-  loads, return `Cmd.FCmd(Future { … }, Msg.LoadDone.apply)` and
-  treat it as async work — the
+  loads, hand it to `Cmd.asyncResult(future, Msg.LoadDone.apply,
+  Msg.LoadFailed.apply)` and treat it as async work — the
   [Async tutorial](../tut/03-async.md) covers the pattern.
 - **Symlink loops** are not detected by `listDir` above — guard with
   `Files.readAttributes(..., LinkOption.NOFOLLOW_LINKS)` if you walk

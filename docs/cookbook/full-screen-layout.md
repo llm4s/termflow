@@ -57,11 +57,8 @@ object App extends TuiApp[Model, Msg]:
     val body   = TextNode(1.x, 1.y, List(m.log.lastOption.getOrElse("(idle)").text))
     val footer = TextNode(1.x, 1.y, List(s" ${m.width}×${m.height}  q: quit ".text))
 
-    Layout.column(gap = 0)(
-      header,
-      // Fill takes the rest of the column once header / footer are sized.
-      // Outside toBudgetedRootNode this would collapse to zero rows.
-    )
+    // Fill takes the rest of the column once header / footer are sized.
+    // Without toBudgetedRootNode the Fill region would collapse to zero rows.
     val layout = Layout.Column(
       gap = 0,
       children = List(

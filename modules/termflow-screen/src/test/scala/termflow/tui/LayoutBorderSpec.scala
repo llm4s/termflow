@@ -89,6 +89,34 @@ class LayoutBorderSpec extends AnyFunSuite:
     assert(ys.contains(5))
     assert(!ys.contains(3))
 
+  test("Border resolves at natural size when no width/height budget is given"):
+    // Calling resolveTo with availableWidth/availableHeight = -1 falls back to
+    // the natural-size path inside resolveBorder (and exercises measureBorder
+    // for the band totals).
+    val b = Layout.border(
+      top = Layout.Elem(tn("TT")),      // (2, 1)
+      left = Layout.Elem(tn("LL")),     // (2, 1)
+      center = Layout.Elem(tn("CCCC")), // (4, 1)
+      right = Layout.Elem(tn("RR")),    // (2, 1)
+      bottom = Layout.Elem(tn("BBBB")), // (4, 1)
+      gap = 1
+    )
+    val nodes = Layout.resolveTo(b, Coord(1.x, 1.y), availableWidth = -1, availableHeight = -1)
+    val ys    = nodes.collect { case t: TextNode => t.y.value }.toSet
+    // top at row 1; gap row 2; mid row 3; gap row 4; bottom row 5.
+    assert(ys.contains(1))
+    assert(ys.contains(3))
+    assert(ys.contains(5))
+
+  test("measureBorder returns (0, 0) for an entirely empty border"):
+    assert(Layout.border().measure == (0, 0))
+
+  test("Layout.resolve uses default origin (1, 1)"):
+    // Hits the resolve$default$1 synthetic accessor on the trait method.
+    val nodes  = Layout.Elem(tn("hi")).resolve()
+    val coords = nodes.collect { case t: TextNode => (t.x.value, t.y.value) }
+    assert(coords == List((1, 1)))
+
   test("Border respects the gap between top, middle, and bottom bands"):
     val b = Layout.border(
       top = Layout.Elem(tn("T")),

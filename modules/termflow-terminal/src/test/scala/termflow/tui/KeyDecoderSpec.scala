@@ -54,3 +54,10 @@ class KeyDecoderSpec extends AnyFunSuite:
     assert(KeyDecoder.decode(127) == InputKey.Backspace)
     // Code 128 is beyond printable
     assert(KeyDecoder.decode(128) == InputKey.Unknown("128"))
+
+  test("Modifiers.isEmpty / nonEmpty are mutually exclusive"):
+    assert(KeyDecoder.Modifiers.none.isEmpty)
+    assert(!KeyDecoder.Modifiers.none.nonEmpty)
+    val held = KeyDecoder.Modifiers(ctrl = true)
+    assert(!held.isEmpty)
+    assert(held.nonEmpty)

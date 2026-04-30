@@ -56,3 +56,31 @@ class NotificationEscapesSpec extends AnyFunSuite:
     val seq = NotificationEscapes.notifyFor(NotificationKind.Vte, s"a${ESC}b", s"c${BEL}d").get
     assert(seq == s"${ESC}]777;notify;ab;cd${BEL}")
   }
+
+  test("attentionFor Kitty emits BEL") {
+    assert(NotificationEscapes.attentionFor(NotificationKind.Kitty).contains(BEL))
+  }
+
+  test("attentionFor Vte emits BEL") {
+    assert(NotificationEscapes.attentionFor(NotificationKind.Vte).contains(BEL))
+  }
+
+  test("notifyFor ITerm2 omits the colon when body is empty") {
+    val seq = NotificationEscapes.notifyFor(NotificationKind.ITerm2, "Build", "").get
+    assert(seq == s"${ESC}]9;Build${BEL}")
+  }
+
+  test("notifyFor Kitty uses just the body when title is empty") {
+    val seq = NotificationEscapes.notifyFor(NotificationKind.Kitty, "", "ping").get
+    // Empty metadata before the second `;`, body in the payload slot.
+    assert(seq == s"${ESC}]99;;ping${ST}")
+  }
+
+  test("notifyFor Kitty uses the title as the payload when body is empty") {
+    val seq = NotificationEscapes.notifyFor(NotificationKind.Kitty, "Build", "").get
+    assert(seq.contains("p=title;Build"))
+    assert(seq.endsWith(ST))
+    // Metadata carries `p=title;Build`, then a final `;` separates payload —
+    // which is the title again because body was empty.
+    assert(seq.endsWith(s";Build$ST"))
+  }

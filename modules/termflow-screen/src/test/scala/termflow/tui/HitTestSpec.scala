@@ -47,6 +47,21 @@ class HitTestSpec extends AnyFunSuite:
     // b is later — should win on overlap.
     assert(merged.hit(3, 3).contains("b"))
 
+  test("Rect.at returns the top-left as a Coord"):
+    val r = Rect(x = 3, y = 7, width = 5, height = 2)
+    assert(r.at == Coord(XCoord(3), YCoord(7)))
+
+  test("HitTest.add with origin/width/height delegates to Rect.at"):
+    val reg = HitTest.empty[String].add("zone", Coord(XCoord(2), YCoord(3)), 4, 5)
+    assert(reg.size == 1)
+    assert(reg.hit(2, 3).contains("zone"))
+    assert(reg.hit(5, 7).contains("zone"))
+    assert(reg.hit(6, 7).isEmpty)
+
+  test("HitTest.isEmpty reports true on a fresh registry, false after add"):
+    assert(HitTest.empty[String].isEmpty)
+    assert(!HitTest.empty[String].add("a", Rect(1, 1, 1, 1)).isEmpty)
+
   // --- Layout.Zone --------------------------------------------------------
 
   private def tn(text: String): TextNode =

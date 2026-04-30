@@ -211,3 +211,107 @@ class ConsoleKeyPressSourceSpec extends AnyFunSuite:
     assert(Modifiers.fromXtermCode(0) == Modifiers.none)
     assert(Modifiers.fromXtermCode(1) == Modifiers.none)
     assert(Modifiers.fromXtermCode(99) == Modifiers.none)
+
+  // ---- SS3 sequences (ESC O <letter>) ----
+
+  test("decodes SS3 F1..F4 (ESC O P/Q/R/S)"):
+    assert(decode("OP") == InputKey.F1)
+    assert(decode("OQ") == InputKey.F2)
+    assert(decode("OR") == InputKey.F3)
+    assert(decode("OS") == InputKey.F4)
+
+  test("decodes SS3 Home / End (ESC O H / ESC O F)"):
+    assert(decode("OH") == InputKey.Home)
+    assert(decode("OF") == InputKey.End)
+
+  test("unrecognised SS3 letter is reported as Unknown"):
+    decode("OZ") match
+      case InputKey.Unknown(_) => ()
+      case other               => fail(s"expected Unknown, got $other")
+
+  test("SS3 with no following byte (truncated) decodes as Escape"):
+    // Bare ESC O with no follow-up byte falls through the SS3 timeout
+    // and should surface as Escape (the standalone-ESC fallback).
+    val src = ConsoleKeyPressSource(new StringReader("O"))
+    try
+      // Two reads possible: Escape (from standalone-ESC), then End or
+      // similar for the trailing 'O'. We just check the first.
+      val first = src.next()
+      first match
+        case InputRead.Key(InputKey.Escape) => ()
+        case other                          => fail(s"expected Escape from truncated SS3, got $other")
+    finally
+      assert(src.close().isSuccess)
+      ()
+
+  // ---- CSI F1..F4 with letter final byte ----
+
+  test("decodes F1..F4 via the CSI letter form (CSI 1;<mod> P/Q/R/S)"):
+    assert(decode("[P") == InputKey.F1)
+    assert(decode("[Q") == InputKey.F2)
+    assert(decode("[R") == InputKey.F3)
+    assert(decode("[S") == InputKey.F4)
+    assert(decode("[1;2P") == InputKey.Modified(InputKey.F1, KeyDecoder.Modifiers(shift = true)))
+
+  // ---- All CSI tilde keys ----
+
+  test("decodes the full CSI ~ table (Home, Insert, PageUp/Down, F1..F12)"):
+    val cases: Seq[(String, KeyDecoder.InputKey)] = Seq(
+      "[1~"  -> InputKey.Home,
+      "[7~"  -> InputKey.Home,
+      "[2~"  -> InputKey.Insert,
+      "[3~"  -> InputKey.Delete,
+      "[4~"  -> InputKey.End,
+      "[8~"  -> InputKey.End,
+      "[5~"  -> InputKey.PageUp,
+      "[6~"  -> InputKey.PageDown,
+      "[11~" -> InputKey.F1,
+      "[12~" -> InputKey.F2,
+      "[13~" -> InputKey.F3,
+      "[14~" -> InputKey.F4,
+      "[15~" -> InputKey.F5,
+      "[17~" -> InputKey.F6,
+      "[18~" -> InputKey.F7,
+      "[19~" -> InputKey.F8,
+      "[20~" -> InputKey.F9,
+      "[21~" -> InputKey.F10,
+      "[23~" -> InputKey.F11,
+      "[24~" -> InputKey.F12
+    )
+    cases.foreach { case (input, expected) =>
+      assert(decode(input) == expected, s"input ${input.replace("", "ESC")} expected $expected")
+    }
+
+  test("CSI tilde with an unknown number is reported as Unknown"):
+    decode("[99~") match
+      case InputKey.Unknown(_) => ()
+      case other               => fail(s"expected Unknown, got $other")
+
+  // ---- Other CSI / unknown finals ----
+
+  test("CSI with an unrecognised final byte is reported as Unknown"):
+    decode("[99X") match
+      case InputKey.Unknown(_) => ()
+      case other               => fail(s"expected Unknown, got $other")
+
+  test("CSI with a non-standard prefix (?, >, !) is reported as Unknown"):
+    decode("[?1;2c") match
+      case InputKey.Unknown(_) => ()
+      case other               => fail(s"expected Unknown, got $other")
+
+  // ---- Paste content reaching EOF before the end marker ----
+
+  test("end-of-stream during paste collection flushes any partial match"):
+    // Stream ends inside what looked like the start of an end marker:
+    // the partial-match prefix should be flushed into the paste payload,
+    // and the source must surface InputRead.End next.
+    val src = ConsoleKeyPressSource(new StringReader("[200~hi[20"))
+    try
+      val read = src.next()
+      read match
+        case InputRead.Key(InputKey.Paste(content)) =>
+          assert(content.startsWith("hi"))
+        case other => fail(s"expected Paste, got $other")
+    finally
+      assert(src.close().isSuccess)
+      ()

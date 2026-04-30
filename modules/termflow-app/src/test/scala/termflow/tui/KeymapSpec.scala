@@ -114,6 +114,71 @@ class KeymapSpec extends AnyFunSuite:
     val mods = KeyDecoder.Modifiers(shift = true, alt = false, ctrl = true, meta = false)
     assert(Keymap.renderKey(InputKey.Modified(InputKey.Tab, mods)) == "S-C-Tab")
 
+  test("renderKey produces readable strings for every navigation / function key"):
+    assert(Keymap.renderKey(InputKey.Enter) == "Enter")
+    assert(Keymap.renderKey(InputKey.Escape) == "Esc")
+    assert(Keymap.renderKey(InputKey.Backspace) == "Backspace")
+    assert(Keymap.renderKey(InputKey.Delete) == "Delete")
+    assert(Keymap.renderKey(InputKey.Insert) == "Insert")
+    assert(Keymap.renderKey(InputKey.Home) == "Home")
+    assert(Keymap.renderKey(InputKey.End) == "End")
+    assert(Keymap.renderKey(InputKey.PageUp) == "PageUp")
+    assert(Keymap.renderKey(InputKey.PageDown) == "PageDown")
+    assert(Keymap.renderKey(InputKey.ArrowUp) == "Up")
+    assert(Keymap.renderKey(InputKey.ArrowDown) == "Down")
+    assert(Keymap.renderKey(InputKey.ArrowLeft) == "Left")
+    assert(Keymap.renderKey(InputKey.ArrowRight) == "Right")
+    assert(Keymap.renderKey(InputKey.F1) == "F1")
+    assert(Keymap.renderKey(InputKey.F2) == "F2")
+    assert(Keymap.renderKey(InputKey.F3) == "F3")
+    assert(Keymap.renderKey(InputKey.F4) == "F4")
+    assert(Keymap.renderKey(InputKey.F5) == "F5")
+    assert(Keymap.renderKey(InputKey.F6) == "F6")
+    assert(Keymap.renderKey(InputKey.F7) == "F7")
+    assert(Keymap.renderKey(InputKey.F8) == "F8")
+    assert(Keymap.renderKey(InputKey.F9) == "F9")
+    assert(Keymap.renderKey(InputKey.F10) == "F10")
+    assert(Keymap.renderKey(InputKey.F11) == "F11")
+    assert(Keymap.renderKey(InputKey.F12) == "F12")
+    assert(Keymap.renderKey(InputKey.Paste("anything")) == "Paste")
+    assert(
+      Keymap.renderKey(InputKey.Mouse(MouseEvent.Press(MouseButton.Left, 1, 1, KeyDecoder.Modifiers()))) ==
+        "Mouse"
+    )
+
+  test("renderKey on a Modified wrapper with no modifiers unwraps to the inner key"):
+    val empty = KeyDecoder.Modifiers()
+    assert(Keymap.renderKey(InputKey.Modified(InputKey.Home, empty)) == "Home")
+
+  test("ChordKeymap.bind on an empty sequence returns the receiver unchanged"):
+    val km    = ChordKeymap.empty[DemoMsg]
+    val again = km.bind(Vector.empty[InputKey], DemoMsg.Quit)
+    assert(again eq km)
+
+  test("ModalKeymap.withMode replaces or extends the keymap for that mode"):
+    enum Mode:
+      case Normal, Edit
+    val k1 = ChordKeymap.empty[DemoMsg].bind(InputKey.CharKey('a'), DemoMsg.A)
+    val k2 = ChordKeymap.empty[DemoMsg].bind(InputKey.CharKey('b'), DemoMsg.B)
+    val mk = ModalKeymap.empty[Mode, DemoMsg].withMode(Mode.Normal, k1).withMode(Mode.Edit, k2)
+    assert(mk.helpEntries(Mode.Normal).map(_._2) == List(DemoMsg.A))
+    assert(mk.helpEntries(Mode.Edit).map(_._2) == List(DemoMsg.B))
+
+  test("KeymapHelp.overlay renders a centered title plus per-chord rows"):
+    val km = ChordKeymap
+      .empty[DemoMsg]
+      .bind(InputKey.Ctrl('C'), DemoMsg.Quit)
+      .bind(Vector(InputKey.Ctrl('X'), InputKey.Ctrl('S')), DemoMsg.A)
+    given Theme = Theme.dark
+    val ov = KeymapHelp.overlay(
+      title = "Help",
+      chords = km,
+      describe = (msg: DemoMsg) => msg.toString
+    )
+    assert(ov.position == OverlayPosition.Centered)
+    assert(ov.width >= "Help".length + 4)
+    assert(ov.height >= 4)
+
   test("layered keymaps form a baseline plus app-specific overrides"):
     val baseline = Keymap.quit(DemoMsg.Quit) ++
       Keymap.focus(next = DemoMsg.NextFocus, previous = DemoMsg.A)

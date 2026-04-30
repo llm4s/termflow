@@ -55,3 +55,23 @@ class WCWidthSpec extends AnyFunSuite:
     assert(rocket.length == 2)               // two Java chars
     assert(WCWidth.stringWidth(rocket) == 2) // one wide column pair
   }
+
+  test("the NUL code point reports width 0 (no rendering)") {
+    assert(WCWidth.codePointWidth(0) == 0)
+  }
+
+  test("charWidth treats surrogate halves as width 1") {
+    val rocket = Character.toChars(0x1f680)
+    // High and low surrogates of U+1F680. In isolation each reports 1
+    // because the renderer cannot resolve the supplementary code point
+    // from a single Char.
+    assert(WCWidth.charWidth(rocket(0)) == 1)
+    assert(WCWidth.charWidth(rocket(1)) == 1)
+  }
+
+  test("charWidth on a BMP character delegates to codePointWidth") {
+    assert(WCWidth.charWidth('A') == 1)
+    assert(WCWidth.charWidth('中') == 2)
+    assert(WCWidth.charWidth(0x07.toChar) == -1)
+    assert(WCWidth.charWidth(0x0301.toChar) == 0) // combining acute
+  }

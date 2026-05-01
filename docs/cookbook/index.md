@@ -12,6 +12,9 @@ TermFlow APIs and (where possible) a sample app you can run.
 - **[Stream output into a scrollback view](streaming-output.md)** —
   `widgets.LogView`, append-and-tail buffering, auto-tail vs. paused
   scroll.
+- **[Build a rolling console / agent UI](rolling-console.md)** —
+  Claude-Code-style transcript with a pinned bottom prompt, auto-tail,
+  pause-on-scroll-up, mouse-wheel scrollback, bounded history.
 - **[Pause and resume a `Sub.Every` timer](timer-pause-resume.md)** —
   cancel + recreate, `Sub.NoSub` placeholder, interval changes.
 - **[Open a file picker and load the result](file-picker.md)** —

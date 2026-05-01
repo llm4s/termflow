@@ -31,6 +31,7 @@
 - [Index](cookbook/index.md)
 - [Show a confirm dialog](cookbook/confirm-dialog.md)
 - [Stream output into a scrollback view](cookbook/streaming-output.md)
+- [Build a rolling console / agent UI](cookbook/rolling-console.md)
 - [Pause and resume a timer](cookbook/timer-pause-resume.md)
 - [Open a file picker](cookbook/file-picker.md)
 - [Draggable splitter](cookbook/split-pane-drag.md)

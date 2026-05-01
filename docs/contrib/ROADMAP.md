@@ -168,8 +168,8 @@ For 1.0:
   additive-changes catalogue (§3.5 / §4.3).
 - ☑ README headline screenshot is the llm4s chat client (§3.3 — demo
   hosted in `llm4s`, screenshot + link in this README).
-- ☐ Pre-1.0 release-hardening checklist complete (§4) — §4.2, §4.5
-  still open.
+- ☐ Pre-1.0 release-hardening checklist complete (§4) — §4.2 still
+  open.
 
 MiMa (§3.1) was originally on this list; it is now scheduled for the
 1.0.1 / 1.1.0 cycle with `1.0.0` as the baseline.
@@ -233,24 +233,20 @@ A new cookbook recipe (`full-screen-layout.md`) walks the header / fill
 composition seam. `LayoutSpec` covers both forms with a Fill-collapses
 vs Fill-expands comparison.
 
-### 4.5 Rolling console / agent UI recipe
+### 4.5 Rolling console / agent UI recipe — ☑ landed
 
-TermFlow should make the Claude Code / Cursor-style transcript pattern
-obvious: execution history scrolls upward, new output auto-tails while
-the user is at the bottom, and the prompt remains fixed at the bottom
-of the viewport.
-
-Acceptance:
-
-- Add a cookbook recipe for a rolling console / agent UI built from
-  `widgets.LogView`, `Prompt`, and a bottom-row `InputNode`.
-- Document the supported model clearly: TermFlow owns an in-app
-  scrollback viewport in the alternate buffer; native terminal
-  scrollback is not the default runtime behaviour.
-- The recipe covers auto-tail, pausing auto-tail when the user scrolls
-  up, resuming with `End`, and bounding retained history.
-- Link the recipe from the install/intro path or widgets guide so LLM
-  and command-runner app authors can find it quickly.
+`docs/cookbook/rolling-console.md` walks the Claude-Code / Cursor-style
+transcript pattern end-to-end: model shape (`Vector[String]` buffer +
+`scrollOffset` + `autoTail`), auto-tail logic, key routing (Arrow /
+PageUp / PageDown / `End` / Ctrl+C), mouse-wheel scrollback through
+`LogView.scrollDelta`, view composition with `LogView` + an `InputNode`
+prompt, and the `Layout.Border` alternative for resize-clean layouts.
+The recipe is explicit that TermFlow owns an in-app scrollback viewport
+inside the alternate buffer; native terminal scrollback is the post-1.0
+§5.3 idea, not the default runtime contract. Linked from
+`docs/cookbook/index.md`, `docs/SUMMARY.md`, and the `LogView` section
+of the widgets guide. `ChatStreamApp` (`sbt chatDemo`) is the live
+worked example referenced from the recipe.
 
 ### 4.6 Mouse-wheel scrolling for LogView-style views — ☑ landed
 
@@ -473,6 +469,12 @@ Two TermFlow-only wins worth preserving through 1.0:
   now leads with the screenshot (`docs/assets/chat-ui-screenshot.png`)
   and links to the source. The §3.6 DoD's "README headline screenshot"
   box is ticked.
+- *2026-04-30* — Stage 4 §4.5 closed: rolling-console / agent-UI
+  cookbook recipe landed at `docs/cookbook/rolling-console.md`. Walks
+  the buffer + `scrollOffset` + `autoTail` pattern with key routing,
+  mouse-wheel scrollback, and bounded history; `ChatStreamApp` is the
+  worked example. Native terminal scrollback explicitly stays a
+  post-1.0 §5.3 idea, not the default contract.
 - *2026-04-30* — Stage 4 §4.9 closed: reduced-motion flag landed.
   `TERMFLOW_REDUCED_MOTION` env var (and HOCON
   `termflow.accessibility.reduced-motion`) flows through

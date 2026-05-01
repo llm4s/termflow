@@ -185,6 +185,10 @@ val node = widgets.LogView(
 Use `LogView.maxScroll(lines, width, height, wrap)` when the user
 scrolls so you clamp the offset correctly.
 
+For a Claude-Code / Cursor-style transcript with a fixed bottom prompt
+and auto-tail behaviour, see the [rolling console
+recipe](../cookbook/rolling-console.md).
+
 ## Layout
 
 ### Tabs

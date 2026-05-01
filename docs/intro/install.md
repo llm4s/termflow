@@ -11,7 +11,7 @@ TermFlow is published to Maven Central. You'll need:
 ## sbt
 
 ```scala
-libraryDependencies += "org.llm4s" %% "termflow" % "0.2.0"
+libraryDependencies += "org.llm4s" %% "termflow" % "0.4.0"
 ```
 
 The `termflow` umbrella pulls in all four modules. To depend on a single
@@ -19,17 +19,17 @@ layer instead:
 
 ```scala
 libraryDependencies ++= Seq(
-  "org.llm4s" %% "termflow-terminal" % "0.2.0",
-  "org.llm4s" %% "termflow-screen"   % "0.2.0",
-  "org.llm4s" %% "termflow-app"      % "0.2.0",
-  "org.llm4s" %% "termflow-widgets"  % "0.2.0"
+  "org.llm4s" %% "termflow-terminal" % "0.4.0",
+  "org.llm4s" %% "termflow-screen"   % "0.4.0",
+  "org.llm4s" %% "termflow-app"      % "0.4.0",
+  "org.llm4s" %% "termflow-widgets"  % "0.4.0"
 )
 ```
 
 For tests, add the testkit on the test classpath:
 
 ```scala
-libraryDependencies += "org.llm4s" %% "termflow-testkit" % "0.2.0" % Test
+libraryDependencies += "org.llm4s" %% "termflow-testkit" % "0.4.0" % Test
 ```
 
 ## Scala versions

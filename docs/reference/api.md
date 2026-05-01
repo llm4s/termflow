@@ -9,10 +9,10 @@ The Scaladoc covers the four published modules:
 
 | Module | Coordinates |
 |---|---|
-| `termflow-terminal` | `org.llm4s::termflow-terminal:0.2.0` |
-| `termflow-screen`   | `org.llm4s::termflow-screen:0.2.0`   |
-| `termflow-app`      | `org.llm4s::termflow-app:0.2.0`      |
-| `termflow-widgets`  | `org.llm4s::termflow-widgets:0.2.0`  |
+| `termflow-terminal` | `org.llm4s::termflow-terminal:0.4.0` |
+| `termflow-screen`   | `org.llm4s::termflow-screen:0.4.0`   |
+| `termflow-app`      | `org.llm4s::termflow-app:0.4.0`      |
+| `termflow-widgets`  | `org.llm4s::termflow-widgets:0.4.0`  |
 
 Plus the umbrella `termflow` artefact that depends on all four, and the
 `termflow-testkit` artefact for testing.

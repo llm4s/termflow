@@ -1,9 +1,9 @@
 # Migration notes
 
-> **0.2.0 / 0.3.0 → 1.0 — no migration required.** TermFlow 1.0 is
-> source-compatible with 0.2.x / 0.3.x. Apps that compiled and ran
-> against either pre-1.0 release should compile and run against 1.0
-> unchanged.
+> **0.2.0 / 0.3.0 / 0.4.0 → 1.0 — no migration required.** TermFlow 1.0
+> is source-compatible with the 0.2.x / 0.3.x / 0.4.x line. Apps that
+> compiled and ran against any pre-1.0 release should compile and run
+> against 1.0 unchanged.
 
 The pre-1.0 cycle deliberately froze the public API surface; every
 landing in the 0.2.x → 1.0 window has been additive. The list below
@@ -67,6 +67,16 @@ a clamp-friendly scroll delta when the wheel lands inside the
 viewport, returning `None` for outside-the-rect or non-scroll events.
 Wired into the `chatDemo` sample; covered in the
 [streaming-output cookbook](../cookbook/streaming-output.md).
+
+### Reduced-motion flag
+
+`TermFlowConfig.accessibility.reducedMotion` (resolved from the
+`TERMFLOW_REDUCED_MOTION` env var or HOCON
+`termflow.accessibility.reduced-motion`) lets apps suppress cosmetic
+animation. `Spinner` accepts a `reducedMotion: Boolean` parameter that
+pins it to `frames(0)` when true; apps can read the flag for their
+own animation budgets. See the
+[accessibility guide](../guide/accessibility.md).
 
 ## Post-1.0 — when MiMa lights up
 

@@ -11,7 +11,7 @@
 - a **theme** model with semantic colour slots and box-drawing chars.
 
 ```scala
-libraryDependencies += "org.llm4s" %% "termflow-screen" % "0.2.0"
+libraryDependencies += "org.llm4s" %% "termflow-screen" % "0.4.0"
 ```
 
 You reach for the screen layer directly when you want a draw surface

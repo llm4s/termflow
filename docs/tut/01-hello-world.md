@@ -26,7 +26,7 @@ hello-termflow/
 ```scala
 ThisBuild / scalaVersion := "3.7.1"
 
-libraryDependencies += "org.llm4s" %% "termflow" % "0.2.0"
+libraryDependencies += "org.llm4s" %% "termflow" % "0.4.0"
 ```
 
 If you've never used sbt before, install it via

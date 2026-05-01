@@ -7,7 +7,7 @@ testing, and provides `KeySim` / `MouseSim` constructors so you don't
 have to hand-build `KeyDecoder.InputKey` values in test code.
 
 ```scala
-libraryDependencies += "org.llm4s" %% "termflow-testkit" % "0.2.0" % Test
+libraryDependencies += "org.llm4s" %% "termflow-testkit" % "0.4.0" % Test
 ```
 
 ## TuiTestDriver

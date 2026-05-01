@@ -6,7 +6,7 @@ you need to build a real interactive program: focus management,
 keymaps, prompts, modal dialogs, async commands, timer subscriptions.
 
 ```scala
-libraryDependencies += "org.llm4s" %% "termflow" % "0.2.0"
+libraryDependencies += "org.llm4s" %% "termflow" % "0.4.0"
 ```
 
 The umbrella `termflow` artefact pulls in the whole stack. Most apps

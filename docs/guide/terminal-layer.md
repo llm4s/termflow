@@ -8,7 +8,7 @@ and switching to the alternate buffer. You reach for the terminal
 layer when those abstractions are in the way.
 
 ```scala
-libraryDependencies += "org.llm4s" %% "termflow-terminal" % "0.2.0"
+libraryDependencies += "org.llm4s" %% "termflow-terminal" % "0.4.0"
 ```
 
 ## When to use it directly

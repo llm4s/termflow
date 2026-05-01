@@ -26,7 +26,7 @@ itself.
 ## Quick start
 
 ```scala
-libraryDependencies += "org.llm4s" %% "termflow" % "0.2.0"
+libraryDependencies += "org.llm4s" %% "termflow" % "0.4.0"
 ```
 
 Then follow [What is TermFlow?](https://llm4s.github.io/termflow/intro/what-is-termflow.html)

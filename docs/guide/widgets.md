@@ -6,7 +6,7 @@ follows the same `(State, handleKey, view)` shape, and takes a
 `given Theme` so it picks up your colour scheme.
 
 ```scala
-libraryDependencies += "org.llm4s" %% "termflow-widgets" % "0.2.0"
+libraryDependencies += "org.llm4s" %% "termflow-widgets" % "0.4.0"
 ```
 
 The umbrella `termflow` artefact already depends on this module —

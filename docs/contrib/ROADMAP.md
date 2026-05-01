@@ -1,14 +1,18 @@
 # TermFlow Roadmap
 
-> Status: 2026-04-30 · Current release: **0.2.0** · Working towards **1.0**.
+> Status: 2026-05-01 · Current release: **0.4.0** · Working towards **1.0**.
 >
-> Stages 1–3 are complete. Stage 4 (1.0 stabilisation) is in progress —
-> §3.2 (sample apps) and §3.4 (Grid + Border layouts) have landed; the
-> killer demo, the migration guide, and the pre-1.0 release-hardening
-> checklist (§4) remain. MiMa (§3.1) was deferred to the post-1.0 cycle
-> (baseline = 1.0.0).
-> This document is forward-looking: it describes the work *left*, not the
-> history of the work *done*.
+> Stages 1–3 are complete. Stage 4 (1.0 stabilisation) is nearly done:
+> §3.2 (sample apps), §3.3 (killer demo, hosted in `llm4s`), §3.4 (Grid
+> + Border layouts), and §3.5 (migration guide — "no migration needed
+> for 0.2.x → 1.0") have all landed, and §4.1 / §4.3 / §4.4 / §4.5 /
+> §4.6 / §4.7 / §4.8 / §4.9 / §4.10 of the pre-1.0 release-hardening
+> checklist are closed. **§4.2 (release-doc sweep) is the last open
+> item before cutting `v1.0.0-RC1`.** MiMa (§3.1) was deferred to the
+> post-1.0 cycle (baseline = 1.0.0).
+>
+> This document is forward-looking: it describes the work *left*, not
+> the history of the work *done*.
 
 ---
 
@@ -34,7 +38,7 @@ offers.
 
 ---
 
-## 2. Current state (0.2.0)
+## 2. Current state (0.4.0)
 
 What ships today:
 
@@ -66,8 +70,10 @@ What ships today:
   stress, sine, hub, input, tabs, task, catalog, widgets, showcase,
   tree, editor, chat.
 - **Docs site** — live at `https://llm4s.github.io/termflow` with
-  Introduction, four tutorials, seven layer guides, nine cookbook
-  recipes, and aggregated Scaladoc.
+  Introduction, four tutorials, eight layer guides (including
+  Accessibility), ten cookbook recipes (including the rolling-console
+  / agent-UI walkthrough), a thread-model reference, and aggregated
+  Scaladoc.
 
 No outstanding architectural debts for 1.0. Remaining work is in §3
 and the pre-1.0 release-hardening checklist in §4.
@@ -168,8 +174,9 @@ For 1.0:
   additive-changes catalogue (§3.5 / §4.3).
 - ☑ README headline screenshot is the llm4s chat client (§3.3 — demo
   hosted in `llm4s`, screenshot + link in this README).
-- ☐ Pre-1.0 release-hardening checklist complete (§4) — §4.2 still
-  open.
+- ☑ Pre-1.0 release-hardening checklist complete (§4) — interim
+  release-doc sweep at 0.4.0 finished §4.2; the final 0.4.0 → 1.0.0
+  bump rides with the release PR itself.
 
 MiMa (§3.1) was originally on this list; it is now scheduled for the
 1.0.1 / 1.1.0 cycle with `1.0.0` as the baseline.
@@ -192,18 +199,29 @@ gives tests the same assertion path without a real terminal. The
 app-layer guide has a new "How errors reach the user" section that
 shows the rendered banner and the testkit hook.
 
-### 4.2 Version and release-doc sweep
+### 4.2 Version and release-doc sweep — ☑ landed (interim 0.4.0 pass)
 
-Before the final release branch/tag, every copy-pasteable coordinate
-and release statement should reflect the intended 1.0 release story.
+Every copy-pasteable coordinate in the published docs has been bumped
+from `0.2.0` to the current released baseline (`0.4.0`): README quick-
+start, all four layer guides, the testkit guide, the install page, the
+Hello-World tutorial, and the API reference module table. Migration
+notes acknowledge `0.2.0 / 0.3.0 / 0.4.0 → 1.0` as the no-migration
+window, and the new reduced-motion entry is catalogued. The roadmap
+headline now reads `Current release: 0.4.0`. Release-instructions still
+describe the `v[0-9]*` tag path, which already covers `v1.0.0`.
 
-Acceptance:
+A second, narrower sweep happens at 1.0 tag time: bump every `0.4.0` →
+`1.0.0`, drop the "no migration needed" wrapper from `migration.md`
+(or re-cast it as historical), and update the §2 "Current state"
+heading. That bump is mechanical — same files, same patterns — and is
+deferred to the release PR rather than landed pre-emptively, so the
+coordinates always reflect what's actually on Maven Central.
 
-- README, install guide, API reference, migration notes, and roadmap
-  agree on the current released baseline and the next target.
-- Release instructions describe the exact tag/workflow path for
-  `v1.0.0`.
-- Any stale `0.2.0` / `0.3.0` examples are intentional and explained.
+Historical mentions of `0.2.0` / `0.3.0` are kept in places where they
+describe the migration story (e.g. early-semver examples in the README,
+the pre-1.0 cycle catalogue in `migration.md`, `0.2.0 → 1.0`
+references in §3.5 / §4.7 of this roadmap) — those are intentional and
+explained in context.
 
 ### 4.3 Public API and docs example audit — ☑ landed
 
@@ -464,6 +482,15 @@ Two TermFlow-only wins worth preserving through 1.0:
 
 ## 8. Recent decisions (rolling, last ~3 months)
 
+- *2026-05-01* — Stage 4 §4.2 closed (interim 0.4.0 pass): every
+  copy-pasteable install coordinate in README + layer guides +
+  tutorials + install page + API reference now reads `0.4.0` instead
+  of `0.2.0`. Migration notes acknowledge `0.2.0 / 0.3.0 / 0.4.0 → 1.0`
+  as the no-migration window. Roadmap headline + §2 heading + cookbook
+  / guide counts updated to reflect the post-§4.5 / §4.10 / a11y
+  state. The final `0.4.0 → 1.0.0` mechanical bump is deferred to the
+  release PR. With this, **§3.6 DoD is complete and 1.0-RC1 is
+  unblocked.**
 - *2026-05-01* — Stage 4 §3.3 closed: the llm4s chat client shipped at
   `modules/samples/.../chat/tui` in the llm4s repo. Termflow's README
   now leads with the screenshot (`docs/assets/chat-ui-screenshot.png`)

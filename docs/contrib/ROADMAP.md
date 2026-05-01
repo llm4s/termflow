@@ -120,48 +120,24 @@ and `chat/` (streaming chat with scrollback per the
 [streaming-output cookbook recipe](../cookbook/streaming-output.md)).
 Catalogue now stands at 22 apps.
 
-### 3.3 Killer demo
+### 3.3 Killer demo — ☑ landed
 
-A working `llm4s` chat client in ~200 lines of TermFlow that surfaces
-streaming, dialogs (tool-call confirmation), theming, mouse-wheel
-scrollback, `Cmd.RequestAttention`, and `Cmd.asyncResult` for tool
-execution. The demo lives in **`llm4s`**, not in this repo: llm4s already
-depends on termflow for its samples, and pulling in an llm4s dependency
-here — even at the demo-module level — would introduce a sibling cycle
-that bites at release time. Decision: 2026-04-30.
+The `llm4s` streaming chat client shipped at
+[`modules/samples/.../chat/tui`](https://github.com/llm4s/llm4s/tree/main/modules/samples/src/main/scala/org/llm4s/samples/chat/tui)
+in the llm4s repo. It exercises the headline TermFlow surface — live
+streaming via the LogView auto-tail pattern, mouse-wheel scrollback,
+slash commands (`/help`, `/clear`, `/theme`), light/dark theme toggle,
+and a pinned bottom prompt — against a real Anthropic-API backend.
 
-For the 1.0 deliverable, termflow's README gets the screenshot and a
-"Built with TermFlow — source at `llm4s/llm4s/.../chat`" link. The
-acceptance criteria stay the same; what moves is *where the source
-lives*, not *what the screenshot shows*.
+Termflow's README now leads with the chat client screenshot
+(`docs/assets/chat-ui-screenshot.png`) plus a "Built with TermFlow —
+source at llm4s/llm4s/.../chat/tui" link, exactly as the §3.6 DoD asks.
 
-App shape (sketch):
-
-- `Layout.Border` shell — header, transcript filling the centre,
-  prompt + status row pinned to the bottom; wrapped in
-  `toBudgetedRootNode` so it reflows on resize.
-- `Cmd.asyncResult` kicks the chat completion; a `Sub.Every` drains
-  streamed tokens into the live assistant entry. Mouse-wheel scroll via
-  `LogView.scrollDelta` (§4.6).
-- One narrow tool — e.g. `read_file(path)`. When the stream emits a
-  tool-call delta, a `Dialogs.confirm("Allow read of <path>?")` modal
-  pauses the run; on accept, the tool runs through `Cmd.asyncResult`
-  and the result feeds back into the model.
-- `Ctrl+T` light/dark toggle, `Cmd.RequestAttention` when a long reply
-  finishes while the user has scrolled away, slash commands
-  (`/quit`, `/clear`, `/model`, `/theme`).
-
-Coordination: open an issue on `llm4s/llm4s` once the §4 hardening
-checklist is closed, so the demo lands against a 1.0-RC of termflow
-rather than a moving target.
-
-Full handover spec — UI sketch, `Model` / `Msg`, streaming pipeline,
-tool-call flow, termflow API surface used, acceptance criteria, file
-layout, testing strategy, and open questions — now lives in the llm4s
-repo at
-[`docs/design/chat-tui-demo-spec.md`](https://github.com/llm4s/llm4s/blob/main/docs/design/chat-tui-demo-spec.md),
-alongside the implementation plan. Open the linked llm4s issue once
-1.0-RC1 is tagged so the demo lands against a stable termflow.
+The original handover spec
+([`docs/design/chat-tui-demo-spec.md`](https://github.com/llm4s/llm4s/blob/main/docs/design/chat-tui-demo-spec.md)
+in llm4s) and the implementation plan that grew out of it remain
+useful reference material; the live source supersedes them as the
+canonical example.
 
 ### 3.4 GridLayout + BorderLayout — ☑ landed
 
@@ -196,7 +172,7 @@ For 1.0:
 - ☑ Migration guide populated — `docs/reference/migration.md` carries
   the explicit "no migration needed for 0.2.x → 1.0" statement plus the
   additive-changes catalogue (§3.5 / §4.3).
-- ☐ README headline screenshot is the llm4s chat client (§3.3 — demo
+- ☑ README headline screenshot is the llm4s chat client (§3.3 — demo
   hosted in `llm4s`, screenshot + link in this README).
 - ☑ Pre-1.0 release-hardening checklist complete (§4) — interim
   release-doc sweep at 0.4.0 finished §4.2; the final 0.4.0 → 1.0.0
@@ -515,6 +491,11 @@ Two TermFlow-only wins worth preserving through 1.0:
   state. The final `0.4.0 → 1.0.0` mechanical bump is deferred to the
   release PR. With this, **§3.6 DoD is complete and 1.0-RC1 is
   unblocked.**
+- *2026-05-01* — Stage 4 §3.3 closed: the llm4s chat client shipped at
+  `modules/samples/.../chat/tui` in the llm4s repo. Termflow's README
+  now leads with the screenshot (`docs/assets/chat-ui-screenshot.png`)
+  and links to the source. The §3.6 DoD's "README headline screenshot"
+  box is ticked.
 - *2026-04-30* — Stage 4 §4.5 closed: rolling-console / agent-UI
   cookbook recipe landed at `docs/cookbook/rolling-console.md`. Walks
   the buffer + `scrollOffset` + `autoTail` pattern with key routing,

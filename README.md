@@ -14,6 +14,15 @@ elevator pitch, install, tutorials, layer guides, cookbook, and Scaladoc.
 This README focuses on building, releasing, and contributing to the repo
 itself.
 
+![termflow chat client](docs/assets/chat-ui-screenshot.png)
+
+> **Built with TermFlow** — the screenshot above is the
+> [`llm4s` chat client](https://github.com/llm4s/llm4s/tree/main/modules/samples/src/main/scala/org/llm4s/samples/chat/tui),
+> a streaming Anthropic-API chat REPL written against this library.
+> Live transcript with auto-tail, mouse-wheel scrollback, light/dark
+> theme toggle, slash commands (`/help`, `/clear`, `/theme`), and a
+> pinned bottom prompt — all in a few hundred lines of TermFlow.
+
 ## Quick start
 
 ```scala

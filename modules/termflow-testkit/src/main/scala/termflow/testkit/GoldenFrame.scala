@@ -42,7 +42,8 @@ object GoldenFrame:
       sb.append(RowPrefix)
       var col = 0
       while col < frame.width do
-        sb.append(frame.cells(row)(col).ch)
+        val cell = frame.cells(row)(col)
+        sb.append(if cell.width == 0 then cell.ch else cell.renderedGlyph)
         col += 1
       sb.append(RowSuffix)
       sb.append(NL)

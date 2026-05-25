@@ -191,6 +191,7 @@ object Keymap:
   def renderKey(k: InputKey): String = k match
     case InputKey.CharKey(c) if c == ' ' => "Space"
     case InputKey.CharKey(c)             => c.toString
+    case InputKey.Supplementary(cp)      => new String(Character.toChars(cp))
     case InputKey.Ctrl(c)                => s"C-${c.toLower}"
     case InputKey.Enter                  => "Enter"
     case InputKey.Escape                 => "Esc"

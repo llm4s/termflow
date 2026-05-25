@@ -2,6 +2,7 @@ package termflow.tui.widgets
 
 import termflow.tui.*
 import termflow.tui.KeyDecoder.InputKey
+import termflow.tui.TuiPrelude.*
 
 /**
  * Multi-line text editor widget.
@@ -104,6 +105,12 @@ object MultiLineInput:
         val newLn  = line.substring(0, s.cursorCol) + ch + line.substring(s.cursorCol)
         (clamp(s.copy(lines = s.lines.updated(s.cursorRow, newLn), cursorCol = newCol)), None)
 
+      case InputKey.Supplementary(cp) =>
+        val chars = new String(Character.toChars(cp))
+        val line  = s.currentLine
+        val newLn = line.substring(0, s.cursorCol) + chars + line.substring(s.cursorCol)
+        (clamp(s.copy(lines = s.lines.updated(s.cursorRow, newLn), cursorCol = s.cursorCol + chars.length)), None)
+
       case InputKey.Enter =>
         val line     = s.currentLine
         val before   = line.substring(0, s.cursorCol)
@@ -184,7 +191,58 @@ object MultiLineInput:
         val newLn  = line.substring(0, s.cursorCol) + '\t' + line.substring(s.cursorCol)
         (clamp(s.copy(lines = s.lines.updated(s.cursorRow, newLn), cursorCol = newCol)), None)
 
+      case InputKey.Paste(text) =>
+        if text.isEmpty then (s, None)
+        else
+          val pasteLines = text.split("\n", -1).toVector
+          val curLine    = s.currentLine
+          val before     = curLine.substring(0, s.cursorCol)
+          val after      = curLine.substring(s.cursorCol)
+          if pasteLines.size == 1 then
+            // Single line: insert inline at cursor.
+            val newLn  = before + pasteLines.head + after
+            val newCol = s.cursorCol + pasteLines.head.length
+            (clamp(s.copy(lines = s.lines.updated(s.cursorRow, newLn), cursorCol = newCol)), None)
+          else
+            // Multiple paste lines: split across rows.
+            val firstLine = before + pasteLines.head
+            val lastLine  = pasteLines.last + after
+            val middle    = pasteLines.drop(1).dropRight(1)
+            val newLines  = s.lines.patch(s.cursorRow, firstLine +: middle :+ lastLine, 1)
+            val newRow    = s.cursorRow + pasteLines.size - 1
+            val newCol    = pasteLines.last.length
+            (clamp(s.copy(lines = newLines, cursorRow = newRow, cursorCol = newCol)), None)
+
       case _ => (s, None)
+
+  /**
+   * Feed a key event into the editor with submit semantics.
+   *
+   * When `key` matches `submitKey`, the full text (`state.text`) is
+   * passed to `toMsg` and the resulting [[Cmd]] is returned. The editor
+   * resets to [[State.empty]]. For all other keys, editing proceeds
+   * identically to the base [[handleKey]].
+   *
+   * @param state     Current editor state.
+   * @param key       The key event to process.
+   * @param submitKey The key that triggers text submission.
+   * @param toMsg     Callback to convert the submitted text into an
+   *                  app message. Return `Left(error)` to surface a
+   *                  [[termflow.tui.TermFlowError]] without submitting.
+   */
+  def handleKey[Msg](state: State, key: InputKey, submitKey: InputKey)(
+    toMsg: String => Result[Msg]
+  ): (State, Option[Cmd[Msg]]) =
+    if key == submitKey then
+      val text = state.text
+      if text.trim.isEmpty then
+        (State.empty, None)
+      else
+        val cmd = toMsg(text).fold(err => Cmd.TermFlowErrorCmd(err), g => Cmd.GCmd(g))
+        (State.empty, Some(cmd))
+    else
+      val (s, _) = handleKey(state, key)
+      (s, None)
 
   /**
    * Render the editor at `(at, width, height)`. Returns a list of

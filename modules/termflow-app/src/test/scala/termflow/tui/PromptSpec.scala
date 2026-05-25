@@ -15,6 +15,12 @@ class PromptSpec extends AnyFunSuite:
     assert(Prompt.render(next) == "a")
     assert(next.cursor == 1)
 
+  test("Supplementary inserts a surrogate pair and advances by two"):
+    val (next, cmd) = Prompt.handleKey[String](Prompt.State(), InputKey.Supplementary(0x1F600))(noopToMsg)
+    assert(cmd.isEmpty)
+    assert(Prompt.render(next) == "😀")
+    assert(next.cursor == 2)
+
   test("Backspace removes the previous character when cursor > 0"):
     val state       = Prompt.State(buffer = Vector('a', 'b'), cursor = 2)
     val (next, cmd) = Prompt.handleKey[String](state, InputKey.Backspace)(noopToMsg)

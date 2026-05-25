@@ -146,13 +146,15 @@ object TextField:
 
       case Backspace =>
         if state.cursor > 0 then
-          val nb = state.buffer.take(state.cursor - 1) + state.buffer.drop(state.cursor)
-          (state.copy(buffer = nb, cursor = state.cursor - 1), None)
+          val prev = Grapheme.previousBoundary(state.buffer, state.cursor)
+          val nb   = state.buffer.take(prev) + state.buffer.drop(state.cursor)
+          (state.copy(buffer = nb, cursor = prev), None)
         else (state, None)
 
       case Delete =>
         if state.cursor < state.buffer.length then
-          val nb = state.buffer.take(state.cursor) + state.buffer.drop(state.cursor + 1)
+          val next = Grapheme.nextBoundary(state.buffer, state.cursor)
+          val nb   = state.buffer.take(state.cursor) + state.buffer.drop(next)
           (state.copy(buffer = nb), None)
         else (state, None)
 
@@ -160,11 +162,26 @@ object TextField:
         val nb = state.buffer.take(state.cursor) + ch + state.buffer.drop(state.cursor)
         (state.copy(buffer = nb, cursor = state.cursor + 1), None)
 
+      case Supplementary(cp) =>
+        val chars = Character.toChars(cp)
+        val nb    = state.buffer.take(state.cursor) + String(chars) + state.buffer.drop(state.cursor)
+        (state.copy(buffer = nb, cursor = state.cursor + chars.length), None)
+
+      case Paste(text) =>
+        if text.isEmpty then (state, None)
+        else
+          // Single-line fields keep only the first pasted line. This preserves
+          // emoji / other Unicode input while avoiding accidental newline
+          // insertion into a one-row widget.
+          val line   = text.takeWhile(ch => ch != '\n' && ch != '\r')
+          val nb     = state.buffer.take(state.cursor) + line + state.buffer.drop(state.cursor)
+          (state.copy(buffer = nb, cursor = state.cursor + line.length), None)
+
       case ArrowLeft =>
-        (state.copy(cursor = math.max(0, state.cursor - 1)), None)
+        (state.copy(cursor = Grapheme.previousBoundary(state.buffer, state.cursor)), None)
 
       case ArrowRight =>
-        (state.copy(cursor = math.min(state.buffer.length, state.cursor + 1)), None)
+        (state.copy(cursor = Grapheme.nextBoundary(state.buffer, state.cursor)), None)
 
       case Home => (state.copy(cursor = 0), None)
       case End  => (state.copy(cursor = state.buffer.length), None)
@@ -232,7 +249,8 @@ object TextField:
     val width           = math.max(1, lineWidth)
     val showPlaceholder = state.buffer.isEmpty && !focused && state.placeholder.nonEmpty
     val display         = if showPlaceholder then state.placeholder else state.buffer
-    val padded          = display.take(width).padTo(width, ' ')
+    val clipped         = clipToWidth(display, width)
+    val padded          = padToWidth(clipped, width)
 
     if focused then
       val cIdx        = math.min(width - 1, math.max(0, state.cursor))
@@ -260,3 +278,37 @@ object TextField:
 
   /** Width of a `TextField` rendered with the given `lineWidth`. */
   def width(lineWidth: Int): Int = math.max(1, lineWidth)
+
+  /**
+   * Truncate `text` so its rendered width is at most `maxWidth`.
+   *
+   * This mirrors the width-aware clipping used by `MultiLineInput` and
+   * avoids splitting wide glyphs or surrogate pairs mid-cell.
+   */
+  private def clipToWidth(text: String, maxWidth: Int): String =
+    if maxWidth <= 0 then ""
+    else
+      val sb = new StringBuilder
+      var w  = 0
+      var i  = 0
+      while i < text.length do
+        val cp  = text.codePointAt(i)
+        val cw  = WCWidth.codePointWidth(cp)
+        val n   = java.lang.Character.charCount(cp)
+        val add = math.max(0, cw)
+        if w + add > maxWidth then return sb.toString
+        sb.append(text.substring(i, i + n))
+        w += add
+        i += n
+      sb.toString
+
+  /** Pad `text` with spaces until its rendered width reaches `targetWidth`. */
+  private def padToWidth(text: String, targetWidth: Int): String =
+    if targetWidth <= 0 then ""
+    else
+      val sb = new StringBuilder(text)
+      var w  = WCWidth.stringWidth(text)
+      while w < targetWidth do
+        sb.append(' ')
+        w += 1
+      sb.toString

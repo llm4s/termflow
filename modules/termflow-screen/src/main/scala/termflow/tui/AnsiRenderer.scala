@@ -87,20 +87,23 @@ object AnsiRenderer:
   /**
    * One cell on the rendered terminal grid.
    *
-   * @param ch    The glyph to emit. For surrogate pairs / multi-cell
-   *              graphemes, only the leading code unit is stored here;
-   *              richer grapheme support is a future stage.
+   * @param ch    The leading UTF-16 code unit. Kept for legacy callers
+   *              and tests that inspect the grid one char at a time.
    * @param style Foreground / background / SGR attributes.
    * @param width Display width in cells: `1` for the typical narrow cell,
    *              `2` for an East Asian Wide / Fullwidth glyph (the next
    *              cell is a continuation), or `0` for a continuation cell
    *              that exists only to absorb the second column of a wide
    *              glyph emitted in the previous cell. The diff loop honours
-   *              `width = 0` cells by *not* emitting their `ch`, since the
+   *              `width = 0` cells by *not* emitting their `glyph`, since the
    *              terminal already advanced past that column when the wide
    *              char was written.
+   * @param glyph Full glyph text to emit for the cell. This is identical
+   *              to `ch.toString` for BMP characters, but preserves
+   *              supplementary code points such as emoji.
    */
-  final case class RenderCell(ch: Char, style: Style, width: Int = 1)
+  final case class RenderCell(ch: Char, style: Style, width: Int = 1, glyph: String = ""):
+    def renderedGlyph: String = if glyph.nonEmpty then glyph else ch.toString
   final case class RenderFrame(
     width: Int,
     height: Int,
@@ -109,7 +112,7 @@ object AnsiRenderer:
   )
   final case class DiffResult(ansi: String, changedCells: Int, changedRows: Int)
   final private case class VisibleInput(text: String, cursorIndex: Int, width: Int)
-  private val blankCell = RenderCell(' ', Style(), 1)
+  private val blankCell = RenderCell(' ', Style(), 1, " ")
 
   def moveTo(x: XCoord, y: YCoord): String =
     s"\u001b[${y.value};${x.value}H"
@@ -471,20 +474,28 @@ object AnsiRenderer:
     def drawString(x: Int, y: Int, str: String, style: Style): Unit =
       var col = x
       var i   = 0
+      var lastGlyphCol: Int = -1
       while i < str.length do
         val cp = str.codePointAt(i)
         val w  = WCWidth.codePointWidth(cp)
-        val ch = str.charAt(i)
         if w == 2 then
-          putCell(col, y, RenderCell(ch, style, 2))
-          putCell(col + 1, y, RenderCell(' ', style, 0))
+          val glyph = new String(Character.toChars(cp))
+          putCell(col, y, RenderCell(glyph.charAt(0), style, 2, glyph))
+          putCell(col + 1, y, RenderCell(' ', style, 0, ""))
+          lastGlyphCol = col
           col += 2
         else if w == 1 then
-          putCell(col, y, RenderCell(ch, style, 1))
+          val glyph = str.substring(i, i + java.lang.Character.charCount(cp))
+          putCell(col, y, RenderCell(glyph.charAt(0), style, 1, glyph))
+          lastGlyphCol = col
           col += 1
-        // Combining marks / control / zero-width: skip silently. They would
-        // ideally attach to the previous cell, but the cell model doesn't
-        // carry composing-glyph slots yet — punting to a future iteration.
+        // Combining marks / variation selectors / control / zero-width:
+        // attach them to the previous visible glyph so emoji presentation
+        // sequences like U+2764 U+FE0F survive into the emitted cell text.
+        else if lastGlyphCol >= 1 then
+          val prev = cells(y - 1)(lastGlyphCol - 1)
+          val extra = str.substring(i, i + java.lang.Character.charCount(cp))
+          cells(y - 1)(lastGlyphCol - 1) = prev.copy(glyph = prev.renderedGlyph + extra)
         i += java.lang.Character.charCount(cp)
 
     def drawBorder(x: Int, y: Int, w: Int, h: Int, style: Style, chars: BorderChars): Unit =
@@ -614,7 +625,7 @@ object AnsiRenderer:
               // style as their leading wide cell but no glyph of their own
               // — the terminal already advanced its cursor past that
               // column when the wide glyph was emitted.
-              if cellAt(Some(current), row, j).width != 0 then out.append(cellAt(Some(current), row, j).ch)
+              if cellAt(Some(current), row, j).width != 0 then out.append(cellAt(Some(current), row, j).renderedGlyph)
               j += 1
             cursor = j
           col = cursor

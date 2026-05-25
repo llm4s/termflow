@@ -77,6 +77,11 @@ object Prompt:
         val newBuf = state.buffer.patch(state.cursor, Seq(ch), 0)
         (normalized(state.copy(buffer = newBuf, cursor = state.cursor + 1)), None)
 
+      case KeyDecoder.InputKey.Supplementary(cp) =>
+        val chars = Character.toChars(cp)
+        val newBuf = state.buffer.patch(state.cursor, chars.toIndexedSeq, 0)
+        (normalized(state.copy(buffer = newBuf, cursor = state.cursor + chars.length)), None)
+
       case KeyDecoder.InputKey.ArrowLeft =>
         // Grapheme-aware step so the cursor doesn't strand combining marks.
         val text    = state.buffer.mkString

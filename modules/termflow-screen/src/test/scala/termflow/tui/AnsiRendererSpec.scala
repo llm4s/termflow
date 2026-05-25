@@ -419,6 +419,19 @@ class AnsiRendererSpec extends AnyFunSuite:
     assert(frame.cells(0)(2).ch == 'A')
     assert(frame.cells(0)(2).width == 1)
 
+  test("buildFrame preserves supplementary emoji glyphs instead of lone surrogates"):
+    val root = RootNode(
+      width = 4,
+      height = 1,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("😀A", Style())))),
+      input = None
+    )
+    val frame = AnsiRenderer.buildFrame(root)
+    assert(frame.cells(0)(0).glyph == "😀")
+    assert(frame.cells(0)(0).width == 2)
+    assert(frame.cells(0)(1).width == 0, "continuation cell after supplementary emoji")
+    assert(frame.cells(0)(2).glyph == "A")
+
   test("renderDiff emits the wide glyph once and skips its continuation cell"):
     val root = RootNode(
       width = 4,
@@ -431,6 +444,17 @@ class AnsiRendererSpec extends AnyFunSuite:
     val aCount  = ansi.count(_ == 'A')
     assert(zhCount == 1, s"wide glyph should appear exactly once in: $ansi")
     assert(aCount == 1, s"narrow glyph should appear exactly once in: $ansi")
+
+  test("renderDiff emits a supplementary emoji glyph intact"):
+    val root = RootNode(
+      width = 4,
+      height = 1,
+      children = List(TextNode(XCoord(1), YCoord(1), List(Text("😀A", Style())))),
+      input = None
+    )
+    val ansi = AnsiRenderer.renderDiff(None, AnsiRenderer.buildFrame(root))
+    assert(ansi.contains("😀"), s"emoji glyph should appear intact in: $ansi")
+    assert(ansi.count(_ == 'A') == 1, s"narrow glyph should appear exactly once in: $ansi")
 
   test("nodeExtents accounts for wide-char display width"):
     val root = RootNode(

@@ -299,3 +299,6 @@ addCommandAlias("wizardDemo",   "termflowSample/runMain termflow.apps.wizard.Wiz
 addCommandAlias("treeDemo",     "termflowSample/runMain termflow.apps.tree.FileTreeApp")
 addCommandAlias("editorDemo",   "termflowSample/runMain termflow.apps.editor.EditorApp")
 addCommandAlias("chatDemo",     "termflowSample/runMain termflow.apps.chat.ChatStreamApp")
+
+addCommandAlias("multilinePromptDemo", "termflowSample/runMain termflow.apps.multiline.MultilinePromptDemo")
+addCommandAlias("unicodeInputDemo", "termflowSample/runMain termflow.apps.unicode.UnicodeInputDemo")

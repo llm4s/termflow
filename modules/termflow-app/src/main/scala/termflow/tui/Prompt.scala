@@ -78,7 +78,7 @@ object Prompt:
         (normalized(state.copy(buffer = newBuf, cursor = state.cursor + 1)), None)
 
       case KeyDecoder.InputKey.Supplementary(cp) =>
-        val chars = Character.toChars(cp)
+        val chars  = Character.toChars(cp)
         val newBuf = state.buffer.patch(state.cursor, chars.toIndexedSeq, 0)
         (normalized(state.copy(buffer = newBuf, cursor = state.cursor + chars.length)), None)
 

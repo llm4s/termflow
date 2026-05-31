@@ -173,8 +173,8 @@ object TextField:
           // Single-line fields keep only the first pasted line. This preserves
           // emoji / other Unicode input while avoiding accidental newline
           // insertion into a one-row widget.
-          val line   = text.takeWhile(ch => ch != '\n' && ch != '\r')
-          val nb     = state.buffer.take(state.cursor) + line + state.buffer.drop(state.cursor)
+          val line = text.takeWhile(ch => ch != '\n' && ch != '\r')
+          val nb   = state.buffer.take(state.cursor) + line + state.buffer.drop(state.cursor)
           (state.copy(buffer = nb, cursor = state.cursor + line.length), None)
 
       case ArrowLeft =>

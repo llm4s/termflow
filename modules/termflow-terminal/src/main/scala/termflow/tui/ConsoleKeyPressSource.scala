@@ -283,8 +283,7 @@ object ConsoleKeyPressSource:
 
         @tailrec
         def loop(continue: Boolean): Unit =
-          if !continue then
-            flushPending()
+          if !continue then flushPending()
           else
             val c = bridge.take().intValue()
             if c == EndOfStream then
@@ -305,7 +304,7 @@ object ConsoleKeyPressSource:
                   pendingHigh = -1
                   inputReads.put(InputRead.Key(InputKey.Supplementary(cp)))
                 case InputKey.NoOp =>
-                  // Parser sentinel — drop but keep pending surrogate.
+                // Parser sentinel — drop but keep pending surrogate.
                 case other =>
                   flushPending()
                   inputReads.put(InputRead.Key(other))

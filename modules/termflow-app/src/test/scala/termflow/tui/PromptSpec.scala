@@ -16,7 +16,7 @@ class PromptSpec extends AnyFunSuite:
     assert(next.cursor == 1)
 
   test("Supplementary inserts a surrogate pair and advances by two"):
-    val (next, cmd) = Prompt.handleKey[String](Prompt.State(), InputKey.Supplementary(0x1F600))(noopToMsg)
+    val (next, cmd) = Prompt.handleKey[String](Prompt.State(), InputKey.Supplementary(0x1f600))(noopToMsg)
     assert(cmd.isEmpty)
     assert(Prompt.render(next) == "😀")
     assert(next.cursor == 2)

@@ -60,11 +60,11 @@ class KeyDecoderSpec extends AnyFunSuite:
     // Arabic ش (U+0634)
     assert(KeyDecoder.decode(0x0634) == InputKey.CharKey(0x0634.toChar))
     // CJK 中 (U+4E2D)
-    assert(KeyDecoder.decode(0x4E2D) == InputKey.CharKey(0x4E2D.toChar))
+    assert(KeyDecoder.decode(0x4e2d) == InputKey.CharKey(0x4e2d.toChar))
     // Cyrillic Я (U+042F)
-    assert(KeyDecoder.decode(0x042F) == InputKey.CharKey(0x042F.toChar))
+    assert(KeyDecoder.decode(0x042f) == InputKey.CharKey(0x042f.toChar))
     // Latin é (U+00E9)
-    assert(KeyDecoder.decode(0x00E9) == InputKey.CharKey(0x00E9.toChar))
+    assert(KeyDecoder.decode(0x00e9) == InputKey.CharKey(0x00e9.toChar))
 
   test("Modifiers.isEmpty / nonEmpty are mutually exclusive"):
     assert(KeyDecoder.Modifiers.none.isEmpty)

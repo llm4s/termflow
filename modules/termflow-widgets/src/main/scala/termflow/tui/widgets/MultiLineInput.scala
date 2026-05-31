@@ -235,8 +235,7 @@ object MultiLineInput:
   ): (State, Option[Cmd[Msg]]) =
     if key == submitKey then
       val text = state.text
-      if text.trim.isEmpty then
-        (State.empty, None)
+      if text.trim.isEmpty then (State.empty, None)
       else
         val cmd = toMsg(text).fold(err => Cmd.TermFlowErrorCmd(err), g => Cmd.GCmd(g))
         (State.empty, Some(cmd))

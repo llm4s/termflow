@@ -472,8 +472,8 @@ object AnsiRenderer:
       if x >= 0 && x < width && y >= 0 && y < height then cells(y)(x) = cell
 
     def drawString(x: Int, y: Int, str: String, style: Style): Unit =
-      var col = x
-      var i   = 0
+      var col               = x
+      var i                 = 0
       var lastGlyphCol: Int = -1
       while i < str.length do
         val cp = str.codePointAt(i)
@@ -493,7 +493,7 @@ object AnsiRenderer:
         // attach them to the previous visible glyph so emoji presentation
         // sequences like U+2764 U+FE0F survive into the emitted cell text.
         else if lastGlyphCol >= 1 then
-          val prev = cells(y - 1)(lastGlyphCol - 1)
+          val prev  = cells(y - 1)(lastGlyphCol - 1)
           val extra = str.substring(i, i + java.lang.Character.charCount(cp))
           cells(y - 1)(lastGlyphCol - 1) = prev.copy(glyph = prev.renderedGlyph + extra)
         i += java.lang.Character.charCount(cp)

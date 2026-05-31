@@ -52,7 +52,7 @@ class TextFieldSpec extends AnyFunSuite:
   test("Supplementary inserts a surrogate pair at the cursor"):
     val s0      = TextField.State.of("ac")
     val s1      = s0.copy(cursor = 1)
-    val (s2, _) = TextField.handleKey(s1, InputKey.Supplementary(0x1F600))(submitOpt)
+    val (s2, _) = TextField.handleKey(s1, InputKey.Supplementary(0x1f600))(submitOpt)
     assert(s2.buffer == "a😀c")
     assert(s2.cursor == 3)
 
@@ -276,7 +276,7 @@ class TextFieldSpec extends AnyFunSuite:
     assert(styles(3).bg == Theme.dark.primary)
 
   test("wide glyphs render intact without overpadding"):
-    val v = TextField.view(TextField.State.of("中"), lineWidth = 3)
+    val v     = TextField.view(TextField.State.of("中"), lineWidth = 3)
     val frame = AnsiRenderer.buildFrame(RootNode(3, 1, List(v), None))
     assert(frame.cells(0)(0).glyph == "中")
     assert(frame.cells(0)(0).width == 2)

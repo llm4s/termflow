@@ -6,15 +6,16 @@ import termflow.tui.Tui.*
 import termflow.tui.TuiPrelude.*
 import termflow.tui.widgets
 
-/** Unicode input demo with per-language sample text and macOS keyboard setup instructions.
-  *
-  * Key bindings:
-  *   Tab / Enter — move and pick menu items
-  *   ESC — leave the composer and focus the menu
-  *   Ctrl+C — exit
-  *   Enter — newline in composer
-  *   Ctrl+D — submit message
-  */
+/**
+ * Unicode input demo with per-language sample text and macOS keyboard setup instructions.
+ *
+ * Key bindings:
+ *   Tab / Enter — move and pick menu items
+ *   ESC — leave the composer and focus the menu
+ *   Ctrl+C — exit
+ *   Enter — newline in composer
+ *   Ctrl+D — submit message
+ */
 object UnicodeInputDemo:
 
   def main(args: Array[String]): Unit =
@@ -26,14 +27,16 @@ object UnicodeInputDemo:
   final case class Lang(
     name: String,
     script: String,
-    inputSource: String,    // macOS Input Source name to add
+    inputSource: String, // macOS Input Source name to add
     tip: String,
     samples: Vector[String]
   )
 
   val languages: Vector[Lang] = Vector(
     Lang(
-      "Arabic", "العربية", "Arabic",
+      "Arabic",
+      "العربية",
+      "Arabic",
       "Arabic script connects right-to-left automatically in the terminal.",
       Vector(
         "مرحبا بك في عالم الطرفية",
@@ -42,7 +45,9 @@ object UnicodeInputDemo:
       )
     ),
     Lang(
-      "Chinese", "中文", "Pinyin - Simplified",
+      "Chinese",
+      "中文",
+      "Pinyin - Simplified",
       "Type Pinyin, then press Space and pick characters from the candidate window.",
       Vector(
         "你好，欢迎使用 TermFlow",
@@ -51,7 +56,9 @@ object UnicodeInputDemo:
       )
     ),
     Lang(
-      "Japanese", "日本語", "Japanese - Romaji",
+      "Japanese",
+      "日本語",
+      "Japanese - Romaji",
       "Type Romaji, press Space to convert to Kana/Kanji, Enter to confirm.",
       Vector(
         "こんにちは、TermFlow へようこそ",
@@ -60,7 +67,9 @@ object UnicodeInputDemo:
       )
     ),
     Lang(
-      "Korean", "한국어", "2-Set Korean",
+      "Korean",
+      "한국어",
+      "2-Set Korean",
       "Type jamo (자모) — they compose into syllable blocks automatically.",
       Vector(
         "안녕하세요, TermFlow에 오신 것을 환영합니다",
@@ -69,7 +78,9 @@ object UnicodeInputDemo:
       )
     ),
     Lang(
-      "Russian", "Русский", "Russian",
+      "Russian",
+      "Русский",
+      "Russian",
       "Standard ЙЦУКЕН layout — phonetic mapping to QWERTY keys.",
       Vector(
         "Привет, добро пожаловать в TermFlow",
@@ -178,11 +189,11 @@ object UnicodeInputDemo:
       Right(Submit(input.value))
 
     override def view(m: Model): RootNode =
-      val w       = m.w
-      val h       = m.h
-      val lang    = languages(m.activeIdx)
-      val maxW    = math.min(w, 82)
-      val innerW  = maxW - 4
+      val w          = m.w
+      val h          = m.h
+      val lang       = languages(m.activeIdx)
+      val maxW       = math.min(w, 82)
+      val innerW     = maxW - 4
       val activeMsgs = m.messages(m.activeIdx)
 
       // ---- ROW LAYOUT (fixed zones, dynamically positioned) ----
@@ -213,11 +224,14 @@ object UnicodeInputDemo:
         text(x, y, s, Style(fg = Green, bold = true))
 
       // --- Header ---
-      val header = TextNode(1.x, 1.y, List(
-        Text(" Unicode Input Demo ", Style(fg = Black, bg = Cyan, bold = true)),
-        Text("  Tab: menu  |  Enter: pick  |  ESC: menu  |  Ctrl+C: exit ",
-          Style(fg = White, bg = Magenta))
-      ))
+      val header = TextNode(
+        1.x,
+        1.y,
+        List(
+          Text(" Unicode Input Demo ", Style(fg = Black, bg = Cyan, bold = true)),
+          Text("  Tab: menu  |  Enter: pick  |  ESC: menu  |  Ctrl+C: exit ", Style(fg = White, bg = Magenta))
+        )
+      )
 
       // --- Language selector ---
       val selLabelY = 3
@@ -225,58 +239,60 @@ object UnicodeInputDemo:
 
       val selRow1Y = selLabelY + 1
       val selRow1 = List(
-        menuButton(2, selRow1Y, 0, "1. Arabic",       m.activeIdx, m.menuIdx, m.menuOpen),
-        menuButton(22, selRow1Y, 1, "2. Chinese",     m.activeIdx, m.menuIdx, m.menuOpen),
-        menuButton(42, selRow1Y, 2, "3. Japanese",    m.activeIdx, m.menuIdx, m.menuOpen),
-        menuButton(62, selRow1Y, 3, "4. Korean",      m.activeIdx, m.menuIdx, m.menuOpen)
+        menuButton(2, selRow1Y, 0, "1. Arabic", m.activeIdx, m.menuIdx, m.menuOpen),
+        menuButton(22, selRow1Y, 1, "2. Chinese", m.activeIdx, m.menuIdx, m.menuOpen),
+        menuButton(42, selRow1Y, 2, "3. Japanese", m.activeIdx, m.menuIdx, m.menuOpen),
+        menuButton(62, selRow1Y, 3, "4. Korean", m.activeIdx, m.menuIdx, m.menuOpen)
       )
 
       val selRow2Y = selRow1Y + 1
       val selRow2 = List(
-        menuButton(2, selRow2Y, 4, "5. Russian",      m.activeIdx, m.menuIdx, m.menuOpen),
+        menuButton(2, selRow2Y, 4, "5. Russian", m.activeIdx, m.menuIdx, m.menuOpen),
         menuButton(42, selRow2Y, languages.size, s"6. $exitMenuLabel", m.activeIdx, m.menuIdx, m.menuOpen)
       )
 
       // --- Separator ---
-      val sep1Y  = selRow2Y + 1
-      val sep1   = dim(2, sep1Y, "─" * (maxW - 2))
+      val sep1Y = selRow2Y + 1
+      val sep1  = dim(2, sep1Y, "─" * (maxW - 2))
 
       // --- Active language ---
       val langHeaderY = sep1Y + 1
       val langHeader  = accent(2, langHeaderY, s"◉ ${lang.name} — ${lang.script}")
 
       // --- Sample texts ---
-      val samplesY = langHeaderY + 1
+      val samplesY    = langHeaderY + 1
       val sampleLabel = label(2, samplesY, "📋 Sample text (copy-paste to test):")
-      val sampleTexts = lang.samples.zipWithIndex.map { (s, i) =>
-        highlight(4, samplesY + 1 + i, s"• $s")
-      }
+      val sampleTexts = lang.samples.zipWithIndex.map((s, i) => highlight(4, samplesY + 1 + i, s"• $s"))
 
       // --- macOS tip ---
       val tipY = samplesY + 1 + lang.samples.size
-      val tipAdd = label(2, tipY, s"💡 Add «${lang.inputSource}» input source (Settings → Keyboard → Input Sources → +). Switch ⌃Space.")
+      val tipAdd = label(
+        2,
+        tipY,
+        s"💡 Add «${lang.inputSource}» input source (Settings → Keyboard → Input Sources → +). Switch ⌃Space."
+      )
       val tipLines = Vector(lang.tip)
       val tipLangNodes = tipLines.zipWithIndex.map { case (line, i) =>
         dim(4, tipY + 1 + i, line)
       }
 
       // --- Messages ---
-      val msgSepY = tipY + tipLines.size + 2
-      val msgSep  = dim(2, msgSepY, "─" * (maxW - 2))
+      val msgSepY    = tipY + tipLines.size + 2
+      val msgSep     = dim(2, msgSepY, "─" * (maxW - 2))
       val msgHeaderY = msgSepY + 1
       val msgHeader  = label(2, msgHeaderY, s"Messages: ${activeMsgs.size} submitted")
 
-      val msgStartY = msgHeaderY + 1
-      val composerH     = 8
-      val composerY     = math.max(msgStartY + 1, h - composerH + 1)
+      val msgStartY      = msgHeaderY + 1
+      val composerH      = 8
+      val composerY      = math.max(msgStartY + 1, h - composerH + 1)
       val composerInnerY = composerY + 1
       val composerInnerH = composerH - 2
-      val msgEndY       = math.max(msgStartY, composerY - 1)
+      val msgEndY        = math.max(msgStartY, composerY - 1)
 
       val allLines: Vector[String] = activeMsgs.flatMap(_.split("\n", -1).toVector)
-      val msgVisible = math.max(0, msgEndY - msgStartY)
-      val visible    = allLines.takeRight(msgVisible)
-      val pad        = msgVisible - visible.size
+      val msgVisible               = math.max(0, msgEndY - msgStartY)
+      val visible                  = allLines.takeRight(msgVisible)
+      val pad                      = msgVisible - visible.size
 
       val msgNodes = (0 until msgVisible).map { i =>
         val y = msgStartY + i
@@ -297,16 +313,16 @@ object UnicodeInputDemo:
         style = Style(border = true, fg = Cyan),
         chars = BorderChars.rounded
       )
-      val composerBg = Color.Rgb(248, 248, 248)
-      val composerWidth = math.max(20, maxW - 16)
+      val composerBg     = Color.Rgb(248, 248, 248)
+      val composerWidth  = math.max(20, maxW - 16)
       val composerInputX = 14
       val composerFill = (0 until composerInnerH).map { row =>
         TextNode(3.x, (composerInnerY + row).y, List(Text(" " * (maxW - 4), Style(bg = composerBg))))
       }.toList
-      val composerTitle = label(4, composerInnerY, "Message:")
-      val composerHint = dim(4, composerInnerY + composerInnerH - 1, "Enter: newline | Ctrl+D: send | Esc/Tab: menu")
+      val composerTitle   = label(4, composerInnerY, "Message:")
+      val composerHint    = dim(4, composerInnerY + composerInnerH - 1, "Enter: newline | Ctrl+D: send | Esc/Tab: menu")
       val composerVisible = widgets.MultiLineInput.scrollFor(m.composer, 4)
-      val composerInputY   = (composerInnerY + 1 + (composerVisible.cursorRow - composerVisible.scrollTop)).y
+      val composerInputY  = (composerInnerY + 1 + (composerVisible.cursorRow - composerVisible.scrollTop)).y
       val composerInput: InputNode =
         InputNode(
           composerInputX.x,
@@ -319,9 +335,9 @@ object UnicodeInputDemo:
       def clipToWidth(text: String, maxWidth: Int): String =
         if maxWidth <= 0 then ""
         else
-          val sb = new StringBuilder
-          var i  = 0
-          var w  = 0
+          val sb        = new StringBuilder
+          var i         = 0
+          var w         = 0
           var truncated = false
           while i < text.length && w < maxWidth do
             val cp = text.codePointAt(i)
@@ -334,10 +350,8 @@ object UnicodeInputDemo:
                 sb.append(new String(Character.toChars(cp)))
                 w += cw
                 i += Character.charCount(cp)
-            else
-              i += Character.charCount(cp)
-          if truncated && maxWidth > 0 then
-            sb.append("…")
+            else i += Character.charCount(cp)
+          if truncated && maxWidth > 0 then sb.append("…")
           sb.toString
 
       def padToWidth(text: String, width: Int): String =
@@ -366,8 +380,7 @@ object UnicodeInputDemo:
         width = w,
         height = h,
         input = Some(composerInput),
-        children =
-          List(header, selLabel) ++
+        children = List(header, selLabel) ++
           selRow1 ++ selRow2 ++
           List(sep1, langHeader) ++
           List(sampleLabel) ++ sampleTexts ++

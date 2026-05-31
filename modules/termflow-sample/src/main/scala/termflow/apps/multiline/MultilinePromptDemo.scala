@@ -6,13 +6,14 @@ import termflow.tui.Tui.*
 import termflow.tui.TuiPrelude.*
 import termflow.tui.widgets
 
-/** Demo: multiline prompt using [[widgets.MultiLineInput]].
-  *
-  * Key bindings:
-  *   - Type anything, Enter inserts a newline
-  *   - Ctrl+D submits the message
-  *   - ESC quits
-  */
+/**
+ * Demo: multiline prompt using [[widgets.MultiLineInput]].
+ *
+ * Key bindings:
+ *   - Type anything, Enter inserts a newline
+ *   - Ctrl+D submits the message
+ *   - ESC quits
+ */
 object MultilinePromptDemo:
 
   def main(args: Array[String]): Unit =
@@ -73,9 +74,7 @@ object MultilinePromptDemo:
             case _ =>
               val submitKey = KeyDecoder.InputKey.Ctrl('D')
               val (nextEditor, maybeCmd) =
-                widgets.MultiLineInput.handleKey[Msg](sized.editor, k, submitKey) { text =>
-                  Right(Msg.Submit(text))
-                }
+                widgets.MultiLineInput.handleKey[Msg](sized.editor, k, submitKey)(text => Right(Msg.Submit(text)))
               maybeCmd match
                 case Some(cmd) =>
                   Tui(sized.copy(editor = nextEditor), cmd)
@@ -98,15 +97,19 @@ object MultilinePromptDemo:
       val h = m.terminalHeight
 
       val editorHeight = 5
-      val fullWidth     = math.min(w, 80)
-      val msgWidth      = math.max(20, fullWidth - 4)
+      val fullWidth    = math.min(w, 80)
+      val msgWidth     = math.max(20, fullWidth - 4)
 
       // --- Top status bar ---
       val status =
-        TextNode(1.x, 1.y, List(
-          Text(" Multiline Prompt Demo ", Style(fg = Black, bg = Cyan, bold = true)),
-          Text("  ESC: quit  |  Ctrl+D: submit  |  Enter: newline ", Style(fg = White, bg = Magenta))
-        ))
+        TextNode(
+          1.x,
+          1.y,
+          List(
+            Text(" Multiline Prompt Demo ", Style(fg = Black, bg = Cyan, bold = true)),
+            Text("  ESC: quit  |  Ctrl+D: submit  |  Enter: newline ", Style(fg = White, bg = Magenta))
+          )
+        )
 
       // --- Messages header ---
       val msgHeaderY = 3
@@ -125,10 +128,9 @@ object MultilinePromptDemo:
 
       val msgNodes = (0 until msgVisible).map { i =>
         val y = msgStartY + i
-        if i < padCount then
-          TextNode(2.x, y.y, List(Text(" " * msgWidth, Style())))
+        if i < padCount then TextNode(2.x, y.y, List(Text(" " * msgWidth, Style())))
         else
-          val text    = visibleLines(i - padCount)
+          val text = visibleLines(i - padCount)
           val display =
             if text.length <= msgWidth then text
             else text.take(msgWidth - 3) + "..."
@@ -138,7 +140,8 @@ object MultilinePromptDemo:
       // --- Editor area (bottom) ---
       val editorLabelY = msgEndY + 1
       val editorLabel = TextNode(
-        2.x, editorLabelY.y,
+        2.x,
+        editorLabelY.y,
         List(Text("Message (Ctrl+D to send, Enter for newline):", Style(fg = Yellow)))
       )
 

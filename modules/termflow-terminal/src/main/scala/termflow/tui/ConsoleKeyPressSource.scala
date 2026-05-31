@@ -274,20 +274,40 @@ object ConsoleKeyPressSource:
     // Decoder: consume ints + escape sequences and emit InputKey
     val decoderThread = ThreadUtils.startThread(() =>
       try
+        var pendingHigh: Int = -1 // high-surrogate code unit, -1 = none
+
+        def flushPending(): Unit =
+          if pendingHigh >= 0 then
+            inputReads.put(InputRead.Key(InputKey.CharKey(pendingHigh.toChar)))
+            pendingHigh = -1
+
         @tailrec
         def loop(continue: Boolean): Unit =
-          if !continue then ()
+          if !continue then flushPending()
           else
             val c = bridge.take().intValue()
             if c == EndOfStream then
+              flushPending()
               inputReads.put(InputRead.End)
               loop(false)
             else
               val key = processKey(c, bridge)
-              // InputKey.NoOp is a parser sentinel (see scroll-wheel
-              // release handling in decodeSgrMouse). Drop it here so apps
-              // never see it, but keep looping for the next byte.
-              if key != InputKey.NoOp then inputReads.put(InputRead.Key(key))
+              key match
+                case InputKey.CharKey(ch) if Character.isHighSurrogate(ch) =>
+                  // Buffer the high surrogate; emit it only if the next
+                  // character is *not* a matching low surrogate.
+                  flushPending()
+                  pendingHigh = ch.toInt
+                case InputKey.CharKey(ch) if Character.isLowSurrogate(ch) && pendingHigh >= 0 =>
+                  // Complete surrogate pair — emit as a single Supplementary.
+                  val cp = Character.toCodePoint(pendingHigh.toChar, ch)
+                  pendingHigh = -1
+                  inputReads.put(InputRead.Key(InputKey.Supplementary(cp)))
+                case InputKey.NoOp =>
+                // Parser sentinel — drop but keep pending surrogate.
+                case other =>
+                  flushPending()
+                  inputReads.put(InputRead.Key(other))
               loop(true)
         loop(true)
       catch {

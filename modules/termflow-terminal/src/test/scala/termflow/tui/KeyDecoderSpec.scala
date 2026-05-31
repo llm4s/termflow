@@ -40,7 +40,7 @@ class KeyDecoderSpec extends AnyFunSuite:
 
   test("decode unknown codes"):
     assert(KeyDecoder.decode(0) == InputKey.Unknown("0"))
-    assert(KeyDecoder.decode(200) == InputKey.Unknown("200"))
+    assert(KeyDecoder.decode(200) == InputKey.CharKey(200.toChar)) // U+00C8 (È)
     assert(KeyDecoder.decode(-1) == InputKey.Unknown("-1"))
 
   test("decode boundary values"):
@@ -53,7 +53,18 @@ class KeyDecoderSpec extends AnyFunSuite:
     // Code 127 is backspace
     assert(KeyDecoder.decode(127) == InputKey.Backspace)
     // Code 128 is beyond printable
-    assert(KeyDecoder.decode(128) == InputKey.Unknown("128"))
+    // Code 128 (0x80) is the PAD control (U+0080), now decoded as CharKey
+    assert(KeyDecoder.decode(128) == InputKey.CharKey(128.toChar))
+
+  test("decode non-ASCII BMP characters"):
+    // Arabic ش (U+0634)
+    assert(KeyDecoder.decode(0x0634) == InputKey.CharKey(0x0634.toChar))
+    // CJK 中 (U+4E2D)
+    assert(KeyDecoder.decode(0x4e2d) == InputKey.CharKey(0x4e2d.toChar))
+    // Cyrillic Я (U+042F)
+    assert(KeyDecoder.decode(0x042f) == InputKey.CharKey(0x042f.toChar))
+    // Latin é (U+00E9)
+    assert(KeyDecoder.decode(0x00e9) == InputKey.CharKey(0x00e9.toChar))
 
   test("Modifiers.isEmpty / nonEmpty are mutually exclusive"):
     assert(KeyDecoder.Modifiers.none.isEmpty)

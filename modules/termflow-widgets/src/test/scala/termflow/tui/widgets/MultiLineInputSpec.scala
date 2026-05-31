@@ -45,7 +45,7 @@ class MultiLineInputSpec extends AnyFunSuite:
     assert(s.cursorRow == 0 && s.cursorCol == 3)
 
   test("Backspace inside a line deletes a grapheme"):
-    val initial = MultiLineInput.State.of("a😀b").copy(cursorCol = 3) // after the emoji
+    val initial = MultiLineInput.State.of("a\uD83D\uDE00b").copy(cursorCol = 3) // after the emoji
     val (s, _)  = MultiLineInput.handleKey[String](initial, InputKey.Backspace)
     assert(s.lines == Vector("ab"))
     assert(s.cursorCol == 1)
@@ -81,7 +81,7 @@ class MultiLineInputSpec extends AnyFunSuite:
     assert(s.cursorRow == 1 && s.cursorCol == 0)
 
   test("ArrowLeft steps over a surrogate pair"):
-    val initial = MultiLineInput.State.of("a😀b").copy(cursorCol = 3)
+    val initial = MultiLineInput.State.of("a\uD83D\uDE00b").copy(cursorCol = 3)
     val (s, _)  = MultiLineInput.handleKey[String](initial, InputKey.ArrowLeft)
     assert(s.cursorCol == 1, "should jump back over the surrogate pair")
 
@@ -100,6 +100,101 @@ class MultiLineInputSpec extends AnyFunSuite:
     val (e, _)  = MultiLineInput.handleKey[String](initial, InputKey.End)
     assert(h.cursorCol == 0)
     assert(e.cursorCol == 5)
+
+  // ---- Paste --------------------------------------------------------------
+
+  test("Paste empty text is a no-op"):
+    val initial = MultiLineInput.State.of("hello")
+    val (s, _)  = MultiLineInput.handleKey[String](initial, InputKey.Paste(""))
+    assert(s == initial)
+
+  test("Paste single line inserts at cursor"):
+    val initial = MultiLineInput.State.of("hello").copy(cursorCol = 2)
+    val (s, _)  = MultiLineInput.handleKey[String](initial, InputKey.Paste("XY"))
+    assert(s.lines == Vector("heXYllo"))
+    assert(s.cursorCol == 4)
+
+  test("Paste multiline splits at cursor across rows"):
+    val initial = MultiLineInput.State.of("hello").copy(cursorCol = 2)
+    val (s, _)  = MultiLineInput.handleKey[String](initial, InputKey.Paste("XY\nZ"))
+    assert(s.lines == Vector("heXY", "Zllo"))
+    assert(s.cursorRow == 1)
+    assert(s.cursorCol == 1)
+
+  test("Paste multiline at start of line prepends rows"):
+    val initial = MultiLineInput.State(lines = Vector("foo", "bar"), cursorRow = 0, cursorCol = 0)
+    val (s, _)  = MultiLineInput.handleKey[String](initial, InputKey.Paste("A\nB"))
+    assert(s.lines == Vector("A", "Bfoo", "bar"))
+    assert(s.cursorRow == 1)
+    assert(s.cursorCol == 1)
+
+  // ---- Supplementary -------------------------------------------------------
+
+  test("Supplementary inserts surrogate pair at cursor"):
+    val initial = MultiLineInput.State.of("hello").copy(cursorCol = 2)
+    val (s, _)  = MultiLineInput.handleKey[String](initial, InputKey.Supplementary(0x1f600)) // 😀
+    assert(s.lines == Vector("he😀llo"))
+    assert(s.cursorCol == 4) // surrogate pair occupies 2 chars
+
+  test("Supplementary survives round-trip"):
+    // Insert 😀 (U+1F600), verify it comes back as the correct code point
+    val (s1, _) = MultiLineInput.handleKey[String](MultiLineInput.State.empty, InputKey.Supplementary(0x1f600))
+    assert(s1.text.codePointAt(0) == 0x1f600)
+    // Insert 🚀 (U+1F680)
+    val (s2, _) = MultiLineInput.handleKey[String](s1, InputKey.Supplementary(0x1f680))
+    assert(s2.text == new String(Character.toChars(0x1f600)) + new String(Character.toChars(0x1f680)))
+
+  // ---- Submit (new overload) ----------------------------------------------
+
+  test("submit key returns the full text as a Cmd and resets editor"):
+    val state = MultiLineInput.State(lines = Vector("hello", "world"))
+    val (s, cmd) = MultiLineInput.handleKey[String](state, InputKey.Ctrl('J'), InputKey.Ctrl('J'))(text =>
+      Right(s"submitted: $text")
+    )
+    assert(s == MultiLineInput.State.empty)
+    assert(cmd.isDefined)
+    cmd.foreach {
+      case Cmd.GCmd(msg) => assert(msg == "submitted: hello\nworld")
+      case other         => fail(s"expected GCmd, got $other")
+    }
+
+  test("submit key does nothing when editor is empty"):
+    val state    = MultiLineInput.State.empty
+    val (s, cmd) = MultiLineInput.handleKey[String](state, InputKey.Ctrl('J'), InputKey.Ctrl('J'))(text => Right(text))
+    assert(s == MultiLineInput.State.empty)
+    assert(cmd.isEmpty)
+
+  test("submit key does nothing when editor is whitespace-only"):
+    val state    = MultiLineInput.State(lines = Vector("   ", "\t"))
+    val (s, cmd) = MultiLineInput.handleKey[String](state, InputKey.Ctrl('J'), InputKey.Ctrl('J'))(text => Right(text))
+    assert(s == MultiLineInput.State.empty)
+    assert(cmd.isEmpty)
+
+  test("non-submit keys delegate to base editing"):
+    val state = MultiLineInput.State(lines = Vector("hello"), cursorCol = 5)
+    val (s, cmd) =
+      MultiLineInput.handleKey[String](state, InputKey.CharKey('!'), InputKey.Ctrl('J'))(text => Right(text))
+    assert(s.lines == Vector("hello!"))
+    assert(s.cursorCol == 6)
+    assert(cmd.isEmpty)
+
+  test("submit surfaces Left as TermFlowErrorCmd"):
+    val state = MultiLineInput.State(lines = Vector("bad"))
+    val (s, cmd) = MultiLineInput.handleKey[String](state, InputKey.Ctrl('J'), InputKey.Ctrl('J'))(_ =>
+      Left(TermFlowError.Validation("rejected"))
+    )
+    assert(s == MultiLineInput.State.empty)
+    assert(cmd.isDefined)
+    cmd.foreach {
+      case Cmd.TermFlowErrorCmd(TermFlowError.Validation("rejected")) => succeed
+      case other                                                      => fail(s"expected TermFlowErrorCmd, got $other")
+    }
+
+  test("base handleKey still returns None for all keys"):
+    val state    = MultiLineInput.State.of("hello\nworld")
+    val (s, cmd) = MultiLineInput.handleKey[String](state, InputKey.Enter)
+    assert(s.lines.size == 3)
+    assert(cmd.isEmpty)
 
   // ---- render -------------------------------------------------------------
 

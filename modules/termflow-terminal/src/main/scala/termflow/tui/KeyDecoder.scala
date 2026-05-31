@@ -54,6 +54,17 @@ object KeyDecoder:
   /** Normalised key representation used by the TUI. */
   enum InputKey:
     case CharKey(ch: Char)
+
+    /**
+     * A supplementary Unicode code point (U+10000 to U+10FFFF) produced by
+     * combining a surrogate pair from the terminal input stream. Emitted
+     * atomically so widgets never see orphan surrogates.
+     *
+     * Call [[java.lang.Character.toChars]] to recover the char[2]
+     * representation for insertion into a Java String.
+     */
+    case Supplementary(codePoint: Int)
+
     case Ctrl(ch: Char)
     case Backspace
     case Delete
@@ -149,7 +160,7 @@ object KeyDecoder:
       case 127     => Backspace
       case code if code >= 1 && code <= 26 =>
         Ctrl(('A' + code - 1).toChar)
-      case code if code >= 32 && code <= 126 =>
+      case code if code >= 32 =>
         CharKey(code.toChar)
       case _ =>
         Unknown(key.toString)

@@ -49,6 +49,32 @@ class TextFieldSpec extends AnyFunSuite:
     assert(s2.buffer == "abc")
     assert(s2.cursor == 2)
 
+  test("Supplementary inserts a surrogate pair at the cursor"):
+    val s0      = TextField.State.of("ac")
+    val s1      = s0.copy(cursor = 1)
+    val (s2, _) = TextField.handleKey(s1, InputKey.Supplementary(0x1f600))(submitOpt)
+    assert(s2.buffer == "a😀c")
+    assert(s2.cursor == 3)
+
+  test("Paste inserts the first line at the cursor"):
+    val s0      = TextField.State.of("ac")
+    val s1      = s0.copy(cursor = 1)
+    val (s2, _) = TextField.handleKey(s1, InputKey.Paste("😀\nignored"))(submitOpt)
+    assert(s2.buffer == "a😀c")
+    assert(s2.cursor == 3)
+
+  test("Backspace deletes a surrogate pair as one unit"):
+    val s0      = TextField.State.of("a😀")
+    val (s1, _) = TextField.handleKey(s0, InputKey.Backspace)(submitOpt)
+    assert(s1.buffer == "a")
+    assert(s1.cursor == 1)
+
+  test("Delete removes a surrogate pair as one unit"):
+    val s0      = TextField.State.of("a😀b").copy(cursor = 1)
+    val (s1, _) = TextField.handleKey(s0, InputKey.Delete)(submitOpt)
+    assert(s1.buffer == "ab")
+    assert(s1.cursor == 1)
+
   // --- handleKey: deletion --------------------------------------------------
 
   test("Backspace removes the char before the cursor"):
@@ -92,6 +118,13 @@ class TextFieldSpec extends AnyFunSuite:
       TextField.handleKey(acc, InputKey.ArrowRight)(submitOpt)
     }
     assert(sEnd.cursor == 3)
+
+  test("ArrowLeft / ArrowRight step over a surrogate pair"):
+    val s0        = TextField.State.of("a😀b")
+    val (left, _) = TextField.handleKey(s0.copy(cursor = 3), InputKey.ArrowLeft)(submitOpt)
+    assert(left.cursor == 1)
+    val (right, _) = TextField.handleKey(left, InputKey.ArrowRight)(submitOpt)
+    assert(right.cursor == 3)
 
   test("Home moves cursor to 0; End moves cursor to length"):
     val s0      = TextField.State.of("abc").copy(cursor = 2)
@@ -241,6 +274,14 @@ class TextFieldSpec extends AnyFunSuite:
     // Truncated to "abcd"; cursor visually pinned at the last cell.
     assert(cs.mkString == "abcd")
     assert(styles(3).bg == Theme.dark.primary)
+
+  test("wide glyphs render intact without overpadding"):
+    val v     = TextField.view(TextField.State.of("中"), lineWidth = 3)
+    val frame = AnsiRenderer.buildFrame(RootNode(3, 1, List(v), None))
+    assert(frame.cells(0)(0).glyph == "中")
+    assert(frame.cells(0)(0).width == 2)
+    assert(frame.cells(0)(1).width == 0, "continuation cell after wide glyph")
+    assert(frame.cells(0)(2).ch == ' ')
 
   test("TextField.width reports lineWidth (clamped to >= 1)"):
     assert(TextField.width(20) == 20)

@@ -243,9 +243,18 @@ object TuiRuntime:
             shouldRender = true
 
           case Cmd.GCmd(g) =>
-            val next: Tui[Model, Msg] = app.update(model, g, bus)
-            model = next.model
-            bus.publish(next.cmd)
+            // Guard the synchronous update the same way FCmd guards its async
+            // mapper: a throw here used to escape the loop and kill the app.
+            // Surface it as an error banner and keep the previous model so a
+            // single bad transition doesn't tear the whole UI down.
+            try
+              val next: Tui[Model, Msg] = app.update(model, g, bus)
+              model = next.model
+              bus.publish(next.cmd)
+            catch
+              case NonFatal(e) =>
+                pendingErr = Some(TermFlowError.Unexpected(unexpectedMessage(e), Some(e)))
+                shouldRender = true
 
           case Cmd.FCmd(task, toCmd, onEnqueue) =>
             task.onComplete:
@@ -306,7 +315,16 @@ object TuiRuntime:
           else renderMetrics.recordCoalescing(consumed)
 
           if !shouldExit then
-            renderer.render(app.view(model), pendingErr, terminalBackend, renderMetrics)
+            // A throwing `view` would otherwise crash the render loop. Fall
+            // back to an empty frame and surface the failure as an error
+            // banner so the app stays alive.
+            val frame: RootNode =
+              try app.view(model)
+              catch
+                case NonFatal(e) =>
+                  pendingErr = Some(TermFlowError.Unexpected(unexpectedMessage(e), Some(e)))
+                  RootNode(math.max(1, terminalBackend.width), math.max(1, terminalBackend.height), Nil, None)
+            renderer.render(frame, pendingErr, terminalBackend, renderMetrics)
             pendingErr = None
             shouldRender = false
             lastRenderAtNanos = System.nanoTime()

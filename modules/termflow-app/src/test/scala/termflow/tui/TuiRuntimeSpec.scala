@@ -435,3 +435,54 @@ class TuiRuntimeSpec extends AnyFunSuite:
     val printed = backend.out.toString
     assert(!printed.contains(ANSI.enableBracketedPaste))
     assert(!printed.contains(ANSI.disableBracketedPaste))
+
+  final private class CapturingRenderer(onError: TermFlowError => Unit) extends TuiRenderer:
+    override def render(
+      textNode: RootNode,
+      err: Option[TermFlowError],
+      terminal: TerminalBackend,
+      renderMetrics: RenderMetrics
+    ): Unit = err.foreach(onError)
+
+  test("a throwing update is surfaced as an error banner without crashing the loop"):
+    val captured = new AtomicReference[Option[TermFlowError]](None)
+    val done     = scala.concurrent.Promise[Unit]()
+
+    object App extends TuiApp[Int, Unit]:
+      // onEnqueue = Some(()) publishes a GCmd(()) (which throws in update);
+      // the future, completed once the error banner renders, drives Exit.
+      override def init(ctx: RuntimeCtx[Unit]): Tui[Int, Unit] =
+        Tui(0, Cmd.FCmd(done.future, _ => Cmd.Exit, onEnqueue = Some(())))
+      override def update(model: Int, msg: Unit, ctx: RuntimeCtx[Unit]): Tui[Int, Unit] =
+        throw new RuntimeException("update boom")
+      override def view(model: Int): RootNode             = RootNode(80, 24, children = List.empty, input = None)
+      override def toMsg(input: PromptLine): Result[Unit] = Right(())
+
+    val renderer = new CapturingRenderer(err =>
+      if captured.get().isEmpty then
+        captured.set(Some(err))
+        done.trySuccess(()): Unit
+    )
+    Console.withOut(new PrintStream(new ByteArrayOutputStream())):
+      TuiRuntime.run(app = App, renderer = renderer, terminalBackend = new TestTerminalBackend, config = TestConfig)
+    assert(captured.get().nonEmpty, "a throwing update should surface a TermFlowError")
+
+  test("a throwing view falls back to an error banner instead of crashing"):
+    val captured = new AtomicReference[Option[TermFlowError]](None)
+    val done     = scala.concurrent.Promise[Unit]()
+
+    object App extends TuiApp[Int, Unit]:
+      override def init(ctx: RuntimeCtx[Unit]): Tui[Int, Unit] =
+        Tui(0, Cmd.FCmd(done.future, _ => Cmd.Exit, onEnqueue = None))
+      override def update(model: Int, msg: Unit, ctx: RuntimeCtx[Unit]): Tui[Int, Unit] = Tui(model)
+      override def view(model: Int): RootNode             = throw new RuntimeException("view boom")
+      override def toMsg(input: PromptLine): Result[Unit] = Right(())
+
+    val renderer = new CapturingRenderer(err =>
+      if captured.get().isEmpty then
+        captured.set(Some(err))
+        done.trySuccess(()): Unit
+    )
+    Console.withOut(new PrintStream(new ByteArrayOutputStream())):
+      TuiRuntime.run(app = App, renderer = renderer, terminalBackend = new TestTerminalBackend, config = TestConfig)
+    assert(captured.get().nonEmpty, "a throwing view should surface a TermFlowError")

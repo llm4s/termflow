@@ -21,6 +21,24 @@ class SplitPaneSpec extends AnyFunSuite:
     assert(l.divider.isEmpty)
   }
 
+  test("panes never overflow a small region (first + gap + second <= major)") {
+    // Regression: independent max(1, ...) floors let the panes sum to more
+    // than the region, so the second pane / divider spilled past the edge.
+    for
+      w     <- 1 to 6
+      gap   <- 0 to 2
+      ratio <- Seq(0.05, 0.5, 0.95)
+    do
+      val l = SplitPane.layout(SplitPane.Direction.Horizontal, width = w, height = 3, splitRatio = ratio, gap = gap)
+      val dividerW = l.divider.map(_.width).getOrElse(0)
+      assert(
+        l.first.width + dividerW + l.second.width <= w,
+        s"overflow at w=$w gap=$gap ratio=$ratio: ${l.first.width}+$dividerW+${l.second.width} > $w"
+      )
+      // The second pane must also stay within the region's right edge.
+      assert(l.second.at.x.value + l.second.width - 1 <= w, s"second pane past edge at w=$w gap=$gap ratio=$ratio")
+  }
+
   test("horizontal split with gap reserves a divider rect") {
     val l = SplitPane.layout(SplitPane.Direction.Horizontal, width = 10, height = 3, splitRatio = 0.5, gap = 2)
     assert(l.divider.isDefined)

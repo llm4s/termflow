@@ -92,8 +92,17 @@ object SplitPane:
     val gapClamped = math.max(0, math.min(gap, math.max(0, major - 2)))
     val available  = math.max(0, major - gapClamped)
     val ratio      = math.max(MinSizeRatio, math.min(1.0 - MinSizeRatio, splitRatio))
-    val firstSize  = math.max(1, (available * ratio).round.toInt)
-    val secondSize = math.max(1, available - firstSize)
+    // Cap firstSize at `available - 1` so the second pane always has room and
+    // `firstSize + gap + secondSize == major` holds exactly. Previously both
+    // sizes independently floored at 1, so for a small region the panes summed
+    // to more than `available` and the second pane (and divider) spilled past
+    // the region edge. When `available < 2` there is no room for two non-empty
+    // panes, so the surplus pane resolves to width/height 0 rather than
+    // overflowing.
+    val firstSize =
+      if available <= 1 then math.min(available, 1)
+      else math.max(1, math.min(available - 1, (available * ratio).round.toInt))
+    val secondSize = math.max(0, available - firstSize)
 
     direction match
       case Direction.Horizontal =>

@@ -101,6 +101,19 @@ class TableSpec extends AnyFunSuite:
     // Name col width=6; "strawberry" truncated to "strawb".
     assert(r.startsWith("strawb"))
 
+  test("formatRow aligns wide (CJK) content by display width, not char count"):
+    // A column of width 4 holding a 2-cell glyph pads to 4 *cells*, and a
+    // wide overflow truncates on a glyph boundary (no lone surrogate / half).
+    val wcols = Vector(
+      Table.Column[String]("h", width = 4, align = Table.Align.Left, render = identity)
+    )
+    val padded = Table.formatRow(wcols, "中")
+    assert(WCWidth.stringWidth(padded) == 4, s"width ${WCWidth.stringWidth(padded)} for [$padded]")
+    assert(padded == "中  ")
+    val truncated = Table.formatRow(wcols, "中文字")
+    assert(WCWidth.stringWidth(truncated) == 4, s"width ${WCWidth.stringWidth(truncated)} for [$truncated]")
+    assert(truncated == "中文")
+
   // --- rendering -----------------------------------------------------------
 
   private def render(v: VNode, width: Int, height: Int): (Array[Array[Char]], Array[Array[Style]]) =

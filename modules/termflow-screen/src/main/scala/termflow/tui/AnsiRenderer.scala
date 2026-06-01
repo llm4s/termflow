@@ -535,10 +535,20 @@ object AnsiRenderer:
         // Combining marks / variation selectors / control / zero-width:
         // attach them to the previous visible glyph so emoji presentation
         // sequences like U+2764 U+FE0F survive into the emitted cell text.
+        //
+        // Bounds-check the target cell explicitly: the leading glyph may have
+        // landed off-grid (e.g. an overlay child or overflowing layout drawn
+        // beyond the frame the grid was sized for), in which case `putCell`
+        // silently dropped it but `lastGlyphCol` still points past the array.
+        // Indexing `cells` directly there throws ArrayIndexOutOfBounds and
+        // crashes the whole render loop.
         else if lastGlyphCol >= 1 then
-          val prev  = cells(y - 1)(lastGlyphCol - 1)
-          val extra = str.substring(i, i + java.lang.Character.charCount(cp))
-          cells(y - 1)(lastGlyphCol - 1) = prev.copy(glyph = prev.renderedGlyph + extra)
+          val gx = lastGlyphCol - 1
+          val gy = y - 1
+          if gy >= 0 && gy < height && gx >= 0 && gx < width then
+            val prev  = cells(gy)(gx)
+            val extra = str.substring(i, i + java.lang.Character.charCount(cp))
+            cells(gy)(gx) = prev.copy(glyph = prev.renderedGlyph + extra)
         i += java.lang.Character.charCount(cp)
 
     def drawBorder(x: Int, y: Int, w: Int, h: Int, style: Style, chars: BorderChars): Unit =

@@ -118,3 +118,13 @@ class MenuBarSpec extends AnyFunSuite:
     assert(MenuBar.hitTest(sample, at, col = 999, row = 1).isEmpty)
     assert(MenuBar.hitTest(sample, at, col = 1, row = 99).isEmpty)
   }
+
+  test("an opened empty-items menu does not crash apply / hitTest") {
+    // Regression: `menu.items.map(_.length).max` threw on empty items once
+    // such a menu was opened.
+    val st0    = MenuBar.State(menus = Vector(MenuBar.Menu("File", Vector.empty)))
+    val opened = MenuBar.handleKey(st0, KeyDecoder.InputKey.Enter).state
+    val at     = Coord(1.x, 1.y)
+    assert(MenuBar.apply(opened, at).nonEmpty)                    // render must not throw
+    assert(MenuBar.hitTest(opened, at, col = 3, row = 2).isEmpty) // hit-test must not throw
+  }

@@ -356,6 +356,40 @@ object AnsiRenderer:
     out.append(moveTo(x, y + (h - 1))).append(s"${chars.bottomLeft}$horizontal${chars.bottomRight}")
     out.append(reset)
 
+  /**
+   * Longest prefix of `s` whose rendered cell width is at most `maxCells`,
+   * never splitting a code point (so wide glyphs and surrogate pairs stay
+   * whole). For pure-ASCII input this returns `s.take(maxCells)`.
+   */
+  private def takeCells(s: String, maxCells: Int): String =
+    if maxCells <= 0 then ""
+    else
+      var w = 0
+      var i = 0
+      while i < s.length do
+        val cp = s.codePointAt(i)
+        val cw = math.max(0, WCWidth.codePointWidth(cp))
+        if w + cw > maxCells then return s.substring(0, i)
+        w += cw
+        i += java.lang.Character.charCount(cp)
+      s
+
+  /**
+   * Smallest char (UTF-16) index `i` such that `WCWidth.stringWidth(s.take(i))`
+   * is at least `targetCells`. Used to translate a desired scroll column back
+   * to a code-point boundary. For pure-ASCII input this returns `targetCells`.
+   */
+  private def charIndexAtCell(s: String, targetCells: Int): Int =
+    if targetCells <= 0 then 0
+    else
+      var w = 0
+      var i = 0
+      while i < s.length && w < targetCells do
+        val cp = s.codePointAt(i)
+        w += math.max(0, WCWidth.codePointWidth(cp))
+        i += java.lang.Character.charCount(cp)
+      i
+
   private def visibleInput(inp: InputNode, rootWidth: Int): VisibleInput =
     val clampedCursor =
       if inp.cursor >= 0 && inp.cursor <= inp.prompt.length then inp.cursor
@@ -363,29 +397,38 @@ object AnsiRenderer:
 
     val requestedWidth =
       if inp.lineWidth > 0 then inp.lineWidth
-      else math.max(1, inp.prompt.length + 1)
+      else math.max(1, WCWidth.stringWidth(inp.prompt) + 1)
 
     val remainingWidth = math.max(1, rootWidth - inp.x.value + 1)
     val width          = math.max(1, math.min(requestedWidth, remainingWidth))
     val prefixLength   = math.max(0, math.min(inp.prefixLength, inp.prompt.length))
-    val fixedPrefix    = inp.prompt.take(prefixLength).take(width)
+    // `width` is a cell budget, so clip the fixed prefix and scroll the
+    // editable suffix by rendered cell width — not UTF-16 length. Otherwise
+    // CJK/emoji input overflows the declared input width or scrolls past the
+    // cursor, even though cursor placement below already uses WCWidth.
+    val fixedPrefix    = takeCells(inp.prompt.take(prefixLength), width)
+    val prefixCells    = WCWidth.stringWidth(fixedPrefix)
     val suffix         = inp.prompt.drop(prefixLength)
-    val availableWidth = math.max(0, width - fixedPrefix.length)
+    val availableCells = math.max(0, width - prefixCells)
     val suffixCursor   = math.max(0, clampedCursor - prefixLength)
     val suffixStart =
-      if availableWidth == 0 then 0
+      if availableCells == 0 then 0
       else
-        val maxStart              = math.max(0, suffix.length - availableWidth)
-        val preferredRightContext = math.min(2, math.max(0, availableWidth - 1))
-        val desiredStart          = suffixCursor - availableWidth + preferredRightContext + 1
-        math.max(0, math.min(maxStart, desiredStart))
+        val suffixCells           = WCWidth.stringWidth(suffix)
+        val cursorCell            = WCWidth.stringWidth(suffix.take(suffixCursor))
+        val maxStartCell          = math.max(0, suffixCells - availableCells)
+        val preferredRightContext = math.min(2, math.max(0, availableCells - 1))
+        val desiredStartCell      = cursorCell - availableCells + preferredRightContext + 1
+        val startCell             = math.max(0, math.min(maxStartCell, desiredStartCell))
+        charIndexAtCell(suffix, startCell)
     val visibleSuffix =
-      if availableWidth == 0 then ""
-      else suffix.slice(suffixStart, suffixStart + availableWidth)
+      if availableCells == 0 then ""
+      else takeCells(suffix.drop(suffixStart), availableCells)
     val visibleText =
-      val text = fixedPrefix + visibleSuffix
-      if text.length >= width then text.take(width)
-      else text + (" " * (width - text.length))
+      val text  = fixedPrefix + visibleSuffix
+      val cells = WCWidth.stringWidth(text)
+      if cells >= width then text
+      else text + (" " * (width - cells))
 
     // Cursor column = sum of WCWidth across visible characters up to the
     // cursor's char index. This makes wide-char input (CJK, emoji) and
@@ -442,7 +485,7 @@ object AnsiRenderer:
         }
 
       case InputNode(x, y, prompt, _, _, lineWidth, _) =>
-        val w     = if lineWidth > 0 then lineWidth else prompt.length
+        val w     = if lineWidth > 0 then lineWidth else WCWidth.stringWidth(prompt)
         val right = x.value + math.max(0, w - 1)
         (right, y.value)
 

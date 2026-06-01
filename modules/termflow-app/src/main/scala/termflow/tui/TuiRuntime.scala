@@ -6,6 +6,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import scala.concurrent.ExecutionContext
 import scala.util.Failure
 import scala.util.Success
+import scala.util.control.NonFatal
 
 /**
  * Pluggable renderer invoked by the runtime loop once per frame.
@@ -249,7 +250,15 @@ object TuiRuntime:
           case Cmd.FCmd(task, toCmd, onEnqueue) =>
             task.onComplete:
               case Success(result) =>
-                bus.publish(toCmd(result))
+                // Guard the success mapper too: if `toCmd` throws, the
+                // failure would otherwise die silently on the execution
+                // context and the app would stay stuck in its loading state.
+                val next =
+                  try toCmd(result)
+                  catch
+                    case NonFatal(e) =>
+                      Cmd.TermFlowErrorCmd(TermFlowError.Unexpected(unexpectedMessage(e), Some(e)))
+                bus.publish(next)
               case Failure(e) =>
                 bus.publish(Cmd.TermFlowErrorCmd(TermFlowError.Unexpected(unexpectedMessage(e), Some(e))))
             onEnqueue match

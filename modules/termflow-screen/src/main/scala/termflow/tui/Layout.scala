@@ -470,14 +470,17 @@ object Layout:
   /** Natural `(width, height)` of a concrete [[VNode]]. */
   def measureVNode(v: VNode): (Int, Int) = v match
     case TextNode(_, _, segments) =>
-      val width = segments.foldLeft(0)((acc, seg) => acc + seg.txt.length)
+      // Rendered cell width, not UTF-16 length: wide (CJK/emoji) and
+      // combining text must measure the same here as the renderer draws,
+      // or siblings, fills, and hit-test zones land at the wrong column.
+      val width = segments.foldLeft(0)((acc, seg) => acc + WCWidth.stringWidth(seg.txt))
       (width, 1)
 
     case BoxNode(_, _, w, h, _, _, _) =>
       (math.max(0, w), math.max(0, h))
 
     case InputNode(_, _, prompt, _, _, lineWidth, _) =>
-      val width = if lineWidth > 0 then lineWidth else prompt.length
+      val width = if lineWidth > 0 then lineWidth else WCWidth.stringWidth(prompt)
       (width, 1)
 
   /**

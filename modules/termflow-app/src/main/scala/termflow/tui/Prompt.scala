@@ -82,6 +82,16 @@ object Prompt:
         val newBuf = state.buffer.patch(state.cursor, chars.toIndexedSeq, 0)
         (normalized(state.copy(buffer = newBuf, cursor = state.cursor + chars.length)), None)
 
+      case KeyDecoder.InputKey.Paste(text) =>
+        if text.isEmpty then (state, None)
+        else
+          // Single-line prompt: keep only the first pasted line so a
+          // multi-line clipboard payload can't smuggle newlines into a
+          // one-row buffer. Mirrors TextField's paste behaviour.
+          val line   = text.takeWhile(ch => ch != '\n' && ch != '\r')
+          val newBuf = state.buffer.patch(state.cursor, line.toVector, 0)
+          (normalized(state.copy(buffer = newBuf, cursor = state.cursor + line.length)), None)
+
       case KeyDecoder.InputKey.ArrowLeft =>
         // Grapheme-aware step so the cursor doesn't strand combining marks.
         val text    = state.buffer.mkString

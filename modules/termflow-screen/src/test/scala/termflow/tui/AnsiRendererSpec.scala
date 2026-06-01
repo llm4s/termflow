@@ -466,6 +466,24 @@ class AnsiRendererSpec extends AnyFunSuite:
     val frame = AnsiRenderer.buildFrame(root)
     assert(frame.width >= 6, s"expected frame width >= 6, got ${frame.width}")
 
+  test("input viewport bounds wide-char text to the declared cell width"):
+    // prompt is 4 CJK glyphs = 8 cells; lineWidth is 4 cells. The viewport
+    // must show only the last two glyphs (4 cells), not slice 4 *chars*
+    // (8 cells) and overflow. Cursor sits at the end.
+    val root = RootNode(
+      width = 20,
+      height = 1,
+      children = Nil,
+      input = Some(InputNode(XCoord(1), YCoord(1), prompt = "你好世界", style = Style(), cursor = 4, lineWidth = 4))
+    )
+    val frame = AnsiRenderer.buildFrame(root)
+    assert(frame.cells(0)(0).glyph == "世", "first visible cell is the scrolled-to glyph")
+    assert(frame.cells(0)(1).width == 0, "continuation cell after wide glyph")
+    assert(frame.cells(0)(2).glyph == "界")
+    assert(frame.cells(0)(3).width == 0, "continuation cell after wide glyph")
+    assert(frame.cells(0)(4).ch == ' ', "nothing rendered past the 4-cell budget")
+    assert(frame.cursor.contains(Coord(XCoord(5), YCoord(1))), "hardware cursor lands one cell past the last glyph")
+
   // ---- renderPatch / depth & extended overloads ----
 
   test("renderPatch default overload uses Ansi8 depth and extended styles"):

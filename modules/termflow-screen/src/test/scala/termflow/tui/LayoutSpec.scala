@@ -18,6 +18,13 @@ class LayoutSpec extends AnyFunSuite:
     val multi = TextNode(1.x, 1.y, List(Text("ab", Style()), Text("cde", Style())))
     assert(Layout.measureVNode(multi) == (5, 1))
 
+  test("measureVNode on TextNode measures rendered cell width, not UTF-16 length"):
+    // 2 CJK glyphs = 4 cells (not 2 chars); emoji surrogate pair = 2 cells
+    // (not 2 chars); a combining mark adds 0. Matches the renderer's WCWidth.
+    assert(Layout.measureVNode(tn("你好")) == (4, 1))
+    assert(Layout.measureVNode(tn("😀")) == (2, 1))
+    assert(Layout.measureVNode(tn("é")) == (1, 1)) // e + combining acute
+
   test("measureVNode on BoxNode returns declared dimensions"):
     assert(Layout.measureVNode(BoxNode(1.x, 1.y, 10, 4, children = Nil)) == (10, 4))
 

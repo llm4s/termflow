@@ -167,6 +167,55 @@ class TuiRuntimeSpec extends AnyFunSuite:
         }
     )
 
+  test("TuiRuntime surfaces an error when the FCmd success mapper throws"):
+    final class StopRuntime extends RuntimeException("stop-runtime")
+
+    val seenErr = new AtomicReference[Option[TermFlowError]](None)
+
+    val renderer = new TuiRenderer:
+      override def render(
+        textNode: RootNode,
+        err: Option[TermFlowError],
+        terminal: TerminalBackend,
+        renderMetrics: RenderMetrics
+      ): Unit =
+        err.foreach { e =>
+          seenErr.set(Some(e))
+          throw new StopRuntime
+        }
+
+    object App extends TuiApp[Int, Unit]:
+      override def init(ctx: RuntimeCtx[Unit]): Tui[Int, Unit] =
+        Tui(
+          model = 0,
+          // The Future succeeds, but the success mapper blows up. Without the
+          // guard this throws on the execution-context thread and the runtime
+          // never sees either the intended command or an error.
+          cmd = Cmd.FCmd(
+            task = Future.successful(()),
+            toCmd = _ => throw new RuntimeException("mapper-boom"),
+            onEnqueue = None
+          )
+        )
+
+      override def update(model: Int, msg: Unit, ctx: RuntimeCtx[Unit]): Tui[Int, Unit] = Tui(model)
+      override def view(model: Int): RootNode             = RootNode(80, 24, children = List.empty, input = None)
+      override def toMsg(input: PromptLine): Result[Unit] = Right(())
+
+    val backend = new TestTerminalBackend
+    intercept[StopRuntime]:
+      TuiRuntime.run(
+        app = App,
+        renderer = renderer,
+        terminalBackend = backend,
+        config = TestConfig
+      )
+
+    assert(seenErr.get().exists {
+      case TermFlowError.Unexpected(msg, Some(_: RuntimeException)) => msg == "mapper-boom"
+      case _                                                        => false
+    })
+
   test("TuiRuntime dispatches GCmd and runs onEnqueue follow-up before completion"):
     enum Msg:
       case Step, Done

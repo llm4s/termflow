@@ -147,3 +147,23 @@ class PromptSpec extends AnyFunSuite:
   test("cursorColumn counts combining marks as 0 columns"):
     val state = Prompt.State(buffer = "é".toVector, cursor = 2)
     assert(Prompt.cursorColumn(state) == 1, "e=1, combining mark=0")
+
+  // ---- bracketed paste ----------------------------------------------------
+
+  test("Paste inserts text at the cursor and advances by its length"):
+    val state       = Prompt.State(buffer = Vector('a', 'd'), cursor = 1)
+    val (next, cmd) = Prompt.handleKey[String](state, InputKey.Paste("bc"))(noopToMsg)
+    assert(cmd.isEmpty)
+    assert(Prompt.render(next) == "abcd")
+    assert(next.cursor == 3)
+
+  test("Paste keeps only the first line of a multi-line payload"):
+    val (next, _) = Prompt.handleKey[String](Prompt.State(), InputKey.Paste("one\ntwo\r\nthree"))(noopToMsg)
+    assert(Prompt.render(next) == "one")
+    assert(next.cursor == 3)
+
+  test("Paste of empty text is a no-op"):
+    val state     = Prompt.State(buffer = Vector('a'), cursor = 1)
+    val (next, _) = Prompt.handleKey[String](state, InputKey.Paste(""))(noopToMsg)
+    assert(Prompt.render(next) == "a")
+    assert(next.cursor == 1)

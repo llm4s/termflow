@@ -318,18 +318,33 @@ object MultiLineInput:
   ): VNode =
     val width = math.max(1, viewportWidth)
     val cur   = math.max(0, math.min(text.length, cursorCol))
-    val before =
-      if cur > 0 then text.substring(0, cur) else ""
-    val cursorChar =
-      if cur < text.length then text.substring(cur, math.min(text.length, cur + 1))
-      else " "
-    val after =
-      if cur < text.length then text.substring(math.min(text.length, cur + 1)) else ""
 
-    // Pad the row out to the viewport so reverse-video cell stays visible
-    // even when the buffer is shorter than the row.
-    val tail   = math.max(0, width - WCWidth.stringWidth(before) - WCWidth.stringWidth(cursorChar))
-    val padded = if after.length < tail then after + (" " * (tail - after.length)) else after
+    // The cursor row, unlike the other rows, used to emit the entire line
+    // verbatim — so a line longer than the viewport overflowed `width`
+    // (spilling past any surrounding box border). Horizontally scroll the
+    // row so it is always exactly `width` cells and the cursor stays visible.
+    val cursorCharWidth =
+      if cur < text.length then math.max(1, WCWidth.codePointWidth(text.codePointAt(cur))) else 1
+    val cursorCell = WCWidth.stringWidth(text.substring(0, cur))
+    // Pin the cursor to the right edge once the text to its left overflows,
+    // reserving enough columns for the (possibly wide) cursor glyph.
+    val startCell = math.max(0, cursorCell - math.max(0, width - cursorCharWidth))
+    val startIdx  = charIndexAtCell(text, startCell)
+
+    val before = clipToWidth(text.substring(startIdx, cur), width)
+    val rest   = text.substring(cur)
+    val (cursorChar, afterRaw) =
+      if rest.isEmpty then (" ", "")
+      else
+        val n = java.lang.Character.charCount(rest.codePointAt(0))
+        (rest.substring(0, n), rest.substring(n))
+
+    val usedCells = WCWidth.stringWidth(before) + WCWidth.stringWidth(cursorChar)
+    val after     = clipToWidth(afterRaw, math.max(0, width - usedCells))
+    // Pad out to the viewport so the reverse-video cell stays visible even
+    // when the (clipped) content is shorter than the row.
+    val pad    = math.max(0, width - usedCells - WCWidth.stringWidth(after))
+    val padded = after + (" " * pad)
     TextNode(
       at.x,
       at.y,
@@ -361,3 +376,20 @@ object MultiLineInput:
         w += add
         i += n
       sb.toString
+
+  /**
+   * Smallest UTF-16 index `i` such that `WCWidth.stringWidth(text.take(i))`
+   * is at least `targetCells`. Translates a desired horizontal scroll column
+   * back to a code-point boundary (never splitting a wide glyph or surrogate
+   * pair). For pure-ASCII input this returns `targetCells`.
+   */
+  private def charIndexAtCell(text: String, targetCells: Int): Int =
+    if targetCells <= 0 then 0
+    else
+      var w = 0
+      var i = 0
+      while i < text.length && w < targetCells do
+        val cp = text.codePointAt(i)
+        w += math.max(0, WCWidth.codePointWidth(cp))
+        i += java.lang.Character.charCount(cp)
+      i

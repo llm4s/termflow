@@ -299,6 +299,22 @@ class ConsoleKeyPressSourceSpec extends AnyFunSuite:
       case InputKey.Unknown(_) => ()
       case other               => fail(s"expected Unknown, got $other")
 
+  test("CSI param that overflows Int does not kill the decoder thread"):
+    // Regression: a parameter too large for Int used to throw
+    // NumberFormatException on the decoder thread, which then died and left
+    // all keyboard/mouse input frozen. The oversized sequence must decode to
+    // Unknown and the *following* key must still be delivered.
+    val src = ConsoleKeyPressSource(new StringReader("[99999999999999Ax"))
+    try
+      // The exact decoding of the oversized sequence is unimportant (the
+      // overflowing param degrades to 0); what matters is that the decoder
+      // survives and still delivers the following 'x'.
+      src.next(): Unit
+      assert(src.next() == InputRead.Key(InputKey.CharKey('x')))
+    finally
+      assert(src.close().isSuccess)
+      ()
+
   // ---- Paste content reaching EOF before the end marker ----
 
   test("end-of-stream during paste collection flushes any partial match"):

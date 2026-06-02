@@ -229,10 +229,14 @@ object Devtools:
    *   maybeIdx match
    *     case None      => model.copy(devCursor = cursor).tui
    *     case Some(idx) =>
-   *       // Rewind: restore the selected frame's model.
-   *       val frame = model.history.at(idx).get
-   *       frame.model.copy(history = model.history.rewindTo(idx).get,
-   *                        devCursor = cursor).tui
+   *       // Rewind: restore the selected frame's model. Use the Option API
+   *       // rather than `.get` — the frame can be evicted from the ring
+   *       // buffer between the keypress and a later rewind across ticks.
+   *       (model.history.at(idx), model.history.rewindTo(idx)) match
+   *         case (Some(frame), Some(rewound)) =>
+   *           frame.model.copy(history = rewound, devCursor = cursor).tui
+   *         case _ =>
+   *           model.copy(devCursor = cursor).tui
    *
    * // In view:
    * Devtools.Panel.view(

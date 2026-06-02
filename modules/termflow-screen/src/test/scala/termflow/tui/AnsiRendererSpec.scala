@@ -419,6 +419,17 @@ class AnsiRendererSpec extends AnyFunSuite:
     assert(frame.cells(0)(2).ch == 'A')
     assert(frame.cells(0)(2).width == 1)
 
+  test("buildFrame does not crash on a combining mark drawn off-grid"):
+    // Regression: an overlay anchored beyond the frame the grid was sized
+    // for, whose child carries a combining mark, used to hit an unchecked
+    // `cells(y - 1)(lastGlyphCol - 1)` access and throw
+    // ArrayIndexOutOfBounds, crashing the render loop.
+    val child   = TextNode(XCoord(1), YCoord(1), List(Text("á", Style())))
+    val overlay = Overlay(OverlayPosition.At(XCoord(10), YCoord(10)), width = 2, height = 1, children = List(child))
+    val root    = RootNode(width = 5, height = 3, children = Nil, input = None, overlays = List(overlay))
+    val frame   = AnsiRenderer.buildFrame(root)
+    assert(frame.width == 5 && frame.height == 3)
+
   test("buildFrame preserves supplementary emoji glyphs instead of lone surrogates"):
     val root = RootNode(
       width = 4,

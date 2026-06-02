@@ -118,6 +118,14 @@ class DialogsSpec extends AnyFunSuite:
     assert(s.contains("▸ banana"), s"selected row must carry the marker, got: $s")
   }
 
+  test("Dialogs.listSelect clamps an out-of-range selectedIndex to a visible highlight") {
+    // selectedIndex past the end (e.g. the list shrank before the app
+    // re-clamped) must still highlight a row, not render nothing selected.
+    val o = Dialogs.listSelect(title = "Pick", items = Seq("apple", "banana", "cherry"), selectedIndex = 9)
+    val s = stringForm(o)
+    assert(s.contains("▸ cherry"), s"out-of-range selection should clamp to last row, got: $s")
+  }
+
   test("Dialogs.listSelect scrolls so the selected row stays visible") {
     val items = (1 to 30).map(i => s"item-$i")
     val o     = Dialogs.listSelect(title = "Long list", items = items, selectedIndex = 25, maxVisible = 6)

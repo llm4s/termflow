@@ -127,19 +127,47 @@ object Table:
       val (nextBody, msg) = ListView.handleKey(state.body, key)(onSelect)
       (state.copy(body = nextBody), msg)
 
-  /** Pad / truncate `s` to exactly `w` cells using the given alignment. */
+  /** Pad / truncate `s` to exactly `w` *display cells* using the alignment. */
   private def align(s: String, w: Int, align: Align): String =
     if w <= 0 then ""
-    else if s.length >= w then s.take(w)
     else
-      val pad = w - s.length
-      align match
-        case Align.Left  => s + " " * pad
-        case Align.Right => " " * pad + s
-        case Align.Center =>
-          val left  = pad / 2
-          val right = pad - left
-          " " * left + s + " " * right
+      // Measure in display cells, not UTF-16 length, so wide (CJK/emoji)
+      // content aligns to the column grid and truncation never splits a
+      // surrogate pair or a wide glyph.
+      val clipped = clipToCells(s, w)
+      val sw      = WCWidth.stringWidth(clipped)
+      if sw >= w then clipped
+      else
+        val pad = w - sw
+        align match
+          case Align.Left  => clipped + " " * pad
+          case Align.Right => " " * pad + clipped
+          case Align.Center =>
+            val left  = pad / 2
+            val right = pad - left
+            " " * left + clipped + " " * right
+
+  /** Longest prefix of `s` whose display width is at most `maxCells`. */
+  private def clipToCells(s: String, maxCells: Int): String =
+    if maxCells <= 0 then ""
+    else
+      val sb = new StringBuilder
+      var w  = 0
+      var i  = 0
+      while i < s.length do
+        val cp = s.codePointAt(i)
+        val cw = math.max(0, WCWidth.codePointWidth(cp))
+        if w + cw > maxCells then return sb.toString
+        sb.append(s.substring(i, i + java.lang.Character.charCount(cp)))
+        w += cw
+        i += java.lang.Character.charCount(cp)
+      sb.toString
+
+  /** Clip `s` to `cells` display cells, then right-pad with spaces to fill. */
+  private def fitToCells(s: String, cells: Int): String =
+    val clipped = clipToCells(s, cells)
+    val w       = WCWidth.stringWidth(clipped)
+    if w >= cells then clipped else clipped + " " * (cells - w)
 
   /** Total visible width = sum of column widths + single-space separators between them. */
   def width[A](columns: Vector[Column[A]]): Int =
@@ -182,7 +210,7 @@ object Table:
 
     val headerStyle  = Style(fg = theme.primary, bold = true)
     val dividerStyle = Style(fg = theme.primary)
-    val headerText   = formatHeader(cols).take(totalW).padTo(totalW, ' ')
+    val headerText   = fitToCells(formatHeader(cols), totalW)
     val dividerText  = "─" * totalW
 
     val headerRow  = TextNode(at.x, at.y, List(Text(headerText, headerStyle)))
@@ -199,7 +227,7 @@ object Table:
       if idx >= state.size then TextNode(at.x, rowY, List(Text(" " * totalW, Style())))
       else
         val rowData    = state.rows(idx)
-        val rendered   = formatRow(cols, rowData).take(totalW).padTo(totalW, ' ')
+        val rendered   = fitToCells(formatRow(cols, rowData), totalW)
         val isSelected = state.selectable && idx == state.body.selected
         val showCursor = isSelected && focused
         val style =

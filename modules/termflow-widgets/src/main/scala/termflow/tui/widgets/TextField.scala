@@ -253,10 +253,20 @@ object TextField:
     val padded          = padToWidth(clipped, width)
 
     if focused then
-      val cIdx        = math.min(width - 1, math.max(0, state.cursor))
-      val before      = padded.take(cIdx)
-      val cursorChar  = padded.charAt(cIdx).toString
-      val after       = padded.drop(cIdx + 1)
+      // `state.cursor` is a UTF-16 code-unit offset, but `padded` is measured
+      // in display cells — the two diverge as soon as the buffer holds a wide
+      // (CJK/emoji) or zero-width glyph, so indexing `padded` by the raw
+      // cursor threw StringIndexOutOfBounds (and split surrogate pairs even
+      // when it didn't throw). Split on the cursor's *display column* instead.
+      val safeCursor = math.max(0, math.min(state.buffer.length, state.cursor))
+      val cursorCol  = math.min(width - 1, WCWidth.stringWidth(state.buffer.take(safeCursor)))
+      val before     = clipToWidth(padded, cursorCol)
+      val rest       = padded.substring(before.length)
+      val (cursorChar, after) =
+        if rest.isEmpty then (" ", "")
+        else
+          val n = java.lang.Character.charCount(rest.codePointAt(0))
+          (rest.substring(0, n), rest.substring(n))
       val baseStyle   = Style(fg = theme.primary)
       val cursorStyle = Style(fg = theme.background, bg = theme.primary)
       TextNode(

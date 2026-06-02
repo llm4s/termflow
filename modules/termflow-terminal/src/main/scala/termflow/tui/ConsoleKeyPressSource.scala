@@ -28,6 +28,16 @@ object ConsoleKeyPressSource:
   private val DefaultModifierIfMissing: Int = 1
 
   /**
+   * Upper bound on the number of CSI parameter characters we buffer. A
+   * well-behaved terminal never sends more than a handful; the cap stops a
+   * malformed or hostile stream of digits from growing the buffer without
+   * limit. Excess digits are dropped — combined with the overflow-safe parse
+   * below, an over-long parameter degrades to `Unknown` rather than killing
+   * the decoder thread.
+   */
+  private val MaxCsiParamChars: Int = 64
+
+  /**
    * Top-level decoder: classifies a single byte as a printable, control,
    * standalone Escape, or the start of a CSI / SS3 sequence and dispatches
    * to the appropriate sub-parser.
@@ -83,7 +93,9 @@ object ConsoleKeyPressSource:
         done = true
       else
         val ch = n.intValue().toChar
-        if (ch >= '0' && ch <= '9') || ch == ';' then builder.append(ch)
+        if (ch >= '0' && ch <= '9') || ch == ';' then
+          // Drop overflow digits rather than buffering an unbounded run.
+          if builder.length < MaxCsiParamChars then builder.append(ch): Unit
         else if prefix == '\u0000' && (ch == '?' || ch == '<' || ch == '>' || ch == '!') then prefix = ch
         else
           finalByte = ch
@@ -93,7 +105,12 @@ object ConsoleKeyPressSource:
     else
       val params: Vector[Int] =
         if builder.isEmpty then Vector.empty
-        else builder.toString.split(";", -1).toVector.map(p => if p.isEmpty then 0 else p.toInt)
+        // `toIntOption` guards against parameter values that overflow `Int`
+        // (e.g. a malformed `CSI 99999999999999 A`). Before this guard the
+        // resulting `NumberFormatException` propagated out of the decoder
+        // thread, which then died and left keyboard/mouse input frozen for
+        // the rest of the session. Unparseable / empty params fall back to 0.
+        else builder.toString.split(";", -1).toVector.map(p => p.toIntOption.getOrElse(0))
       prefix match
         case '<'      => decodeSgrMouse(params, finalByte)
         case '\u0000' => csiToKey(params, finalByte, queueBridge)
@@ -206,9 +223,12 @@ object ConsoleKeyPressSource:
   private def decodeSgrMouse(params: Vector[Int], finalByte: Char): InputKey =
     if params.length < 3 then InputKey.Unknown(s"CSI <${params.mkString(";")}$finalByte")
     else
-      val button       = params(0)
-      val col          = params(1)
-      val row          = params(2)
+      val button = params(0)
+      // SGR mouse coordinates are 1-based; clamp to honour the invariant
+      // documented on `MouseEvent` so downstream `col - 1` indexing can't
+      // land at -1 if a terminal ever reports a 0.
+      val col          = math.max(1, params(1))
+      val row          = math.max(1, params(2))
       val releaseFinal = finalByte == 'm'
       // `fromSgr` returns None for the scroll-wheel release byte some
       // terminals duplicate after each press — surface as NoOp so the

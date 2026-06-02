@@ -241,9 +241,15 @@ object Dialogs:
     cancelLabel: String = "Cancel",
     position: OverlayPosition = OverlayPosition.Centered
   )(using theme: Theme): Overlay =
-    val layout     = listSelectLayout(items.size, selectedIndex, maxVisible)
-    val visible    = layout.visibleCount
-    val anchor     = layout.anchorIndex
+    val layout  = listSelectLayout(items.size, selectedIndex, maxVisible)
+    val visible = layout.visibleCount
+    val anchor  = layout.anchorIndex
+    // Clamp to match the scroll anchor (which already clamps). Without this
+    // an out-of-range `selectedIndex` (e.g. the app's list shrank before it
+    // re-clamped) scrolls to a valid window but highlights no row, so the
+    // list looks frozen with nothing selected.
+    val clampedSelectedIndex =
+      if items.isEmpty then -1 else math.max(0, math.min(items.size - 1, selectedIndex))
     val choices    = List(Choice(okLabel, okFocused), Choice(cancelLabel, !okFocused))
     val titleLen   = title.length + 4
     val actionsLen = choiceWidth(choices) + 4
@@ -261,7 +267,7 @@ object Dialogs:
         .zipWithIndex
         .map { case (item, i) =>
           val absIdx = anchor + i
-          val sel    = absIdx == selectedIndex
+          val sel    = absIdx == clampedSelectedIndex
           val marker = if sel then "▸ " else "  "
           val style =
             if sel then Style(fg = theme.background, bg = theme.primary, bold = true)
@@ -498,6 +504,10 @@ object Dialogs:
     val visible = layout.visibleCount
     val anchor  = layout.anchorIndex
     val choices = List(Choice(okLabel, okFocused), Choice(cancelLabel, !okFocused))
+    // Clamp to match the scroll anchor so an out-of-range selectedIndex still
+    // highlights a row instead of leaving the list visually unselected.
+    val clampedSelectedIndex =
+      if entries.isEmpty then -1 else math.max(0, math.min(entries.size - 1, selectedIndex))
 
     val pathStr    = currentPath.toString
     val titleLen   = title.length + 4
@@ -535,7 +545,7 @@ object Dialogs:
         .zipWithIndex
         .map { case (entry, i) =>
           val absIdx = anchor + i
-          val sel    = absIdx == selectedIndex
+          val sel    = absIdx == clampedSelectedIndex
           renderEntryRow(entry, sel, layout.firstRowOffset + i, innerWidth, showSizes, theme)
         }
         .toList

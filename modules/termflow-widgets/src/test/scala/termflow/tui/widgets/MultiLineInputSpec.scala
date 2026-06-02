@@ -216,6 +216,17 @@ class MultiLineInputSpec extends AnyFunSuite:
     val texts = nodes.map { case t: TextNode => t.txt.map(_.txt).mkString; case _ => "" }
     assert(texts.last.startsWith("line-9"))
 
+  test("cursor row is clipped to the viewport width and keeps the cursor visible"):
+    // Regression: the cursor row emitted the whole line verbatim, so a line
+    // longer than the viewport overflowed `width` cells. It must now render
+    // exactly `width` cells with the cursor scrolled into view.
+    val long  = "x" * 100
+    val s     = MultiLineInput.State(lines = Vector(long), cursorRow = 0, cursorCol = 80)
+    val nodes = MultiLineInput.render(s, width = 10, height = 1)
+    assert(nodes.size == 1)
+    val rowText = nodes.head.asInstanceOf[TextNode].txt.map(_.txt).mkString
+    assert(WCWidth.stringWidth(rowText) == 10, s"row width ${WCWidth.stringWidth(rowText)} for [$rowText]")
+
   test("render returns Nil for non-positive size"):
     val s = MultiLineInput.State.empty
     assert(MultiLineInput.render(s, width = 0, height = 5).isEmpty)

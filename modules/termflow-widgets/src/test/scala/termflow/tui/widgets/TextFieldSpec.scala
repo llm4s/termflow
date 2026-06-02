@@ -275,6 +275,21 @@ class TextFieldSpec extends AnyFunSuite:
     assert(cs.mkString == "abcd")
     assert(styles(3).bg == Theme.dark.primary)
 
+  test("focused field with wide chars and cursor at end renders without crashing"):
+    // Regression: cursor (a UTF-16 offset) was used to index the
+    // display-cell-measured padded string, throwing StringIndexOutOfBounds
+    // once the buffer held wide glyphs.
+    val s     = TextField.State(buffer = "你好", cursor = 2)
+    val v     = TextField.view(s, lineWidth = 4, focused = true)
+    val frame = AnsiRenderer.buildFrame(RootNode(4, 1, List(v), None))
+    assert(frame.width == 4)
+
+  test("focused cursor lands on the whole wide glyph (no surrogate/half-char split)"):
+    // buffer "a中b", cursor after 'a' (offset 1) → cursor cell is the wide 中.
+    val s = TextField.State(buffer = "a中b", cursor = 1)
+    val v = TextField.view(s, lineWidth = 6, focused = true)
+    assert(v.asInstanceOf[TextNode].txt(1).txt == "中")
+
   test("wide glyphs render intact without overpadding"):
     val v     = TextField.view(TextField.State.of("中"), lineWidth = 3)
     val frame = AnsiRenderer.buildFrame(RootNode(3, 1, List(v), None))

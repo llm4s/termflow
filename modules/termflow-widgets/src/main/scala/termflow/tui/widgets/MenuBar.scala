@@ -167,7 +167,7 @@ object MenuBar:
           val style =
             if sel then Style(fg = theme.background, bg = theme.primary, bold = true)
             else Style(fg = theme.foreground)
-          val padded = item.padTo(menu.items.map(_.length).max + 2, ' ')
+          val padded = item.padTo(dropdownInnerWidth(menu), ' ')
           TextNode(at.x + (left - 1), at.y + (1 + j), List(Text(padded, style)))
         }
         barNode :: itemNodes
@@ -194,12 +194,22 @@ object MenuBar:
         case Some(idx) =>
           val menu    = state.menus(idx)
           val left    = at.x.value + titleStartCol(state, idx) - 1
-          val width   = menu.items.map(_.length).max + 2
+          val width   = dropdownInnerWidth(menu)
           val itemRow = row - (at.y.value + 1)
           if itemRow < 0 || itemRow >= menu.items.size then None
           else if col < left || col >= left + width then None
           else Some(Right(itemRow))
         case None => None
+
+  /**
+   * Inner cell width of `menu`'s dropdown: the widest item label plus a
+   * two-cell padding. `maxOption` guards the empty-items case — an empty
+   * menu can still be opened via Enter/Arrow, and `Vector.empty.max` would
+   * otherwise throw `UnsupportedOperationException` from both [[apply]] and
+   * [[hitTest]].
+   */
+  private def dropdownInnerWidth(menu: Menu): Int =
+    menu.items.map(_.length).maxOption.getOrElse(0) + 2
 
   /**
    * Column offset (1-based, relative to `at.x`) where the title cell

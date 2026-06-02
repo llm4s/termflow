@@ -123,6 +123,18 @@ class HistorySpec extends AnyFunSuite:
     store.append("  four  ")
     assert(store.load() == Vector("three", "four"))
 
+  test("InMemoryHistoryStore tolerates concurrent append/load without corruption"):
+    // Regression: the backing ArrayBuffer was unsynchronized, so concurrent
+    // append vs. load could throw or corrupt state. Hammer it from several
+    // threads and assert it neither throws nor exceeds maxEntries.
+    val store = InMemoryHistoryStore(maxEntries = 50)
+    val threads = (0 until 8).map { t =>
+      new Thread(() => for i <- 0 until 500 do { store.append(s"e-$t-$i"); store.load(): Unit })
+    }
+    threads.foreach(_.start())
+    threads.foreach(_.join())
+    assert(store.load().size <= 50)
+
   test("Ctrl+C exits without appending history"):
     val store = new StubStore(Vector("one"))
     val start = PromptHistory.initial(store)

@@ -195,10 +195,14 @@ enum Layout:
    *     subtracted when both border zones are present).
    *   - `center` consumes the rest.
    *
-   * Without a budget, every zone takes its natural size; the overall
-   * measure is `(max(top.w, left.w + gap + center.w + gap + right.w,
-   * bottom.w), top.h + gap + max(left.h, center.h, right.h) + gap +
-   * bottom.h)` with gap terms only when the adjacent zones are non-empty.
+   * Without a budget, every zone takes its natural size. Because top/bottom
+   * are inset between the left/right zones, the width they contribute is
+   * `left.w + top.w + right.w` (and likewise for bottom), so the overall
+   * measure is `(max(left.w + top.w + right.w, left.w + gap + center.w + gap
+   * + right.w, left.w + bottom.w + right.w), top.h + gap + max(left.h,
+   * center.h, right.h) + gap + bottom.h)` with gap terms only when the
+   * adjacent zones are non-empty. The left/right widths are zero when those
+   * zones are absent, so the band's width collapses to its own natural width.
    *
    * Insetting the top/bottom strips by the left/right widths keeps the
    * corner columns clear, so a five-zone bordered box no longer draws
@@ -465,7 +469,12 @@ object Layout:
         case n if n >= 2 => g * (n - 1)
         case _           => 0
     val midRowW = leftW + centerW + rightW + midRowGap
-    val width   = List(topW, midRowW, botW).max
+    // Top/bottom are inset between the left/right zones (issue #209), so the
+    // width they need is left.w + band.w + right.w. (left/right widths are 0
+    // when absent, collapsing to the band's own width.)
+    val topBandW = leftW + topW + rightW
+    val botBandW = leftW + botW + rightW
+    val width    = List(topBandW, midRowW, botBandW).max
     val verticalGap =
       List(b.top.isDefined, midH > 0, b.bottom.isDefined).count(identity) match
         case n if n >= 2 => g * (n - 1)
@@ -724,7 +733,9 @@ object Layout:
    * natural height across the middle columns (inset by the left / right
    * widths so the corner columns stay clear); left / right take their
    * natural width down the middle band; center fills the remainder. Without
-   * a budget every zone takes its natural size.
+   * a budget every zone takes its natural size, and the synthesised width
+   * leaves room for the inset top/bottom (`left.w + band.w + right.w`) so a
+   * wide top/bottom keeps its full width instead of being clipped.
    */
   private def resolveBorder[Id](
     b: Border,
@@ -745,7 +756,10 @@ object Layout:
       else
         val midZones = List(b.left, b.center, b.right).count(_.isDefined)
         val midGap   = if midZones >= 2 then gap * (midZones - 1) else 0
-        List(topW, leftW + centerW + rightW + midGap, botW).max
+        // Top/bottom are inset between left/right (issue #209): the width they
+        // need is left.w + band.w + right.w, so they keep their full natural
+        // width in the inset position. left/right widths are 0 when absent.
+        List(leftW + topW + rightW, leftW + centerW + rightW + midGap, leftW + botW + rightW).max
     val budgetH =
       if availableHeight >= 0 then availableHeight
       else

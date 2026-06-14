@@ -179,12 +179,17 @@ enum Layout:
   case Grid(columns: Int, rowGap: Int, colGap: Int, cells: List[GridCell])
 
   /**
-   * Five-zone border layout: top and bottom span the full width, left and
-   * right take their natural width and fill the middle band, center fills
-   * what's left. Any zone may be `None` and its space collapses.
+   * Five-zone border layout: top and bottom span the middle columns (the
+   * span between the left and right zones), left and right take their
+   * natural width and fill the middle band, center fills what's left. Any
+   * zone may be `None` and its space collapses.
    *
    * **Sizing.** Designed for a budgeted resolve. With a budget:
-   *   - `top` / `bottom` each take their natural height; full width.
+   *   - `top` / `bottom` each take their natural height and span the middle
+   *     columns: their width is `availableWidth - left.w - right.w` and they
+   *     start at `left.w` (the CSS-grid "header spans the middle columns"
+   *     convention). When neither `left` nor `right` is present this is the
+   *     full width.
    *   - `left` / `right` each take their natural width; the middle band's
    *     height is `availableHeight - top.h - bottom.h - 2*gap` (gap is only
    *     subtracted when both border zones are present).
@@ -195,17 +200,18 @@ enum Layout:
    * bottom.w), top.h + gap + max(left.h, center.h, right.h) + gap +
    * bottom.h)` with gap terms only when the adjacent zones are non-empty.
    *
-   * **Out of scope.** Independent gaps for the four borders; alignment of
-   * shorter top/bottom strips against the left/right edges (today they
-   * span the full width even when adjacent corners are occupied by left/
-   * right zones). Hit-test passthrough works because any zone can be a
-   * [[Zone]].
+   * Insetting the top/bottom strips by the left/right widths keeps the
+   * corner columns clear, so a five-zone bordered box no longer draws
+   * overlapping / inconsistent corners (issue #209).
    *
-   * @param top    Optional top zone (full width, natural height).
+   * **Out of scope.** Independent gaps for the four borders. Hit-test
+   * passthrough works because any zone can be a [[Zone]].
+   *
+   * @param top    Optional top zone (middle-column width, natural height).
    * @param left   Optional left zone (natural width, middle-band height).
    * @param center Optional center zone (fills remaining rectangle).
    * @param right  Optional right zone (natural width, middle-band height).
-   * @param bottom Optional bottom zone (full width, natural height).
+   * @param bottom Optional bottom zone (middle-column width, natural height).
    * @param gap    Cells between adjacent zones; clamps to 0.
    */
   case Border(
@@ -715,9 +721,10 @@ object Layout:
 
   /**
    * Resolve a [[Border]] at `at`. With a budget, top / bottom take their
-   * natural height across the full width; left / right take their natural
-   * width down the middle band; center fills the remainder. Without a
-   * budget every zone takes its natural size.
+   * natural height across the middle columns (inset by the left / right
+   * widths so the corner columns stay clear); left / right take their
+   * natural width down the middle band; center fills the remainder. Without
+   * a budget every zone takes its natural size.
    */
   private def resolveBorder[Id](
     b: Border,
@@ -788,12 +795,18 @@ object Layout:
         case Some(bb) => out ++= resolveTrackedImpl(zone, origin, w, h, bb)
         case None     => out ++= resolveTo(zone, origin, w, h)
 
-    b.top.foreach(z => emit(z, Coord(XCoord(leftX), YCoord(topY)), budgetW, topActualH))
+    // Inset top/bottom to the middle columns so the corner columns owned by
+    // left/right stay clear (issue #209). Collapses to the full width when
+    // neither left nor right is present.
+    val midX     = leftX + leftActualW
+    val midSpanW = math.max(0, budgetW - leftActualW - rightActualW)
+
+    b.top.foreach(z => emit(z, Coord(XCoord(midX), YCoord(topY)), midSpanW, topActualH))
     if midH > 0 then
       b.left.foreach(z => emit(z, Coord(XCoord(leftX), YCoord(midY)), leftActualW, midH))
       b.center.foreach(z => emit(z, Coord(XCoord(centerX), YCoord(midY)), centerW2, midH))
       b.right.foreach(z => emit(z, Coord(XCoord(rightX), YCoord(midY)), rightActualW, midH))
-    b.bottom.foreach(z => emit(z, Coord(XCoord(leftX), YCoord(botY)), budgetW, botActualH))
+    b.bottom.foreach(z => emit(z, Coord(XCoord(midX), YCoord(botY)), midSpanW, botActualH))
     out.result()
 
   /**

@@ -76,6 +76,33 @@ class LayoutBorderSpec extends AnyFunSuite:
     // Center fills x=2..19 on rows 2..4.
     assert(hits.hit(10, 3).contains("center"))
 
+  test("Border insets top/bottom so corner columns stay clear of left/right (issue #209)"):
+    val (_, hits) = Layout.resolveTracked[String](
+      Layout.border(
+        top = Layout.zone("top", tn("T")),
+        left = Layout.zone("left", tn("L")),
+        center = Layout.zone("center", tn("C")),
+        right = Layout.zone("right", tn("R")),
+        bottom = Layout.zone("bottom", tn("B")),
+        gap = 0
+      ),
+      Coord(1.x, 1.y),
+      20,
+      5
+    )
+    // left.w = right.w = 1, so top/bottom span only the middle columns
+    // (x = 2..19). The corner columns (x = 1, x = 20) are left for the
+    // left/right zones in the middle band and must not be claimed by
+    // top/bottom — otherwise the corners overlap.
+    assert(hits.hit(2, 1).contains("top"))
+    assert(hits.hit(19, 1).contains("top"))
+    assert(!hits.hit(1, 1).contains("top"))
+    assert(!hits.hit(20, 1).contains("top"))
+    assert(hits.hit(2, 5).contains("bottom"))
+    assert(hits.hit(19, 5).contains("bottom"))
+    assert(!hits.hit(1, 5).contains("bottom"))
+    assert(!hits.hit(20, 5).contains("bottom"))
+
   test("Border collapses the middle band when none of left/center/right are set"):
     val b = Layout.border(
       top = Layout.Elem(tn("T")),

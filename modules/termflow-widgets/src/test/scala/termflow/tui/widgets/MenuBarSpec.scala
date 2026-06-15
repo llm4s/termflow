@@ -119,6 +119,44 @@ class MenuBarSpec extends AnyFunSuite:
     assert(MenuBar.hitTest(sample, at, col = 1, row = 99).isEmpty)
   }
 
+  // ---- wide-char (CJK/emoji) display-width handling -----------------------
+
+  private val wide = MenuBar.State(
+    menus = Vector(
+      MenuBar.Menu("文件", Vector("打开", "Save")), // title 4 cells; items 4 / 4 cells
+      MenuBar.Menu("Edit", Vector("Cut"))
+    )
+  )
+
+  test("dropdown rows pad to display width, not char count") {
+    val opened = wide.copy(openIdx = Some(0), cursor = 0)
+    val nodes  = MenuBar(opened)
+    // First node is the title row; the rest are the dropdown item rows.
+    val itemTexts = nodes.tail.collect { case TextNode(_, _, runs) => runs.head.txt }
+    // innerWidth = max(width("打开")=4, width("Save")=4) + 2 = 6 cells.
+    assert(itemTexts == List("打开  ", "Save  "), s"got $itemTexts")
+    itemTexts.foreach(t => assert(WCWidth.stringWidth(t) == 6, s"width ${WCWidth.stringWidth(t)} for [$t]"))
+  }
+
+  test("a wide-char title positions the next menu by display cells in hitTest") {
+    val at = Coord(1.x, 1.y)
+    // "文件" is 4 cells, cell = 4 + 4 padding = 8, occupying cols 1..8.
+    assert(MenuBar.hitTest(wide, at, col = 1, row = 1) == Some(Left(0)))
+    assert(MenuBar.hitTest(wide, at, col = 8, row = 1) == Some(Left(0)))
+    // Separator at col 9; "Edit" cell starts at col 1 + 8 + 1 = 10.
+    assert(MenuBar.hitTest(wide, at, col = 9, row = 1).isEmpty)
+    assert(MenuBar.hitTest(wide, at, col = 10, row = 1) == Some(Left(1)))
+  }
+
+  test("a wide-char title aligns the dropdown under the correct menu") {
+    val at     = Coord(1.x, 1.y)
+    val opened = wide.copy(openIdx = Some(1)) // open "Edit"
+    // Edit's dropdown left edge mirrors its title start (col 10).
+    assert(MenuBar.hitTest(opened, at, col = 10, row = 2) == Some(Right(0)))
+    // Just left of the dropdown is outside it.
+    assert(MenuBar.hitTest(opened, at, col = 9, row = 2).isEmpty)
+  }
+
   test("an opened empty-items menu does not crash apply / hitTest") {
     // Regression: `menu.items.map(_.length).max` threw on empty items once
     // such a menu was opened.

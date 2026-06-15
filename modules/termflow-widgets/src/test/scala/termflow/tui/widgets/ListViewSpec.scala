@@ -196,6 +196,48 @@ class ListViewSpec extends AnyFunSuite:
     // "  " prefix (unfocused, no cursor) + 6 chars of truncated content.
     assert(cs(0).mkString == "  this-i")
 
+  // Reconstruct a row's logical content from the cell grid by concatenating
+  // each visible cell's glyph and skipping the width-0 filler the renderer
+  // inserts after a wide glyph. This recovers exactly what the widget emitted,
+  // so we can measure display width and detect split surrogates / glyphs.
+  private def rowContent(v: VNode, width: Int, row: Int): String =
+    val frame = AnsiRenderer.buildFrame(RootNode(width, row + 1, List(v), None))
+    val sb    = new StringBuilder
+    (0 until width).foreach { c =>
+      val cell = frame.cells(row)(c)
+      if cell.width > 0 then sb.append(cell.renderedGlyph)
+    }
+    sb.toString
+
+  test("renders wide (CJK) rows aligned by display width, not char count"):
+    // lineWidth 8 ⇒ content area is 6 cells. Three 2-cell glyphs fill it exactly.
+    val s   = ListView.State.of(Vector("中文字"), visibleRows = 1)
+    val v   = ListView.view(s, lineWidth = 8, focused = false, render = (x: String) => x)
+    val row = rowContent(v, 8, 0)
+    assert(row == "  中文字", s"got [$row]")
+    assert(WCWidth.stringWidth(row) == 8, s"width ${WCWidth.stringWidth(row)} for [$row]")
+
+  test("truncates wide content on a glyph boundary, never splitting a wide glyph"):
+    // Content area is 7 - 2 = 5 cells (odd). A run of 2-cell glyphs can only
+    // fill 4 cells; the boundary must land between glyphs, padded to width.
+    // The old `take(5)` kept all three glyphs (6 display cells) and overflowed.
+    val s   = ListView.State.of(Vector("中文字"), visibleRows = 1)
+    val v   = ListView.view(s, lineWidth = 7, focused = false, render = (x: String) => x)
+    val row = rowContent(v, 7, 0)
+    // "  " prefix + "中文" (4 cells) + one space pad = 7 cells, no half glyph.
+    assert(row == "  中文 ", s"got [$row]")
+    assert(WCWidth.stringWidth(row) == 7)
+
+  test("truncates emoji (surrogate pairs) without splitting a surrogate"):
+    // The old `take(5)` on "🎉🎉🎉" (6 UTF-16 units) would slice through the
+    // third emoji's surrogate pair, leaving a lone half.
+    val s   = ListView.State.of(Vector("🎉🎉🎉"), visibleRows = 1)
+    val v   = ListView.view(s, lineWidth = 7, focused = false, render = (x: String) => x)
+    val row = rowContent(v, 7, 0)
+    assert(row == "  🎉🎉 ", s"got [$row]")
+    assert(WCWidth.stringWidth(row) == 7, s"width ${WCWidth.stringWidth(row)} for [$row]")
+    assert(row.count(_.isSurrogate) % 2 == 0, "no lone surrogate half")
+
   test("width helper reports >= 3 regardless of input"):
     assert(ListView.width(30) == 30)
     assert(ListView.width(2) == 3)

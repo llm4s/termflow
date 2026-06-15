@@ -181,8 +181,10 @@ object ListView:
       else
         val isSelected = itemIdx == state.selected
         val content    = render(state.items(itemIdx))
-        val truncated  = content.take(width - 2)
-        val padded     = truncated.padTo(width - 2, ' ')
+        // Truncate/pad by display cells (not UTF-16 units) so CJK/emoji rows
+        // align to the column grid and `.take` never splits a surrogate pair
+        // or a wide glyph at the truncation boundary.
+        val padded     = fitToCells(content, width - 2)
         val showCursor = isSelected && focused
         val prefix     = if showCursor then "▸ " else "  "
         val style =
@@ -199,3 +201,25 @@ object ListView:
 
   /** Width of a rendered list with the given `lineWidth`. Mirrors [[view]]. */
   def width(lineWidth: Int): Int = math.max(3, lineWidth)
+
+  /** Longest prefix of `s` whose display width is at most `maxCells`. */
+  private def clipToCells(s: String, maxCells: Int): String =
+    if maxCells <= 0 then ""
+    else
+      val sb = new StringBuilder
+      var w  = 0
+      var i  = 0
+      while i < s.length do
+        val cp = s.codePointAt(i)
+        val cw = math.max(0, WCWidth.codePointWidth(cp))
+        if w + cw > maxCells then return sb.toString
+        sb.append(s.substring(i, i + java.lang.Character.charCount(cp)))
+        w += cw
+        i += java.lang.Character.charCount(cp)
+      sb.toString
+
+  /** Clip `s` to `cells` display cells, then right-pad with spaces to fill. */
+  private def fitToCells(s: String, cells: Int): String =
+    val clipped = clipToCells(s, cells)
+    val w       = WCWidth.stringWidth(clipped)
+    if w >= cells then clipped else clipped + " " * (cells - w)

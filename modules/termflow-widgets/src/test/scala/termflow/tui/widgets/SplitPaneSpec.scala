@@ -114,8 +114,8 @@ class SplitPaneSpec extends AnyFunSuite:
     val armed = SplitPane.DragState(0.5, dragging = true)
     val ev    = MouseEvent.Drag(MouseButton.Left, col = 15, row = 3, mods)
     val next  = SplitPane.handleMouse(armed, ev, SplitPane.Direction.Horizontal, 20, 5, gap = 1)
-    // 15 / 20 = 0.75
-    assert(math.abs(next.splitRatio - 0.75) < 1e-6, s"expected ~0.75, got ${next.splitRatio}")
+    // rel = (15 - 1) = 14 of 19 (= width - 1) → 14/19
+    assert(math.abs(next.splitRatio - 14.0 / 19.0) < 1e-6, s"expected ~${14.0 / 19.0}, got ${next.splitRatio}")
     assert(next.dragging, "still dragging")
   }
 
@@ -124,8 +124,8 @@ class SplitPaneSpec extends AnyFunSuite:
     val ev    = MouseEvent.Release(MouseButton.Left, col = 5, row = 3, mods)
     val next  = SplitPane.handleMouse(armed, ev, SplitPane.Direction.Horizontal, 20, 5, gap = 1)
     assert(!next.dragging, "release ends the drag")
-    // 5 / 20 = 0.25
-    assert(math.abs(next.splitRatio - 0.25) < 1e-6, s"expected 0.25, got ${next.splitRatio}")
+    // rel = (5 - 1) = 4 of 19 (= width - 1) → 4/19
+    assert(math.abs(next.splitRatio - 4.0 / 19.0) < 1e-6, s"expected ${4.0 / 19.0}, got ${next.splitRatio}")
   }
 
   test("Release outside the region keeps the previous ratio (no snap-back)") {
@@ -157,6 +157,35 @@ class SplitPaneSpec extends AnyFunSuite:
     val armed = SplitPane.DragState(0.5, dragging = true)
     val ev    = MouseEvent.Drag(MouseButton.Left, col = 5, row = 8, mods)
     val next  = SplitPane.handleMouse(armed, ev, SplitPane.Direction.Vertical, 10, 16, gap = 1)
-    // 8 / 16 = 0.5 — but cursor inside the region from the top.
-    assert(math.abs(next.splitRatio - 0.5) < 1e-6, s"expected ~0.5, got ${next.splitRatio}")
+    // rel = (8 - 1) = 7 of 15 (= height - 1) → 7/15
+    assert(math.abs(next.splitRatio - 7.0 / 15.0) < 1e-6, s"expected ~${7.0 / 15.0}, got ${next.splitRatio}")
+  }
+
+  // ---- drag symmetry (regression for llm4s/termflow#208) ------------------
+
+  test("far-left and far-right horizontal drags are mirror images about 0.5") {
+    // The divider should reach both ends symmetrically: a drag d cells in
+    // from the left and the matching drag d cells in from the right must map
+    // to ratios that sum to 1 (mirror about the centre).
+    for
+      width <- Seq(2, 5, 10, 20, 21)
+      d     <- 0 to (width - 1) / 2
+    do
+      val left  = MouseEvent.Drag(MouseButton.Left, col = 1 + d, row = 3, mods)
+      val right = MouseEvent.Drag(MouseButton.Left, col = 1 + (width - 1 - d), row = 3, mods)
+      val armed = SplitPane.DragState(0.5, dragging = true)
+      val lr    = SplitPane.handleMouse(armed, left, SplitPane.Direction.Horizontal, width, 5, gap = 1).splitRatio
+      val rr    = SplitPane.handleMouse(armed, right, SplitPane.Direction.Horizontal, width, 5, gap = 1).splitRatio
+      assert(math.abs((lr + rr) - 1.0) < 1e-9, s"not symmetric at width=$width d=$d: $lr + $rr")
+  }
+
+  test("far-left/far-right drags reach the symmetric raw endpoints 0.0 and 1.0") {
+    val armed   = SplitPane.DragState(0.5, dragging = true)
+    val width   = 20
+    val leftEv  = MouseEvent.Drag(MouseButton.Left, col = 1, row = 3, mods)             // far left
+    val rightEv = MouseEvent.Drag(MouseButton.Left, col = 1 + width - 1, row = 3, mods) // far right
+    val l       = SplitPane.handleMouse(armed, leftEv, SplitPane.Direction.Horizontal, width, 5, gap = 1).splitRatio
+    val r       = SplitPane.handleMouse(armed, rightEv, SplitPane.Direction.Horizontal, width, 5, gap = 1).splitRatio
+    assert(math.abs(l - 0.0) < 1e-9, s"far-left raw ratio should be 0.0, got $l")
+    assert(math.abs(r - 1.0) < 1e-9, s"far-right raw ratio should be 1.0, got $r")
   }

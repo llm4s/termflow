@@ -242,17 +242,24 @@ object SplitPane:
     col: Int,
     row: Int
   ): Double =
+    // Map the pointer onto a symmetric raw ratio in [0, 1]: the first and
+    // last cells of the region map to exactly 0 and 1, so the reachable
+    // range is symmetric about the centre (0.5) before `clampRatio`. Using
+    // `span - 1` as the denominator (rather than `span`, with a `+1` bias)
+    // is what makes far-left and far-right drags mirror images.
     direction match
       case Direction.Horizontal =>
         val span    = math.max(1, width)
-        val rel     = col - at.x.value + 1 // 1..width inside the region
-        val clamped = math.max(1, math.min(span, rel))
-        clamped.toDouble / span
+        val denom   = math.max(1, span - 1)
+        val rel     = col - at.x.value // 0..width-1 inside the region
+        val clamped = math.max(0, math.min(span - 1, rel))
+        clamped.toDouble / denom
       case Direction.Vertical =>
         val span    = math.max(1, height)
-        val rel     = row - at.y.value + 1
-        val clamped = math.max(1, math.min(span, rel))
-        clamped.toDouble / span
+        val denom   = math.max(1, span - 1)
+        val rel     = row - at.y.value // 0..height-1 inside the region
+        val clamped = math.max(0, math.min(span - 1, rel))
+        clamped.toDouble / denom
 
   private def clampRatio(ratio: Double): Double =
     math.max(MinSizeRatio, math.min(1.0 - MinSizeRatio, ratio))

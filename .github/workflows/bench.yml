@@ -19,6 +19,7 @@ on:
     # otherwise go unnoticed until the weekly run.
     paths:
       - 'modules/termflow-bench/**'
+      - 'modules/termflow-terminal/**'
       - 'modules/termflow-screen/**'
       - 'modules/termflow-app/**'
       - 'modules/termflow-widgets/**'

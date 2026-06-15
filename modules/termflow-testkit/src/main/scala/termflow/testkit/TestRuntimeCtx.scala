@@ -1,5 +1,6 @@
 package termflow.testkit
 
+import termflow.tui.Clock
 import termflow.tui.Cmd
 import termflow.tui.LogPath
 import termflow.tui.LoggingConfig
@@ -26,12 +27,16 @@ import scala.collection.mutable
  */
 final class TestRuntimeCtx[Msg](
   override val terminal: TerminalBackend,
-  override val config: TermFlowConfig
+  override val config: TermFlowConfig,
+  val manualClock: ManualClock = new ManualClock()
 ) extends RuntimeCtx[Msg]:
 
   private val lock      = new Object
   private val cmdBuffer = mutable.Queue.empty[Cmd[Msg]]
   private val subs      = mutable.ArrayBuffer.empty[Sub[Msg]]
+
+  /** Virtual clock backing `Sub.Every`; advanced via [[TuiTestDriver.advanceTime]]. */
+  override def clock: Clock = manualClock
 
   override def publish(cmd: Cmd[Msg]): Unit =
     lock.synchronized {

@@ -63,6 +63,14 @@ trait RuntimeCtx[Msg] extends EventSink[Msg]:
    */
   def registerSub(sub: Sub[Msg]): Sub[Msg]
 
+  /**
+   * Clock used to read wall-clock time and to schedule timer subscriptions
+   * ([[Sub.Every]]). Defaults to the real [[SystemClock]]; the testkit's
+   * `TestRuntimeCtx` overrides it with a `ManualClock` so timers advance
+   * deterministically under test.
+   */
+  def clock: Clock = SystemClock
+
 /**
  * Read side of the command bus consumed by the runtime loop.
  *

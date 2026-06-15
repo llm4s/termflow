@@ -1,0 +1,60 @@
+name: Bench Smoke
+
+# Dedicated gate for the non-aggregated `bench` (sbt-jmh) module. Because
+# `bench` is intentionally excluded from `root.aggregate(...)`, the normal CI
+# (`ciCheck`) never compiles/tests/lints it — this workflow is the ONLY
+# automated gate that builds the benchmarks. It runs every bench present (no
+# benchmark-name filter) as a smoke test: prove the harness still compiles and
+# runs. There is no score threshold; only compile/run errors fail the job.
+# Full benchmark runs and baseline regeneration stay manual.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly, Monday 06:00 UTC — catches drift in depended-on modules.
+    - cron: '0 6 * * 1'
+  pull_request:
+    # Broad path filter: an API or build change in any depended-on module can
+    # break the benches, and since `bench` is outside `ciCheck` it would
+    # otherwise go unnoticed until the weekly run.
+    paths:
+      - 'modules/termflow-bench/**'
+      - 'modules/termflow-screen/**'
+      - 'modules/termflow-app/**'
+      - 'modules/termflow-widgets/**'
+      - 'modules/termflow-sample/**'
+      - 'modules/termflow-testkit/**'
+      - 'build.sbt'
+      - 'project/**'
+      - '.github/workflows/bench.yml'
+
+# Prevent overlapping runs for the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.head_ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  bench-smoke:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: sbt
+
+      - name: Setup sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: JMH smoke run (every bench, minimal iterations)
+        # No benchmark-name filter -> runs whatever benches are present, so this
+        # stays forward-compatible as more bench classes land. No `-t` thread
+        # flag: benches that mutate per-invocation state self-pin with
+        # @Threads(1) + @State(Scope.Thread) in their own source.
+        run: sbt --batch "bench/Jmh/run -i 1 -wi 1 -f1 -r 1 -w 1"

@@ -11,3 +11,6 @@ target/
 hs_err_pid*
 *.semanticdb
 book/
+
+# JMH raw result exports (regenerate via bench/Jmh/run -rf json)
+**/jmh-result.json

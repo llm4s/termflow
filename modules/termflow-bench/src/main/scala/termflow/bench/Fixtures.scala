@@ -100,3 +100,77 @@ object Fixtures:
   private def fillRow(n: Int): Layout =
     val children = (0 until n).map(i => Layout.Fill(Layout.Elem(leaf(s"fill$i")))).toList
     Layout.Row(gap = 1, children)
+
+  // --- Render fixtures (BuildFrameBench / AnsiDiffBench) ---------------------
+  //
+  // A representative, terminal-sized [[RootNode]] for the rendering
+  // microbenchmarks. It is a full-screen bordered [[BoxNode]] over a stack of
+  // text rows that nearly fill the interior — dense enough that
+  // `AnsiRenderer.buildFrame` populates most of the cell grid and `diff` has a
+  // realistic amount of content to compare.
+
+  /** Representative frame dimensions (a typical wide terminal). */
+  val ScreenWidth: Int  = 120
+  val ScreenHeight: Int = 40
+
+  /** Diff scenario axis — drives the before/after pair in [[diffRoots]]. */
+  val DiffScenarios: List[String] = List("identical", "singleCell", "singleRow", "fullScreen")
+
+  /** Number of interior text rows (everything between the box borders). */
+  private def interiorRows: Int = math.max(1, ScreenHeight - 2)
+
+  /** Interior content width (between the left/right box borders). */
+  private def interiorWidth: Int = math.max(1, ScreenWidth - 2)
+
+  /** A dense, deterministic row of the given content for interior row `r`. */
+  private def baseRow(r: Int): String =
+    val label = s"row $r "
+    (label * (interiorWidth / label.length + 1)).take(interiorWidth)
+
+  /** A fully different row of the same width, used for changed rows. */
+  private def changedRow(r: Int): String =
+    val label = s"CHANGED $r "
+    (label * (interiorWidth / label.length + 1)).take(interiorWidth)
+
+  /** Flip a single character near the middle of `s` (one-cell change). */
+  private def flipOneChar(s: String): String =
+    if s.isEmpty then s
+    else
+      val i = s.length / 2
+      s.updated(i, if s(i) == '#' then '*' else '#')
+
+  /**
+   * Build a full-screen [[RootNode]] from `rows` interior strings: a bordered
+   * box plus one [[TextNode]] per interior row, anchored inside the border.
+   */
+  private def screenOf(rows: IndexedSeq[String]): RootNode =
+    val border = BoxNode(1.x, 1.y, ScreenWidth, ScreenHeight, Nil, Style(border = true))
+    val texts = rows.zipWithIndex.map { case (s, i) =>
+      TextNode(2.x, (i + 2).y, List(s.take(interiorWidth).text))
+    }.toList
+    RootNode(ScreenWidth, ScreenHeight, border :: texts, None)
+
+  /** The representative root for [[BuildFrameBench]]. */
+  def screenRoot: RootNode =
+    screenOf((0 until interiorRows).map(baseRow))
+
+  /**
+   * A controlled `(before, after)` [[RootNode]] pair for the diff benchmark.
+   *
+   *   - `identical`  — same content, so `diff` is a no-op (0 changed cells).
+   *   - `singleCell` — one character on one middle row differs.
+   *   - `singleRow`  — one whole middle row is replaced.
+   *   - `fullScreen` — every interior row is replaced.
+   *
+   * @throws RuntimeException for an unrecognised scenario.
+   */
+  def diffRoots(scenario: String): (RootNode, RootNode) =
+    val base = (0 until interiorRows).map(baseRow)
+    val mid  = interiorRows / 2
+    val after = scenario match
+      case "identical"  => base
+      case "singleCell" => base.updated(mid, flipOneChar(base(mid)))
+      case "singleRow"  => base.updated(mid, changedRow(mid))
+      case "fullScreen" => base.indices.map(changedRow)
+      case other        => sys.error(s"unknown diff scenario: $other")
+    (screenOf(base), screenOf(after))

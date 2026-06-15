@@ -167,7 +167,7 @@ object MenuBar:
           val style =
             if sel then Style(fg = theme.background, bg = theme.primary, bold = true)
             else Style(fg = theme.foreground)
-          val padded = item.padTo(dropdownInnerWidth(menu), ' ')
+          val padded = fitToCells(item, dropdownInnerWidth(menu))
           TextNode(at.x + (left - 1), at.y + (1 + j), List(Text(padded, style)))
         }
         barNode :: itemNodes
@@ -202,35 +202,60 @@ object MenuBar:
         case None => None
 
   /**
-   * Inner cell width of `menu`'s dropdown: the widest item label plus a
+   * Inner cell width of `menu`'s dropdown: the widest item label (measured in
+   * display cells, not UTF-16 length, so CJK/emoji labels align) plus a
    * two-cell padding. `maxOption` guards the empty-items case — an empty
    * menu can still be opened via Enter/Arrow, and `Vector.empty.max` would
    * otherwise throw `UnsupportedOperationException` from both [[apply]] and
    * [[hitTest]].
    */
   private def dropdownInnerWidth(menu: Menu): Int =
-    menu.items.map(_.length).maxOption.getOrElse(0) + 2
+    menu.items.map(WCWidth.stringWidth).maxOption.getOrElse(0) + 2
 
   /**
    * Column offset (1-based, relative to `at.x`) where the title cell
-   *  for `menuIdx` begins. Mirrors the rendering layout.
+   *  for `menuIdx` begins. Mirrors the rendering layout. Title width is
+   *  measured in display cells so a wide-char title doesn't mis-position
+   *  every later dropdown.
    */
   private def titleStartCol(state: State, menuIdx: Int): Int =
     var col = 1
     var i   = 0
     while i < menuIdx do
-      val cellWidth = state.menus(i).title.length + 4 + 1 // "[ X ]" plus separator
+      val cellWidth = WCWidth.stringWidth(state.menus(i).title) + 4 + 1 // "[ X ]" plus separator
       col += cellWidth
       i += 1
     col
 
-  /** Hit-test for the title row. */
+  /** Hit-test for the title row. Title width is measured in display cells. */
   private def hitTestTitles(state: State, baseCol: Int, clickCol: Int): Option[Int] =
     var col = baseCol
     var i   = 0
     while i < state.menus.size do
-      val cellWidth = state.menus(i).title.length + 4
+      val cellWidth = WCWidth.stringWidth(state.menus(i).title) + 4
       if clickCol >= col && clickCol < col + cellWidth then return Some(i)
       col += cellWidth + 1 // + separator
       i += 1
     None
+
+  /** Longest prefix of `s` whose display width is at most `maxCells`. */
+  private def clipToCells(s: String, maxCells: Int): String =
+    if maxCells <= 0 then ""
+    else
+      val sb = new StringBuilder
+      var w  = 0
+      var i  = 0
+      while i < s.length do
+        val cp = s.codePointAt(i)
+        val cw = math.max(0, WCWidth.codePointWidth(cp))
+        if w + cw > maxCells then return sb.toString
+        sb.append(s.substring(i, i + java.lang.Character.charCount(cp)))
+        w += cw
+        i += java.lang.Character.charCount(cp)
+      sb.toString
+
+  /** Clip `s` to `cells` display cells, then right-pad with spaces to fill. */
+  private def fitToCells(s: String, cells: Int): String =
+    val clipped = clipToCells(s, cells)
+    val w       = WCWidth.stringWidth(clipped)
+    if w >= cells then clipped else clipped + " " * (cells - w)

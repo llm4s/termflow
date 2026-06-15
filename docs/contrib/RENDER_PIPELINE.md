@@ -54,8 +54,8 @@ class MyAppSnapshotSpec extends AnyFunSuite with GoldenSupport:
     assertGoldenFrame(d.frame, "after-do-something")
 ```
 
-- `TuiTestDriver` exposes `model`, `frame`, `send(msg)`, `cmds`, `exited`, and `observedErrors`.
-- Subscriptions (`Sub.Every`, `Sub.InputKey`, `Sub.TerminalResize`) are never started — tests stay deterministic. For prompt-driven apps, construct the wrapping `Msg` directly (e.g. `Msg.ConsoleInputKey(KeyDecoder.InputKey.CharKey('+'))`) instead of waiting on the input thread.
+- `TuiTestDriver` exposes `model`, `frame`, `send(msg)`, `advanceTime(duration)`, `cmds`, `exited`, and `observedErrors`.
+- Subscriptions (`Sub.Every`, `Sub.InputKey`, `Sub.TerminalResize`) are never started on a real scheduler — tests stay deterministic. For prompt-driven apps, construct the wrapping `Msg` directly (e.g. `Msg.ConsoleInputKey(KeyDecoder.InputKey.CharKey('+'))`) instead of waiting on the input thread. `Sub.Every` timers are driven explicitly via `TuiTestDriver.advanceTime`, backed by a virtual `ManualClock` (see [the testing guide](../guide/testing.md#driving-subevery-with-virtual-time)).
 - `Cmd.FCmd` must wrap a pre-resolved `Future.successful(...)`; the driver will not block on unresolved futures.
 
 ### Golden file format

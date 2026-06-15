@@ -70,6 +70,16 @@ object Sub:
    */
   trait InputSub[+Msg] extends Sub[Msg]
 
+  /**
+   * Marker for timer subscriptions whose ticks are driven by a [[Clock]]
+   * ([[Every]] is the only one today).
+   *
+   * The testkit uses this marker to tell timers apart from input-/resize-style
+   * subs so it can start exactly the clock-driven ones against a `ManualClock`
+   * during `advanceTime`, while leaving thread-spawning subs dormant.
+   */
+  trait TimerSub[+Msg] extends Sub[Msg]
+
   private def autoRegisterIfRuntimeCtx[Msg](sub: Sub[Msg], sink: EventSink[Msg]): Sub[Msg] =
     sink match
       case ctx: RuntimeCtx[?] =>
@@ -90,14 +100,17 @@ object Sub:
    * Create a timer subscription that fires at a fixed interval.
    *
    * Each tick publishes `Cmd.GCmd(msg())` through `sink`. The thunk runs on
-   * a single background scheduler thread, so `msg()` must not block.
+   * the scheduler owned by the sink's [[Clock]], so `msg()` must not block.
    *
-   * The scheduler is constructed lazily by [[Sub.start]] rather than in this
-   * factory, so `TestRuntimeCtx` can keep timers dormant during snapshot
-   * tests (it does not call `start()` on registered subs). For all
-   * production paths (`LocalCmdBus.registerSub`, bare `EventSink` sinks)
-   * `start()` runs synchronously immediately after construction, preserving
-   * the original eager-start behaviour.
+   * Ticks are scheduled through the clock resolved from `sink`: a
+   * [[RuntimeCtx]] supplies its [[RuntimeCtx.clock]] (the real [[SystemClock]]
+   * in production, a `ManualClock` under the testkit), while a bare
+   * `EventSink` falls back to [[SystemClock]]. The schedule is created lazily
+   * by [[Sub.start]] rather than in this factory, so `TestRuntimeCtx` can keep
+   * timers dormant during snapshot tests (it does not call `start()` on
+   * registered subs). For all production paths (`LocalCmdBus.registerSub`,
+   * bare `EventSink` sinks) `start()` runs synchronously immediately after
+   * construction, preserving the original eager-start behaviour.
    *
    * @param millis Interval between ticks, in milliseconds.
    * @param msg Thunk producing the next message on each tick.
@@ -105,23 +118,18 @@ object Sub:
    *             the subscription auto-registers for cleanup on exit.
    */
   def Every[Msg](millis: Long, msg: () => Msg, sink: EventSink[Msg]): Sub[Msg] =
-    val sub = new Sub[Msg]:
-      private val lock                                                               = new Object
-      @volatile private var active                                                   = true
-      @volatile private var scheduler: java.util.concurrent.ScheduledExecutorService = null
-      @volatile private var handle: java.util.concurrent.ScheduledFuture[?]          = null
+    val clock = sink match
+      case ctx: RuntimeCtx[?] => ctx.clock
+      case _                  => SystemClock
+    val sub = new TimerSub[Msg]:
+      private val lock                               = new Object
+      @volatile private var active                   = true
+      @volatile private var handle: Clock.Cancelable = null
 
       override def start(): Unit =
         lock.synchronized {
-          if scheduler == null && active then
-            val s = Executors.newSingleThreadScheduledExecutor(ThreadUtils.newThreadFactory())
-            scheduler = s
-            handle = s.scheduleAtFixedRate(
-              () => sink.publish(Cmd.GCmd[Msg](msg())),
-              0L,
-              millis,
-              TimeUnit.MILLISECONDS
-            )
+          if handle == null && active then
+            handle = clock.schedulePeriodic(millis, () => sink.publish(Cmd.GCmd[Msg](msg())))
         }
 
       override def isActive: Boolean = active
@@ -129,14 +137,7 @@ object Sub:
       override def cancel(): Unit =
         lock.synchronized {
           active = false
-          if handle != null then handle.cancel(true): Unit
-          if scheduler != null then
-            scheduler.shutdownNow(): Unit
-            try scheduler.awaitTermination(200L, TimeUnit.MILLISECONDS): Unit
-            catch {
-              case _: InterruptedException =>
-                Thread.currentThread().interrupt()
-            }
+          if handle != null then handle.cancel()
         }
     autoRegisterIfRuntimeCtx(sub, sink)
 

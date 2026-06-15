@@ -41,6 +41,12 @@ object DigitalClock:
   import Msg._
 
   object App extends TuiApp[Model, Msg]:
+    // Read wall-clock time through the runtime's Clock rather than
+    // LocalTime.now() directly, so the testkit's ManualClock drives it
+    // deterministically (see Sub.Every / TuiTestDriver.advanceTime).
+    private def currentTime(ctx: RuntimeCtx[Msg]): String =
+      LocalTime.ofInstant(ctx.clock.instant(), ctx.clock.zone).toString
+
     private def syncTerminalSize(m: Model, ctx: RuntimeCtx[Msg]): Model =
       val w = ctx.terminal.width
       val h = ctx.terminal.height
@@ -53,7 +59,7 @@ object DigitalClock:
         terminalHeight = ctx.terminal.height,
         SubSource[String](
           Sub.Every(1000, () => Tick, ctx),
-          LocalTime.now().toString
+          currentTime(ctx)
         ),
         List.empty,
         None,
@@ -65,7 +71,7 @@ object DigitalClock:
       val sized = syncTerminalSize(m, ctx)
       msg match
         case Tick =>
-          sized.copy(clock = sized.clock.copy(value = LocalTime.now().toString)).tui
+          sized.copy(clock = sized.clock.copy(value = currentTime(ctx))).tui
 
         case StartClock =>
           if sized.clock.sub.isActive then sized.copy(error = Some("Clock already running")).tui

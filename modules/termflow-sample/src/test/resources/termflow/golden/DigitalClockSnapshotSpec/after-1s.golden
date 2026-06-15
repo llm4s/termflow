@@ -1,0 +1,14 @@
+# width=44 height=12
+# cursor=6,11
+|┌──────────────────────────────────────┐    |
+|│Time: 00:00:01                        │    |
+|│──────────────────────────────────────│    |
+|│Type a message and press Enter        │    |
+|│──────────────────────────────────────│    |
+|│Commands:                             │    |
+|│  start | startclock -> start ticking │    |
+|│  stop  | stopclock  -> stop ticking  │    |
+|│  exit               -> quit          │    |
+|└──────────────────────────────────────┘    |
+| []>                                        |
+|                                            |

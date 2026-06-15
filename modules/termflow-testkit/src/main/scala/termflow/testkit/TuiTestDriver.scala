@@ -3,11 +3,13 @@ package termflow.testkit
 import termflow.tui.AnsiRenderer
 import termflow.tui.AnsiRenderer.RenderFrame
 import termflow.tui.Cmd
+import termflow.tui.Sub
 import termflow.tui.TermFlowError
 import termflow.tui.TuiApp
 
 import scala.collection.mutable
 import scala.compiletime.uninitialized
+import scala.concurrent.duration.FiniteDuration
 import scala.util.Failure
 import scala.util.Success
 
@@ -104,6 +106,32 @@ final class TuiTestDriver[Model, Msg](
     if !_initialized then throw new IllegalStateException("TuiTestDriver.send() called before init()")
     if _exited then throw new IllegalStateException("TuiTestDriver.send() called after Cmd.Exit")
     dispatch(msg)
+    processPending()
+
+  /** Advance virtual time by `duration`. See [[advanceTime(durationMillis:Long)*]]. */
+  def advanceTime(duration: FiniteDuration): Unit = advanceTime(duration.toMillis)
+
+  /**
+   * Advance the test [[ManualClock]] by `durationMillis`, firing every
+   * `Sub.Every` tick that falls due, then drain and apply the resulting
+   * messages through `app.update` — exactly as the real runtime would when
+   * its scheduler ticks, but deterministically and without any real-time wait.
+   *
+   * Registered timer subs are started lazily here (against the manual clock,
+   * so no threads spawn); input and resize subs stay dormant, matching the
+   * driver's usual determinism guarantees. A timer registered with period `p`
+   * first ticks `p` ms after the advance that starts it, so
+   * `advanceTime(N * p)` yields `N` ticks.
+   */
+  def advanceTime(durationMillis: Long): Unit =
+    if !_initialized then throw new IllegalStateException("TuiTestDriver.advanceTime() called before init()")
+    if _exited then throw new IllegalStateException("TuiTestDriver.advanceTime() called after Cmd.Exit")
+    ctx.registeredSubs.foreach {
+      case t: Sub.TimerSub[?] => t.start()
+      case _                  => ()
+    }
+    ctx.manualClock.advance(durationMillis)
+    enqueueCtxQueue()
     processPending()
 
   private def dispatch(msg: Msg): Unit =

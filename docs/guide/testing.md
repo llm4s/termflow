@@ -32,8 +32,10 @@ The driver:
   recursively so chained transitions complete before `send` returns.
 - Renders the current model after every `send` — `driver.frame`
   returns the latest `RenderFrame`.
-- Suppresses subscription start-up — `Sub.Every` timers never tick,
-  `Sub.InputKey` never reads stdin, so tests stay deterministic.
+- Suppresses real subscription start-up — `Sub.InputKey` never reads
+  stdin and `Sub.Every` timers never tick on a real scheduler, so tests
+  stay deterministic. Timer ticks are instead driven explicitly with
+  `advanceTime` (see [Driving `Sub.Every` with virtual time](#driving-subevery-with-virtual-time)).
 
 Key methods:
 
@@ -41,11 +43,63 @@ Key methods:
 class TuiTestDriver[Model, Msg]:
   def init():    Unit
   def send(msg:  Msg):  Unit
+  def advanceTime(duration: FiniteDuration): Unit
+  def advanceTime(durationMillis: Long):     Unit
   def model:     Model
   def exited:    Boolean
   def cmds:      List[Cmd[Msg]]
   def observedErrors: List[TermFlowError]
   def frame:     RenderFrame
+```
+
+## Driving `Sub.Every` with virtual time
+
+Apps that animate or poll via `Sub.Every` (`DigitalClock`, `SineWaveApp`, …)
+used to be untestable: their ticks fired on a real background scheduler. The
+testkit removes that dependency on wall-clock time with a virtual clock.
+
+`RuntimeCtx.clock` abstracts both wall-clock reads and the periodic scheduler
+behind `Sub.Every`. Production uses `SystemClock` (real time, background
+executor). `TestRuntimeCtx` substitutes a `ManualClock` whose time only moves
+when you call `advanceTime`:
+
+```scala
+val driver = TuiTestDriver(DigitalClock.App, width = 44, height = 20)
+driver.init()
+assert(driver.model.clock.value == "00:00")   // ManualClock starts at epoch 0, UTC
+
+driver.advanceTime(1.second)                   // fires exactly one 1s tick
+assert(driver.model.clock.value == "00:00:01")
+
+driver.advanceTime(3.seconds)                  // three more ticks
+assert(driver.model.clock.value == "00:00:04")
+```
+
+`advanceTime` starts the registered timer subs against the `ManualClock` (no
+threads spawn), fires every tick that falls due, and applies the resulting
+messages through `app.update` — just as the runtime would when its scheduler
+ticks. Input and resize subs stay dormant.
+
+Tick semantics: a timer with period `p` first fires `p` ms after the advance
+that starts it, then every `p` thereafter, so `advanceTime(N * p)` produces
+exactly `N` ticks. Unlike the real scheduler there is no immediate fire at
+scheduling time — this gives an exact advance→tick correspondence.
+
+For apps that **display** wall-clock time (e.g. `DigitalClock`), read it
+through `ctx.clock` rather than `LocalTime.now()` so the `ManualClock` drives
+it deterministically:
+
+```scala
+private def currentTime(ctx: RuntimeCtx[Msg]): String =
+  LocalTime.ofInstant(ctx.clock.instant(), ctx.clock.zone).toString
+```
+
+`ManualClock` can be constructed directly in lower-level tests:
+
+```scala
+val clock = new ManualClock(startMillis = 0L)        // zone defaults to UTC
+clock.schedulePeriodic(100L, () => tick())
+clock.advance(300.millis)                            // tick() fires 3 times
 ```
 
 ## Asserting on the frame

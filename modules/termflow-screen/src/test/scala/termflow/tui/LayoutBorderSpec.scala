@@ -76,6 +76,71 @@ class LayoutBorderSpec extends AnyFunSuite:
     // Center fills x=2..19 on rows 2..4.
     assert(hits.hit(10, 3).contains("center"))
 
+  test("Border insets top/bottom so corner columns stay clear of left/right (issue #209)"):
+    val (_, hits) = Layout.resolveTracked[String](
+      Layout.border(
+        top = Layout.zone("top", tn("T")),
+        left = Layout.zone("left", tn("L")),
+        center = Layout.zone("center", tn("C")),
+        right = Layout.zone("right", tn("R")),
+        bottom = Layout.zone("bottom", tn("B")),
+        gap = 0
+      ),
+      Coord(1.x, 1.y),
+      20,
+      5
+    )
+    // left.w = right.w = 1, so top/bottom span only the middle columns
+    // (x = 2..19). The corner columns (x = 1, x = 20) are left for the
+    // left/right zones in the middle band and must not be claimed by
+    // top/bottom — otherwise the corners overlap.
+    assert(hits.hit(2, 1).contains("top"))
+    assert(hits.hit(19, 1).contains("top"))
+    assert(!hits.hit(1, 1).contains("top"))
+    assert(!hits.hit(20, 1).contains("top"))
+    assert(hits.hit(2, 5).contains("bottom"))
+    assert(hits.hit(19, 5).contains("bottom"))
+    assert(!hits.hit(1, 5).contains("bottom"))
+    assert(!hits.hit(20, 5).contains("bottom"))
+
+  test("Border (unbudgeted) keeps a wide top at full natural width, corners clear (issue #209)"):
+    // top is wider than the left+center+right mid row. The unbudgeted resolve
+    // must synthesise enough width for the inset top (left.w + top.w + right.w)
+    // so the top is not clipped, and the measured size must match what's drawn.
+    val b = Layout.border(
+      top = Layout.Elem(tn("TTTTTTTT")), // (8, 1)
+      left = Layout.Elem(tn("L")),       // (1, 1)
+      center = Layout.Elem(tn("C")),     // (1, 1)
+      right = Layout.Elem(tn("R")),      // (1, 1)
+      bottom = Layout.Elem(tn("B")),     // (1, 1)
+      gap = 0
+    )
+    // Natural width = left.w + top.w + right.w = 1 + 8 + 1 = 10; height = 3.
+    assert(b.measure == (10, 3))
+
+    val (_, hits) = Layout.resolveTracked[String](
+      Layout.border(
+        top = Layout.zone("top", tn("TTTTTTTT")),
+        left = Layout.zone("left", tn("L")),
+        center = Layout.zone("center", tn("C")),
+        right = Layout.zone("right", tn("R")),
+        bottom = Layout.zone("bottom", tn("B")),
+        gap = 0
+      ),
+      Coord(1.x, 1.y),
+      availableWidth = -1,
+      availableHeight = -1
+    )
+    // Top keeps its full 8-column width, inset by left.w to x = 2..9, leaving
+    // the corner columns x = 1 and x = 10 clear.
+    assert(hits.hit(2, 1).contains("top"))
+    assert(hits.hit(9, 1).contains("top"))
+    assert(!hits.hit(1, 1).contains("top"))
+    assert(!hits.hit(10, 1).contains("top"))
+    // Left/right own the corner columns in the middle band (row 2).
+    assert(hits.hit(1, 2).contains("left"))
+    assert(hits.hit(10, 2).contains("right"))
+
   test("Border collapses the middle band when none of left/center/right are set"):
     val b = Layout.border(
       top = Layout.Elem(tn("T")),

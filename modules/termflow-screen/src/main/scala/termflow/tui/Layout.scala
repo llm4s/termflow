@@ -179,33 +179,43 @@ enum Layout:
   case Grid(columns: Int, rowGap: Int, colGap: Int, cells: List[GridCell])
 
   /**
-   * Five-zone border layout: top and bottom span the full width, left and
-   * right take their natural width and fill the middle band, center fills
-   * what's left. Any zone may be `None` and its space collapses.
+   * Five-zone border layout: top and bottom span the middle columns (the
+   * span between the left and right zones), left and right take their
+   * natural width and fill the middle band, center fills what's left. Any
+   * zone may be `None` and its space collapses.
    *
    * **Sizing.** Designed for a budgeted resolve. With a budget:
-   *   - `top` / `bottom` each take their natural height; full width.
+   *   - `top` / `bottom` each take their natural height and span the middle
+   *     columns: their width is `availableWidth - left.w - right.w` and they
+   *     start at `left.w` (the CSS-grid "header spans the middle columns"
+   *     convention). When neither `left` nor `right` is present this is the
+   *     full width.
    *   - `left` / `right` each take their natural width; the middle band's
    *     height is `availableHeight - top.h - bottom.h - 2*gap` (gap is only
    *     subtracted when both border zones are present).
    *   - `center` consumes the rest.
    *
-   * Without a budget, every zone takes its natural size; the overall
-   * measure is `(max(top.w, left.w + gap + center.w + gap + right.w,
-   * bottom.w), top.h + gap + max(left.h, center.h, right.h) + gap +
-   * bottom.h)` with gap terms only when the adjacent zones are non-empty.
+   * Without a budget, every zone takes its natural size. Because top/bottom
+   * are inset between the left/right zones, the width they contribute is
+   * `left.w + top.w + right.w` (and likewise for bottom), so the overall
+   * measure is `(max(left.w + top.w + right.w, left.w + gap + center.w + gap
+   * + right.w, left.w + bottom.w + right.w), top.h + gap + max(left.h,
+   * center.h, right.h) + gap + bottom.h)` with gap terms only when the
+   * adjacent zones are non-empty. The left/right widths are zero when those
+   * zones are absent, so the band's width collapses to its own natural width.
    *
-   * **Out of scope.** Independent gaps for the four borders; alignment of
-   * shorter top/bottom strips against the left/right edges (today they
-   * span the full width even when adjacent corners are occupied by left/
-   * right zones). Hit-test passthrough works because any zone can be a
-   * [[Zone]].
+   * Insetting the top/bottom strips by the left/right widths keeps the
+   * corner columns clear, so a five-zone bordered box no longer draws
+   * overlapping / inconsistent corners (issue #209).
    *
-   * @param top    Optional top zone (full width, natural height).
+   * **Out of scope.** Independent gaps for the four borders. Hit-test
+   * passthrough works because any zone can be a [[Zone]].
+   *
+   * @param top    Optional top zone (middle-column width, natural height).
    * @param left   Optional left zone (natural width, middle-band height).
    * @param center Optional center zone (fills remaining rectangle).
    * @param right  Optional right zone (natural width, middle-band height).
-   * @param bottom Optional bottom zone (full width, natural height).
+   * @param bottom Optional bottom zone (middle-column width, natural height).
    * @param gap    Cells between adjacent zones; clamps to 0.
    */
   case Border(
@@ -459,7 +469,12 @@ object Layout:
         case n if n >= 2 => g * (n - 1)
         case _           => 0
     val midRowW = leftW + centerW + rightW + midRowGap
-    val width   = List(topW, midRowW, botW).max
+    // Top/bottom are inset between the left/right zones (issue #209), so the
+    // width they need is left.w + band.w + right.w. (left/right widths are 0
+    // when absent, collapsing to the band's own width.)
+    val topBandW = leftW + topW + rightW
+    val botBandW = leftW + botW + rightW
+    val width    = List(topBandW, midRowW, botBandW).max
     val verticalGap =
       List(b.top.isDefined, midH > 0, b.bottom.isDefined).count(identity) match
         case n if n >= 2 => g * (n - 1)
@@ -715,9 +730,12 @@ object Layout:
 
   /**
    * Resolve a [[Border]] at `at`. With a budget, top / bottom take their
-   * natural height across the full width; left / right take their natural
-   * width down the middle band; center fills the remainder. Without a
-   * budget every zone takes its natural size.
+   * natural height across the middle columns (inset by the left / right
+   * widths so the corner columns stay clear); left / right take their
+   * natural width down the middle band; center fills the remainder. Without
+   * a budget every zone takes its natural size, and the synthesised width
+   * leaves room for the inset top/bottom (`left.w + band.w + right.w`) so a
+   * wide top/bottom keeps its full width instead of being clipped.
    */
   private def resolveBorder[Id](
     b: Border,
@@ -738,7 +756,10 @@ object Layout:
       else
         val midZones = List(b.left, b.center, b.right).count(_.isDefined)
         val midGap   = if midZones >= 2 then gap * (midZones - 1) else 0
-        List(topW, leftW + centerW + rightW + midGap, botW).max
+        // Top/bottom are inset between left/right (issue #209): the width they
+        // need is left.w + band.w + right.w, so they keep their full natural
+        // width in the inset position. left/right widths are 0 when absent.
+        List(leftW + topW + rightW, leftW + centerW + rightW + midGap, leftW + botW + rightW).max
     val budgetH =
       if availableHeight >= 0 then availableHeight
       else
@@ -788,12 +809,18 @@ object Layout:
         case Some(bb) => out ++= resolveTrackedImpl(zone, origin, w, h, bb)
         case None     => out ++= resolveTo(zone, origin, w, h)
 
-    b.top.foreach(z => emit(z, Coord(XCoord(leftX), YCoord(topY)), budgetW, topActualH))
+    // Inset top/bottom to the middle columns so the corner columns owned by
+    // left/right stay clear (issue #209). Collapses to the full width when
+    // neither left nor right is present.
+    val midX     = leftX + leftActualW
+    val midSpanW = math.max(0, budgetW - leftActualW - rightActualW)
+
+    b.top.foreach(z => emit(z, Coord(XCoord(midX), YCoord(topY)), midSpanW, topActualH))
     if midH > 0 then
       b.left.foreach(z => emit(z, Coord(XCoord(leftX), YCoord(midY)), leftActualW, midH))
       b.center.foreach(z => emit(z, Coord(XCoord(centerX), YCoord(midY)), centerW2, midH))
       b.right.foreach(z => emit(z, Coord(XCoord(rightX), YCoord(midY)), rightActualW, midH))
-    b.bottom.foreach(z => emit(z, Coord(XCoord(leftX), YCoord(botY)), budgetW, botActualH))
+    b.bottom.foreach(z => emit(z, Coord(XCoord(midX), YCoord(botY)), midSpanW, botActualH))
     out.result()
 
   /**

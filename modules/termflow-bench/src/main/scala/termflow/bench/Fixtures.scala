@@ -17,6 +17,10 @@ import termflow.tui.ScreenPrelude.*
  *     the fluent helpers only accept leaf `VNode` children.
  *   - `grid`         — a fixed-column [[termflow.tui.Layout.Grid]] of
  *     [[termflow.tui.GridCell]]s.
+ *   - `fillRow`      — a [[termflow.tui.Layout.Row]] of multiple
+ *     [[termflow.tui.Layout.Fill]] siblings, so the budgeted resolve path
+ *     (`resolveTo` with a non-negative budget) exercises the Fill / even-split
+ *     distribution branch — natural sizing leaves that branch untouched.
  *
  * All trees are pure data: no terminal, no I/O, no randomness — the same
  * `(shape, size)` always yields the same tree, so benchmark runs are
@@ -25,7 +29,7 @@ import termflow.tui.ScreenPrelude.*
 object Fixtures:
 
   /** Benchmark shape axis — drives [[tree]]'s structure. */
-  val Shapes: List[String] = List("flatRow", "nestedColumn", "grid")
+  val Shapes: List[String] = List("flatRow", "nestedColumn", "grid", "fillRow")
 
   /** Benchmark size axis — drives the child / cell counts in [[tree]]. */
   val Sizes: List[String] = List("small", "medium", "large")
@@ -55,6 +59,7 @@ object Fixtures:
       case "flatRow"      => flatRow(n)
       case "nestedColumn" => nestedColumn(n)
       case "grid"         => grid(n)
+      case "fillRow"      => fillRow(n)
       case other          => sys.error(s"unknown shape: $other")
 
   /** A single Row of `n` leaf text nodes (built via the public helper). */
@@ -85,3 +90,13 @@ object Fixtures:
     val cols  = math.max(2, math.sqrt(n.toDouble).round.toInt)
     val cells = (0 until n).map(i => GridCell(Layout.Elem(leaf(s"g$i")))).toList
     Layout.Grid(columns = cols, rowGap = 1, colGap = 2, cells = cells)
+
+  /**
+   * A Row of `n` [[termflow.tui.Layout.Fill]] siblings, each wrapping a leaf.
+   * Under a budgeted `resolveTo` the Fills split the available major axis
+   * evenly, so this is the shape that actually drives the Fill distribution
+   * branch (every other shape leaves it dormant).
+   */
+  private def fillRow(n: Int): Layout =
+    val children = (0 until n).map(i => Layout.Fill(Layout.Elem(leaf(s"fill$i")))).toList
+    Layout.Row(gap = 1, children)

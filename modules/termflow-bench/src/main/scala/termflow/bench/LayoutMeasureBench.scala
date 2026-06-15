@@ -20,7 +20,7 @@ import termflow.tui.Layout
 @State(Scope.Benchmark)
 class LayoutMeasureBench:
 
-  @Param(Array("flatRow", "nestedColumn", "grid"))
+  @Param(Array("flatRow", "nestedColumn", "grid", "fillRow"))
   var shape: String = ""
 
   @Param(Array("small", "medium", "large"))

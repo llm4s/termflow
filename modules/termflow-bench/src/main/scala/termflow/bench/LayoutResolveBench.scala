@@ -29,7 +29,7 @@ class LayoutResolveBench:
   private val BudgetWidth  = 120
   private val BudgetHeight = 40
 
-  @Param(Array("flatRow", "nestedColumn", "grid"))
+  @Param(Array("flatRow", "nestedColumn", "grid", "fillRow"))
   var shape: String = ""
 
   @Param(Array("small", "medium", "large"))

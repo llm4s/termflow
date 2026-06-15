@@ -168,7 +168,9 @@ lazy val termflowScreen = (project in file("modules/termflow-screen"))
     commonSettings,
     frameworkScalafixSettings,
     libraryDependencies ++= Seq(
-      Deps.scalatest % Test
+      Deps.scalatest               % Test,
+      Deps.scalacheck              % Test,
+      Deps.scalatestPlusScalacheck % Test
     )
   )
 

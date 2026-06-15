@@ -254,6 +254,21 @@ lazy val termflowSample = (project in file("modules/termflow-sample"))
     publish / skip  := true
   )
 
+// JMH microbenchmark module. Deliberately NOT added to root.aggregate(...) so
+// it is excluded from `ciCheck` (scalafmtCheckAll/scalafixAll/test follow
+// project aggregation). It is built only by explicit `sbt "bench/..."`
+// invocations and the dedicated bench CI workflow. The val MUST stay named
+// `bench` so `sbt "bench/Jmh/run"` works verbatim.
+lazy val bench = (project in file("modules/termflow-bench"))
+  .enablePlugins(JmhPlugin)
+  .dependsOn(termflowScreen, termflowApp, termflowWidgets, termflowSample, termflowTestkit)
+  .settings(
+    name := "termflow-bench",
+    commonSettings,
+    publish / skip  := true,
+    coverageEnabled := false
+  )
+
 addCommandAlias("ciCheck", ";scalafmtCheckAll;scalafixAll --check;test")
 // `coverage`/`coverageReport` are sbt-scoverage *commands* — they
 // can't be invoked with the `project/key` selector syntax. The pattern
